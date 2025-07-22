@@ -1,0 +1,16 @@
+{
+  "metadata": {
+    "id": "WA_AWS_1",
+    "name": "Ensure S3 buckets use server-side encryption",
+    "category": "AWS Well-Architected",
+    "severity": "MEDIUM",
+    "description": "AWS Well-Architected Framework: Encrypt data at rest"
+  },
+  "scope": "resource",
+  "definition": {
+    "cond_type": "attribute",
+    "resource_types": ["aws_s3_bucket"],
+    "attribute": "server_side_encryption_configuration.rule.apply_server_side_encryption_by_default.sse_algorithm",
+    "operator": "exists"
+  }
+}

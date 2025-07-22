@@ -1,0 +1,2 @@
+external_checks_dir:
+  - checkov-policies
