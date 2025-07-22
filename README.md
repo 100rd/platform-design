@@ -52,3 +52,8 @@ docker run -p 8080:8080 example-api
 
 See `docs/platform-overview.md` for an architectural overview of the system.
 See `docs/02-terragrunt-strategy.md` for the Terragrunt proposal.
+
+## Compliance Checks
+
+A GitHub Actions workflow (`well-architected.yml`) runs [Checkov](https://github.com/bridgecrewio/checkov) against the Terraform code. Custom policies located in the `checkov-policies/` directory map to AWS Well-Architected Framework best practices.
+
