@@ -38,6 +38,7 @@ This repository contains documentation and reference configurations for a casino
   components such as the External Secrets Operator reside under `apps/infra/`.
 - `apps/` – Helm charts for applications deployed via ArgoCD
 - `terraform/`, `helm/`, `kustomize/`, `argocd/` – infrastructure and deployment files
+- `terragrunt/` – Terragrunt configuration linking Terraform modules
 - `helm/app/` – generic Helm chart for deploying applications with ingress and external secrets
 - `argocd/applicationset.yaml` – example ApplicationSet manifest for ArgoCD
 
@@ -50,3 +51,4 @@ docker run -p 8080:8080 example-api
 ```
 
 See `docs/platform-overview.md` for an architectural overview of the system.
+See `docs/02-terragrunt-strategy.md` for the Terragrunt proposal.
