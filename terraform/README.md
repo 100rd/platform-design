@@ -6,6 +6,7 @@ This directory provisions a basic AWS infrastructure stack consisting of:
 - **EKS** cluster using two managed node groups:
   - On-demand instances
   - Spot instances
+- Optional worker nodes on Hetzner Cloud using `hcloud`
 
 The modules are thin wrappers around the official AWS modules and can be used in
 GitOps workflows.
