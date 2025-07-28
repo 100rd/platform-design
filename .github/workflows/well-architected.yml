@@ -17,3 +17,17 @@ jobs:
           config_file: .checkov.yaml
           quiet: true
           framework: terraform
+
+  image-scan:
+    runs-on: ubuntu-latest
+    needs: checkov
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build example-api image
+        run: docker build -t example-api ./services/example-api
+      - name: Scan Docker image
+        uses: aquasecurity/trivy-action@v0.12.0
+        with:
+          image-ref: example-api:latest
+          severity: CRITICAL,HIGH
+          exit-code: '1'

@@ -56,4 +56,5 @@ See `docs/02-terragrunt-strategy.md` for the Terragrunt proposal.
 ## Compliance Checks
 
 A GitHub Actions workflow (`well-architected.yml`) runs [Checkov](https://github.com/bridgecrewio/checkov) against the Terraform code. Custom policies located in the `checkov-policies/` directory map to AWS Well-Architected Framework best practices.
+It also builds the `services/example-api` Docker image and scans it with [Trivy](https://github.com/aquasecurity/trivy). The workflow fails if any HIGH or CRITICAL vulnerabilities are found.
 
