@@ -40,6 +40,7 @@ This repository contains documentation and reference configurations for a casino
 - `terraform/`, `helm/`, `kustomize/`, `argocd/` – infrastructure and deployment files
 - `terragrunt/` – Terragrunt configuration linking Terraform modules
 - `helm/app/` – generic Helm chart for deploying applications with ingress and external secrets
+- `network-policies/` - baseline Kubernetes NetworkPolicy manifests
 - `argocd/applicationset.yaml` – example ApplicationSet manifest for ArgoCD
 
 ## Getting Started
