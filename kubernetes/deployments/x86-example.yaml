@@ -1,0 +1,232 @@
+---
+# Example Deployment for x86/amd64 Architecture
+# This demonstrates how to deploy workloads on x86 nodes provisioned by Karpenter
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: x86-nginx-example
+  namespace: default
+  labels:
+    app: x86-nginx
+    architecture: amd64
+    example: "true"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: x86-nginx
+      architecture: amd64
+  template:
+    metadata:
+      labels:
+        app: x86-nginx
+        architecture: amd64
+    spec:
+      # Node selector to run on x86 architecture
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        karpenter.sh/nodepool: x86-general-purpose
+
+      # Anti-affinity to spread pods across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - x86-nginx
+                topologyKey: kubernetes.io/hostname
+
+      # Tolerations (if NodePool has taints)
+      tolerations: []
+
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+              name: http
+              protocol: TCP
+
+          # Resource requests trigger Karpenter node provisioning
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+          # Liveness and readiness probes
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # Environment variables to show architecture
+          env:
+            - name: ARCHITECTURE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['kubernetes.io/arch']
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+
+          # Volume mounts
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /usr/share/nginx/html/index.html
+              subPath: index.html
+              readOnly: true
+
+      # Volumes
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: x86-nginx-config
+
+---
+# ConfigMap with custom HTML page
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: x86-nginx-config
+  namespace: default
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>x86 Example on Karpenter</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                max-width: 800px;
+                margin: 50px auto;
+                padding: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }
+            .container {
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 10px;
+                padding: 30px;
+                backdrop-filter: blur(10px);
+            }
+            h1 { margin-top: 0; }
+            .info { background: rgba(0,0,0,0.2); padding: 15px; border-radius: 5px; margin: 10px 0; }
+            .label { font-weight: bold; color: #ffd700; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🖥️ x86/amd64 Architecture Example</h1>
+            <div class="info">
+                <p><span class="label">Architecture:</span> x86/amd64 (Intel/AMD)</p>
+                <p><span class="label">Node Pool:</span> x86-general-purpose</p>
+                <p><span class="label">Provisioner:</span> Karpenter</p>
+                <p><span class="label">Platform:</span> Amazon EKS</p>
+            </div>
+            <h2>About this Deployment</h2>
+            <p>This application is running on x86 architecture nodes automatically provisioned by Karpenter.</p>
+            <h3>Key Features:</h3>
+            <ul>
+                <li>Runs on x86 (Intel/AMD) processors</li>
+                <li>Karpenter automatically scales nodes based on pod requests</li>
+                <li>Supports mixed capacity types (Spot + On-Demand)</li>
+                <li>Multi-AZ deployment for high availability</li>
+            </ul>
+            <h3>Instance Families:</h3>
+            <ul>
+                <li>Compute Optimized: c6i, c6a, c7i, c7a</li>
+                <li>General Purpose: m6i, m6a, m7i, m7a</li>
+                <li>Memory Optimized: r6i, r6a, r7i, r7a</li>
+            </ul>
+        </div>
+    </body>
+    </html>
+
+---
+# Service to expose the deployment
+apiVersion: v1
+kind: Service
+metadata:
+  name: x86-nginx-service
+  namespace: default
+  labels:
+    app: x86-nginx
+    architecture: amd64
+spec:
+  type: ClusterIP
+  selector:
+    app: x86-nginx
+    architecture: amd64
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+
+---
+# HorizontalPodAutoscaler for automatic scaling
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: x86-nginx-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: x86-nginx-example
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+        - type: Pods
+          value: 2
+          periodSeconds: 30
+      selectPolicy: Max

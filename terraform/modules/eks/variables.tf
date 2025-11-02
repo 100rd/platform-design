@@ -6,7 +6,7 @@ variable "cluster_name" {
 variable "cluster_version" {
   description = "Kubernetes version for the cluster"
   type        = string
-  default     = "1.33"
+  default     = "1.34"
 }
 
 variable "vpc_id" {
@@ -19,52 +19,34 @@ variable "private_subnet_ids" {
   type        = list(string)
 }
 
-variable "ondemand_instance_types" {
-  description = "Instance types for on-demand node group"
+variable "karpenter_controller_instance_types" {
+  description = "Instance types for Karpenter controller node group"
   type        = list(string)
   default     = ["t3.medium"]
 }
 
-variable "ondemand_desired_size" {
-  description = "Desired capacity for on-demand node group"
+variable "karpenter_controller_desired_size" {
+  description = "Desired capacity for Karpenter controller node group"
   type        = number
   default     = 2
 }
 
-variable "ondemand_min_size" {
-  description = "Minimum nodes for on-demand node group"
+variable "karpenter_controller_min_size" {
+  description = "Minimum nodes for Karpenter controller node group"
   type        = number
   default     = 1
 }
 
-variable "ondemand_max_size" {
-  description = "Maximum nodes for on-demand node group"
+variable "karpenter_controller_max_size" {
+  description = "Maximum nodes for Karpenter controller node group"
   type        = number
-  default     = 4
+  default     = 3
 }
 
-variable "spot_instance_types" {
-  description = "Instance types for spot node group"
-  type        = list(string)
-  default     = ["t3.medium"]
-}
-
-variable "spot_desired_size" {
-  description = "Desired capacity for spot node group"
-  type        = number
-  default     = 2
-}
-
-variable "spot_min_size" {
-  description = "Minimum nodes for spot node group"
-  type        = number
-  default     = 1
-}
-
-variable "spot_max_size" {
-  description = "Maximum nodes for spot node group"
-  type        = number
-  default     = 4
+variable "karpenter_node_iam_role_additional_policies" {
+  description = "Additional IAM policies to attach to Karpenter node IAM role"
+  type        = map(string)
+  default     = {}
 }
 
 variable "tags" {

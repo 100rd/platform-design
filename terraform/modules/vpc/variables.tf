@@ -15,6 +15,24 @@ variable "azs" {
   default     = null
 }
 
+variable "cluster_name" {
+  description = "EKS cluster name for Karpenter discovery tags (optional)"
+  type        = string
+  default     = ""
+}
+
+variable "private_subnet_tags" {
+  description = "Additional tags for private subnets"
+  type        = map(string)
+  default     = {}
+}
+
+variable "public_subnet_tags" {
+  description = "Additional tags for public subnets"
+  type        = map(string)
+  default     = {}
+}
+
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)
