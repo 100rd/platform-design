@@ -103,6 +103,181 @@ terraform apply
 
 ---
 
+## [2025-11-03 Phase 3] - Simple Environment Quick-Start
+
+### Summary
+Phase 3 of platform adaptation completed. Created a simplified Terragrunt environment (`envs/simple`) that provides a quick-start deployment example of EKS with Karpenter and multi-architecture support. This environment preserves the existing platform structure while adding an easy-to-deploy reference implementation.
+
+### Added
+
+**Terragrunt Environment Structure:**
+- `terragrunt/envs/simple/terragrunt.hcl`: Environment-level configuration
+  - Sets environment name to "simple"
+  - Includes parent Terragrunt configuration
+  - Minimal configuration for quick deployment
+
+- `terragrunt/envs/simple/vpc/terragrunt.hcl`: VPC configuration
+  - Dedicated VPC with CIDR 10.0.0.0/16
+  - Cluster name: "simple-eks-cluster"
+  - Karpenter discovery tags pre-configured
+  - 3 public and 3 private subnets across AZs
+  - Single NAT Gateway for cost optimization
+
+- `terragrunt/envs/simple/eks/terragrunt.hcl`: EKS + Karpenter configuration
+  - Kubernetes version 1.34 (latest)
+  - Dependency management with VPC module
+  - Mock outputs for planning
+  - Karpenter controller node group: 2-3 x t3.medium
+  - Complete tagging strategy
+
+**Documentation:**
+- `terragrunt/envs/simple/README.md`: Comprehensive 500+ line quick-start guide
+  - **5-Minute Quick Start**: Complete deployment from zero to running cluster
+  - **Architecture Details**: VPC, EKS, and Karpenter configuration tables
+  - **Deployment Examples**: x86 vs ARM64 workload patterns with YAML
+  - **Cost Estimation**: Monthly costs breakdown (~$175-200 for dev cluster)
+  - **Cost Optimization Tips**: ARM64/Graviton savings, spot instances, consolidation
+  - **Configuration Customization**: How to modify VPC, EKS, and NodePool settings
+  - **Common Operations**: Scale up/down, check logs, force consolidation
+  - **Troubleshooting**: Pods stuck pending, Karpenter not provisioning, wrong architecture
+  - **Cleanup Instructions**: Step-by-step infrastructure destruction
+  - **Quick Reference**: Command cheat sheet
+  - **Success Criteria**: What to expect after deployment
+
+### Features
+
+**Quick-Start Benefits:**
+- **5-minute deployment**: From zero to running EKS cluster with Karpenter
+- **Batteries included**: Pre-configured VPC, EKS, and Karpenter with sensible defaults
+- **Multi-architecture ready**: x86 and ARM64 NodePools configured and documented
+- **Cost-optimized**: Spot instances, Graviton, and auto-consolidation enabled
+- **Production-ready**: Security groups, IAM roles, and pod identity pre-configured
+- **Well-documented**: Comprehensive README with every command needed
+
+**Architecture:**
+- VPC: 10.0.0.0/16 with 6 subnets (3 public, 3 private) across 3 AZs
+- EKS: Kubernetes 1.34 with Pod Identity and 2-3 controller nodes
+- Karpenter: Ready for x86 (m6i, m7i, c6i, c7i) and ARM64 (m7g, c7g, r7g) instances
+- Cost: ~$165/month infrastructure + variable workload costs
+
+**Developer Experience:**
+- Clear examples showing how to deploy on x86 vs ARM64
+- NodeSelector patterns for architecture selection
+- Cost comparison documentation (ARM64 saves 20-40%)
+- Troubleshooting guide for common issues
+- One-command deployment and cleanup
+
+### Design Philosophy
+
+**Preservation of Existing Structure:**
+- Does not modify or replace existing platform components
+- Keeps dev/prod environments intact
+- Adds simple environment as an additional reference
+- Maintains modular architecture
+
+**Simplification Approach:**
+- Uses existing Terraform modules (no duplication)
+- Minimal configuration in Terragrunt
+- Sensible defaults for quick start
+- Comprehensive documentation for customization
+
+### Use Cases
+
+**Ideal for:**
+- First-time users wanting to try EKS + Karpenter
+- POC and demo deployments
+- Learning multi-architecture patterns
+- Development and testing environments
+- Cost-optimized workloads
+
+**Not intended for:**
+- Production deployments requiring custom configuration
+- Multi-region setups
+- Complex networking requirements
+- High-availability production workloads
+
+(Users should customize or use dev/prod environments for production)
+
+### Files Created
+```
+terragrunt/envs/simple/
+├── terragrunt.hcl                    # Environment configuration
+├── README.md                          # Comprehensive quick-start guide (500+ lines)
+├── vpc/
+│   └── terragrunt.hcl                # VPC configuration
+└── eks/
+    └── terragrunt.hcl                # EKS + Karpenter configuration
+```
+
+### Deployment Commands
+
+**Deploy everything:**
+```bash
+cd terragrunt/envs/simple
+terragrunt run-all apply
+aws eks update-kubeconfig --region us-east-1 --name simple-eks-cluster
+kubectl apply -f ../../../kubernetes/karpenter/
+```
+
+**Deploy workloads:**
+```bash
+# x86 deployment
+kubectl apply -f ../../../kubernetes/deployments/x86-example.yaml
+
+# ARM64 Graviton deployment (20-40% cheaper)
+kubectl apply -f ../../../kubernetes/deployments/arm64-graviton-example.yaml
+```
+
+**Cleanup:**
+```bash
+kubectl delete -f ../../../kubernetes/deployments/
+kubectl delete -f ../../../kubernetes/karpenter/
+terragrunt run-all destroy
+```
+
+### Integration with Existing Platform
+
+**Relationship to Platform:**
+- Simple environment sits alongside `terragrunt/envs/dev/` and `terragrunt/envs/prod/`
+- Uses same Terraform modules (`terraform/modules/vpc/` and `terraform/modules/eks/`)
+- References same Kubernetes manifests (`kubernetes/karpenter/` and `kubernetes/deployments/`)
+- Follows same Terragrunt patterns and conventions
+
+**Advantages:**
+- Zero code duplication
+- Consistent module behavior across environments
+- Easy to understand and customize
+- Clear separation of concerns
+
+### Cost Estimation
+
+**Infrastructure (Always Running):**
+- EKS Control Plane: ~$73/month
+- NAT Gateway: ~$32/month
+- Controller Nodes: 2 x t3.medium = ~$60/month
+- **Subtotal: ~$165/month**
+
+**Application Workloads (Variable):**
+- x86 spot: ~$0.02-0.05/hour per vCPU
+- ARM64 Graviton spot: ~$0.015-0.035/hour per vCPU (20-40% cheaper)
+
+**Total for Dev Cluster: $175-200/month**
+
+### Documentation Updated
+- CHANGELOG.md - This entry
+- README.md - Simple environment links (if applicable)
+
+### Next Steps for Users
+
+After deploying the simple environment:
+1. Experiment with both x86 and ARM64 workloads
+2. Compare performance and costs
+3. Test Karpenter autoscaling with load
+4. Customize NodePool configurations
+5. Move to dev/prod environments for production workloads
+
+---
+
 ## [2025-11-02 Phase 2] - Karpenter Implementation
 
 ### Summary
