@@ -2,8 +2,8 @@ module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "21.8.0"
 
-  cluster_name    = var.cluster_name
-  cluster_version = var.cluster_version
+  cluster_name                   = var.cluster_name
+  cluster_version                = var.cluster_version
   cluster_endpoint_public_access = true
 
   # Authentication mode for EKS v21+
@@ -84,11 +84,11 @@ module "karpenter" {
   cluster_name = module.eks.cluster_name
 
   # Enable Pod Identity (default in v21+)
-  enable_pod_identity = true
+  enable_pod_identity             = true
   create_pod_identity_association = true
 
   # Create IAM role for Karpenter-provisioned nodes
-  create_node_iam_role = true
+  create_node_iam_role          = true
   node_iam_role_use_name_prefix = false
 
   # Enable native spot termination handling

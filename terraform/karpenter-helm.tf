@@ -55,36 +55,38 @@ provider "kubernetes" {
   token                  = data.aws_eks_cluster_auth.cluster.token
 }
 
-# Install Karpenter CRDs
-resource "kubernetes_manifest" "karpenter_node_class_crd" {
-  manifest = yamldecode(file("${path.module}/kubernetes/karpenter/crds/karpenter.k8s.aws_ec2nodeclasses.yaml"))
+# Data source for ECR Public authorization token
+data "aws_ecrpublic_authorization_token" "token" {
+  provider = aws.virginia
 }
 
-resource "kubernetes_manifest" "karpenter_node_pool_crd" {
-  manifest = yamldecode(file("${path.module}/kubernetes/karpenter/crds/karpenter.sh_nodepools.yaml"))
-}
-
-resource "kubernetes_manifest" "karpenter_node_claim_crd" {
-  manifest = yamldecode(file("${path.module}/kubernetes/karpenter/crds/karpenter.sh_nodeclaims.yaml"))
+# AWS provider for us-east-1 (required for ECR Public)
+provider "aws" {
+  alias  = "virginia"
+  region = "us-east-1"
 }
 
 # Karpenter Helm Release
+# CRDs are automatically installed by the Helm chart (skipCRDs: false is default)
 resource "helm_release" "karpenter" {
-  namespace        = "kube-system"
-  create_namespace = false
-  name             = "karpenter"
-  repository       = "oci://public.ecr.aws/karpenter"
+  namespace           = "kube-system"
+  create_namespace    = false
+  name                = "karpenter"
+  repository          = "oci://public.ecr.aws/karpenter"
   repository_username = data.aws_ecrpublic_authorization_token.token.user_name
   repository_password = data.aws_ecrpublic_authorization_token.token.password
-  chart            = "karpenter"
-  version          = var.karpenter_version
+  chart               = "karpenter"
+  version             = var.karpenter_version
+
+  # Ensure CRDs are installed by Helm
+  skip_crds = false
 
   values = [
     yamlencode({
       # Settings for EKS Pod Identity (v21+)
       settings = {
-        clusterName = var.cluster_name
-        clusterEndpoint = data.aws_eks_cluster.cluster.endpoint
+        clusterName       = var.cluster_name
+        clusterEndpoint   = data.aws_eks_cluster.cluster.endpoint
         interruptionQueue = var.karpenter_interruption_queue_name
       }
 
@@ -136,31 +138,14 @@ resource "helm_release" "karpenter" {
 
       # Pod disruption budget
       podDisruptionBudget = {
-        enabled        = true
-        minAvailable   = 1
+        enabled      = true
+        minAvailable = 1
       }
 
       # Log level
       logLevel = "info"
     })
   ]
-
-  depends_on = [
-    kubernetes_manifest.karpenter_node_class_crd,
-    kubernetes_manifest.karpenter_node_pool_crd,
-    kubernetes_manifest.karpenter_node_claim_crd,
-  ]
-}
-
-# Data source for ECR Public authorization token
-data "aws_ecrpublic_authorization_token" "token" {
-  provider = aws.virginia
-}
-
-# AWS provider for us-east-1 (required for ECR Public)
-provider "aws" {
-  alias  = "virginia"
-  region = "us-east-1"
 }
 
 # Variables
