@@ -74,12 +74,24 @@ echo "Rendering ARM64 NodePool..."
 envsubst < "$TEMPLATE_DIR/arm64-nodepool.yaml.tpl" > "$OUTPUT_DIR/arm64-nodepool-rendered.yaml"
 echo "  -> $OUTPUT_DIR/arm64-nodepool-rendered.yaml"
 
+# Render C-series NodePool
+echo "Rendering C-series NodePool..."
+envsubst < "$TEMPLATE_DIR/c-series-nodepool.yaml.tpl" > "$OUTPUT_DIR/c-series-nodepool-rendered.yaml"
+echo "  -> $OUTPUT_DIR/c-series-nodepool-rendered.yaml"
+
+# Render Spot NodePool
+echo "Rendering Spot NodePool..."
+envsubst < "$TEMPLATE_DIR/spot-nodepool.yaml.tpl" > "$OUTPUT_DIR/spot-nodepool-rendered.yaml"
+echo "  -> $OUTPUT_DIR/spot-nodepool-rendered.yaml"
+
 echo ""
 echo "Templates rendered successfully!"
 echo ""
 echo "To apply to your cluster:"
 echo "  kubectl apply -f $OUTPUT_DIR/x86-nodepool-rendered.yaml"
 echo "  kubectl apply -f $OUTPUT_DIR/arm64-nodepool-rendered.yaml"
+echo "  kubectl apply -f $OUTPUT_DIR/c-series-nodepool-rendered.yaml"
+echo "  kubectl apply -f $OUTPUT_DIR/spot-nodepool-rendered.yaml"
 echo ""
 echo "To verify:"
 echo "  kubectl get nodepool"

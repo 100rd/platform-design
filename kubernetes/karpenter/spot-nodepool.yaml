@@ -1,0 +1,229 @@
+---
+# EC2NodeClass for Spot instances
+# Highly flexible for maximum spot availability and cost savings
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: spot-flexible
+  labels:
+    capacity-type: spot
+    purpose: cost-optimized
+spec:
+  # AMI selection - using Amazon Linux 2023 (AL2023)
+  amiSelectorTerms:
+    - alias: al2023@latest
+
+  # IAM role created by Karpenter Terraform module
+  # Replace with actual role name: module.karpenter.node_iam_role_name
+  role: "REPLACE_WITH_KARPENTER_NODE_ROLE_NAME"
+
+  # Subnet discovery using tags
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "REPLACE_WITH_CLUSTER_NAME"
+
+  # Security group discovery using tags
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "REPLACE_WITH_CLUSTER_NAME"
+
+  # User data for node configuration
+  userData: |
+    #!/bin/bash
+    echo "Spot instance node initialized"
+
+  # Tags to apply to EC2 instances
+  tags:
+    Name: karpenter-spot-node
+    CapacityType: spot
+    CostOptimized: "true"
+    ManagedBy: Karpenter
+    NodePool: spot-flexible
+
+  # Block device mappings - standard for general workloads
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        volumeSize: 50Gi
+        volumeType: gp3
+        encrypted: true
+        deleteOnTermination: true
+
+  # Metadata options for IMDS
+  metadataOptions:
+    httpEndpoint: enabled
+    httpProtocolIPv6: disabled
+    httpPutResponseHopLimit: 2
+    httpTokens: required
+
+---
+# NodePool for pure Spot instances
+# Maximum cost savings (up to 90%) with high instance diversity
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: spot-flexible
+  labels:
+    capacity-type: spot
+spec:
+  # Reference to EC2NodeClass
+  template:
+    metadata:
+      labels:
+        karpenter.sh/nodepool: spot-flexible
+        capacity-type: spot
+        node-type: cost-optimized
+        interruption-tolerant: "true"
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: spot-flexible
+
+      # Requirements for node selection
+      requirements:
+        # Support both x86 and ARM64 for maximum flexibility
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64", "arm64"]
+
+        # Operating system
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+
+        # Broad instance categories for maximum spot pool diversity
+        # m = general purpose, c = compute, r = memory, t = burstable
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["m", "c", "r", "t"]
+
+        # Modern generations only (6th gen and newer)
+        - key: karpenter.k8s.aws/instance-generation
+          operator: Gt
+          values: ["5"]
+
+        # Wide range of instance families for spot diversity
+        # x86: m7i, m7a, m6i, m6a, c7i, c7a, c6i, c6a, r7i, r7a, r6i, r6a, t3
+        # ARM64: m7g, c7g, r7g, m6g, c6g, r6g, t4g
+        - key: karpenter.k8s.aws/instance-family
+          operator: In
+          values:
+            # x86 instances
+            - "m7i"
+            - "m7a"
+            - "m6i"
+            - "m6a"
+            - "c7i"
+            - "c7a"
+            - "c6i"
+            - "c6a"
+            - "r7i"
+            - "r7a"
+            - "r6i"
+            - "r6a"
+            - "t3"
+            # ARM64/Graviton instances
+            - "m7g"
+            - "m7gd"
+            - "c7g"
+            - "c7gd"
+            - "r7g"
+            - "r7gd"
+            - "m6g"
+            - "m6gd"
+            - "c6g"
+            - "c6gd"
+            - "r6g"
+            - "r6gd"
+            - "t4g"
+
+        # Flexible CPU range
+        - key: karpenter.k8s.aws/instance-cpu
+          operator: In
+          values: ["2", "4", "8", "16", "32"]
+
+        # SPOT ONLY - 100% spot for maximum cost savings
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot"]
+
+        # All availability zones for maximum spot availability
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values: ["us-east-1a", "us-east-1b", "us-east-1c"]
+
+      # Taints to indicate spot nature
+      # Workloads must tolerate spot interruptions
+      taints:
+        - key: "karpenter.sh/spot"
+          value: "true"
+          effect: "NoSchedule"
+
+  # Limits for this NodePool - generous for flexible workloads
+  limits:
+    cpu: "1000"
+    memory: 2000Gi
+
+  # Disruption budget for node lifecycle
+  disruption:
+    # Aggressive consolidation for cost optimization
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 15s
+
+    # More aggressive disruption budget for spot
+    budgets:
+      - nodes: "20%"
+        schedule: "@daily"
+        duration: 1h
+
+  # Weight for scheduling priority
+  # Higher weight to prefer spot for cost savings
+  weight: 50
+
+---
+# Example usage in a deployment:
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: spot-tolerant-app
+# spec:
+#   replicas: 10
+#   template:
+#     spec:
+#       nodeSelector:
+#         karpenter.sh/nodepool: spot-flexible
+#         capacity-type: spot
+#       tolerations:
+#         - key: "karpenter.sh/spot"
+#           operator: "Equal"
+#           value: "true"
+#           effect: "NoSchedule"
+#       containers:
+#       - name: app
+#         image: your-app:latest
+#         resources:
+#           requests:
+#             cpu: "1"
+#             memory: 2Gi
+#
+# Best practices for Spot workloads:
+# 1. Design for interruptions (2-minute warning)
+# 2. Use multiple replicas for high availability
+# 3. Implement graceful shutdown handlers
+# 4. Use persistent storage for state
+# 5. Set appropriate PodDisruptionBudgets
+#
+# Ideal workloads for Spot:
+# - Stateless web applications
+# - Batch processing jobs
+# - CI/CD workers
+# - Data processing pipelines
+# - Development/staging environments
+# - Queue workers
+# - Containerized microservices
+#
+# Cost savings:
+# - Up to 90% vs on-demand pricing
+# - Graviton instances add additional 20-40% savings
+# - Combined: up to 92-94% total savings possible

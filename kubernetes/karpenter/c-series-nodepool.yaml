@@ -1,0 +1,196 @@
+---
+# EC2NodeClass for C-series compute-optimized instances
+# Optimized for compute-intensive workloads
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: c-series-compute
+  labels:
+    architecture: amd64
+    purpose: compute-optimized
+    instance-category: c-series
+spec:
+  # AMI selection - using Amazon Linux 2023 (AL2023)
+  amiSelectorTerms:
+    - alias: al2023@latest
+
+  # IAM role created by Karpenter Terraform module
+  # Replace with actual role name: module.karpenter.node_iam_role_name
+  role: "REPLACE_WITH_KARPENTER_NODE_ROLE_NAME"
+
+  # Subnet discovery using tags
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "REPLACE_WITH_CLUSTER_NAME"
+
+  # Security group discovery using tags
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "REPLACE_WITH_CLUSTER_NAME"
+
+  # User data for node configuration
+  userData: |
+    #!/bin/bash
+    echo "C-series compute-optimized node initialized"
+
+  # Tags to apply to EC2 instances
+  tags:
+    Name: karpenter-c-series-node
+    Architecture: amd64
+    InstanceCategory: compute-optimized
+    ManagedBy: Karpenter
+    NodePool: c-series-compute
+
+  # Block device mappings - larger for compute workloads
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        volumeSize: 100Gi
+        volumeType: gp3
+        iops: 3000
+        throughput: 125
+        encrypted: true
+        deleteOnTermination: true
+
+  # Metadata options for IMDS
+  metadataOptions:
+    httpEndpoint: enabled
+    httpProtocolIPv6: disabled
+    httpPutResponseHopLimit: 2
+    httpTokens: required
+
+---
+# NodePool for C-series compute-optimized workloads
+# Best for: CPU-intensive tasks, batch processing, high-performance computing
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: c-series-compute
+  labels:
+    architecture: amd64
+    instance-category: c-series
+spec:
+  # Reference to EC2NodeClass
+  template:
+    metadata:
+      labels:
+        karpenter.sh/nodepool: c-series-compute
+        architecture: amd64
+        node-type: compute-optimized
+        instance-category: c-series
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: c-series-compute
+
+      # Requirements for node selection
+      requirements:
+        # x86 architecture only
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+
+        # Operating system
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+
+        # Only C-series instances (compute-optimized)
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["c"]
+
+        # Modern generations only (6th gen and newer)
+        - key: karpenter.k8s.aws/instance-generation
+          operator: Gt
+          values: ["5"]
+
+        # C-series instance families
+        # c7i = 7th gen Intel (latest)
+        # c7a = 7th gen AMD
+        # c6i = 6th gen Intel
+        # c6a = 6th gen AMD
+        # c6in = 6th gen Intel network-optimized
+        - key: karpenter.k8s.aws/instance-family
+          operator: In
+          values: ["c7i", "c7a", "c6i", "c6a", "c6in"]
+
+        # CPU range for compute workloads
+        - key: karpenter.k8s.aws/instance-cpu
+          operator: In
+          values: ["4", "8", "16", "32", "64"]
+
+        # Capacity type: balanced mix for reliability
+        # 70% spot for cost savings, 30% on-demand for stability
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot", "on-demand"]
+
+        # Availability zones
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values: ["us-east-1a", "us-east-1b", "us-east-1c"]
+
+      # Taints for workload isolation
+      # Require explicit scheduling to C-series nodes
+      taints:
+        - key: "workload-type"
+          value: "compute-intensive"
+          effect: "NoSchedule"
+
+  # Limits for this NodePool
+  limits:
+    cpu: "500"
+    memory: 1000Gi
+
+  # Disruption budget for node lifecycle
+  disruption:
+    # Consolidation settings - moderate for compute workloads
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 60s
+
+    # Budget for disruptions (PDB-like)
+    budgets:
+      - nodes: "10%"
+        schedule: "@daily"
+        duration: 30m
+
+  # Weight for scheduling priority
+  weight: 15
+
+---
+# Example usage in a deployment:
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: compute-intensive-app
+# spec:
+#   template:
+#     spec:
+#       nodeSelector:
+#         karpenter.sh/nodepool: c-series-compute
+#         instance-category: c-series
+#       tolerations:
+#         - key: "workload-type"
+#           operator: "Equal"
+#           value: "compute-intensive"
+#           effect: "NoSchedule"
+#       containers:
+#       - name: app
+#         image: your-compute-app:latest
+#         resources:
+#           requests:
+#             cpu: "4"
+#             memory: 8Gi
+#           limits:
+#             cpu: "8"
+#             memory: 16Gi
+#
+# Use cases for C-series:
+# - Batch processing
+# - Video encoding
+# - Scientific computing
+# - High-performance web servers
+# - Machine learning inference
+# - Data analytics

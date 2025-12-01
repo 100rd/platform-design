@@ -11,7 +11,7 @@ variable "cluster_endpoint" {
 variable "karpenter_version" {
   description = "Karpenter Helm chart version"
   type        = string
-  default     = "1.1.1"
+  default     = "1.8.1"
 }
 
 variable "karpenter_controller_role_arn" {
