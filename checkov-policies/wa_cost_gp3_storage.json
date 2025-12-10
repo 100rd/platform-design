@@ -1,0 +1,19 @@
+{
+    "metadata": {
+        "id": "WA_COST_EBS_1",
+        "name": "Ensure EBS volumes use gp3 type",
+        "category": "AWS Well-Architected",
+        "severity": "LOW",
+        "description": "Cost Optimization Pillar: Use most cost-effective resources (gp3 is cheaper/better than gp2)"
+    },
+    "scope": "resource",
+    "definition": {
+        "cond_type": "attribute",
+        "resource_types": [
+            "aws_ebs_volume"
+        ],
+        "attribute": "type",
+        "operator": "equals",
+        "value": "gp3"
+    }
+}

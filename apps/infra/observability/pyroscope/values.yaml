@@ -1,0 +1,475 @@
+pyroscope:
+  enabled: true
+
+  # Deploy in microservices mode for production scalability
+  deploymentMode: microservices
+
+  # Pyroscope configuration
+  pyroscope:
+    # Storage configuration - S3 backend
+    storage:
+      backend: s3
+      s3:
+        bucket: gaming-platform-profiling-data
+        region: us-west-2
+        endpoint: s3.us-west-2.amazonaws.com
+
+        # Use IRSA for authentication
+        access_key_id: ""
+        secret_access_key: ""
+
+        # Enable server-side encryption
+        sse:
+          type: "SSE-S3"
+
+        # Additional S3 settings
+        insecure: false
+        signature_version: "v4"
+
+    # Retention configuration - profiling data is large, keep for 7 days
+    retention:
+      enabled: true
+      delete_delay: 168h  # 7 days
+
+    # Block storage settings
+    blocks_storage:
+      backend: s3
+
+      # Block duration - 1 hour blocks for good balance
+      block_ranges:
+        - from: 0
+          to: 3600000  # 1 hour in ms
+
+      # Compaction settings
+      tsdb:
+        retention_period: 168h  # 7 days
+        block_ranges_period:
+          - 1h
+
+        # Optimize for write performance
+        wal_compression_enabled: true
+        flush_blocks_on_shutdown: true
+
+      # S3 bucket configuration
+      s3:
+        bucket_name: gaming-platform-profiling-data
+        region: us-west-2
+
+    # Ingestion configuration
+    limits:
+      # Per-tenant limits
+      ingestion_rate_mb: 50  # 50 MB/s per tenant
+      ingestion_burst_size_mb: 100
+      max_label_names_per_series: 30
+      max_label_name_length: 1024
+      max_label_value_length: 2048
+
+      # Query limits
+      max_query_lookback: 720h  # 30 days
+      max_query_length: 0  # unlimited
+      max_query_parallelism: 32
+
+      # Profile limits
+      max_profile_size_bytes: 16777216  # 16 MB
+      max_profile_stack_depth: 256
+
+    # Server configuration
+    server:
+      http_listen_port: 4040
+      grpc_listen_port: 9095
+
+      # Enable profiling of Pyroscope itself
+      profiling_enabled: true
+
+    # Memberlist configuration for distributed setup
+    memberlist:
+      join_members:
+        - pyroscope-distributor-headless.observability.svc.cluster.local:7946
+        - pyroscope-ingester-headless.observability.svc.cluster.local:7946
+        - pyroscope-querier-headless.observability.svc.cluster.local:7946
+
+      bind_port: 7946
+
+      # Gossip settings
+      retransmit_factor: 2
+      gossip_interval: 1s
+      gossip_nodes: 3
+
+  # Component configurations
+  distributor:
+    enabled: true
+    replicas: 2
+
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/component
+                    operator: In
+                    values:
+                      - distributor
+              topologyKey: kubernetes.io/hostname
+
+    service:
+      type: ClusterIP
+      port: 4040
+
+      # Enable service annotations for metrics
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4040"
+        prometheus.io/path: "/metrics"
+
+  ingester:
+    enabled: true
+    replicas: 3
+
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 4Gi
+      limits:
+        cpu: 4000m
+        memory: 8Gi
+
+    # Persistent storage for WAL
+    persistence:
+      enabled: true
+      size: 50Gi
+      storageClass: gp3-encrypted
+
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 2
+
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/component
+                  operator: In
+                  values:
+                    - ingester
+            topologyKey: kubernetes.io/hostname
+
+    # Lifecycle settings for graceful shutdown
+    terminationGracePeriodSeconds: 600
+
+    extraEnv:
+      - name: GOGC
+        value: "100"  # Optimize Go GC for memory-intensive workload
+
+  querier:
+    enabled: true
+    replicas: 2
+
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 70
+
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/component
+                    operator: In
+                    values:
+                      - querier
+              topologyKey: kubernetes.io/hostname
+
+  storeGateway:
+    enabled: true
+    replicas: 2
+
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+
+    # Persistent cache for index headers
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: gp3-encrypted
+
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/component
+                    operator: In
+                    values:
+                      - store-gateway
+              topologyKey: kubernetes.io/hostname
+
+  compactor:
+    enabled: true
+    replicas: 1  # Only one compactor needed
+
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+
+    # Persistent storage for compaction work
+    persistence:
+      enabled: true
+      size: 50Gi
+      storageClass: gp3-encrypted
+
+    # Compaction runs periodically
+    extraArgs:
+      - "-compactor.compaction-interval=1h"
+      - "-compactor.retention-enabled=true"
+
+  queryFrontend:
+    enabled: true
+    replicas: 2
+
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 70
+
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+
+    service:
+      type: ClusterIP
+      port: 4040
+
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4040"
+
+  # Agent configuration for scraping
+  agent:
+    enabled: true
+    mode: "kubernetes"
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+    # Deploy as DaemonSet to scrape all nodes
+    daemonset:
+      enabled: true
+      updateStrategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 1
+
+    # Service account with permissions to discover pods
+    serviceAccount:
+      create: true
+      annotations:
+        eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/pyroscope-agent-role
+
+    config:
+      # Scrape configuration loaded from ConfigMap
+      scrape_configs:
+        - job_name: "kubernetes-pods"
+
+          # Kubernetes service discovery
+          kubernetes_sd_configs:
+            - role: pod
+
+          # Relabeling rules
+          relabel_configs:
+            # Only scrape pods with annotation
+            - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_scrape]
+              action: keep
+              regex: "true"
+
+            # Get port from annotation or use default
+            - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_port]
+              action: replace
+              target_label: __address__
+              regex: (.+)
+              replacement: ${1}
+
+            # Get application name from annotation or label
+            - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_application_name]
+              action: replace
+              target_label: __name__
+            - source_labels: [__meta_kubernetes_pod_label_app]
+              action: replace
+              target_label: __name__
+              regex: (.+)
+
+            # Get profile type from annotation
+            - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_profile_type]
+              action: replace
+              target_label: __profile_type__
+              regex: (.+)
+              replacement: ${1}
+
+            # Add Kubernetes metadata
+            - source_labels: [__meta_kubernetes_namespace]
+              target_label: namespace
+            - source_labels: [__meta_kubernetes_pod_name]
+              target_label: pod
+            - source_labels: [__meta_kubernetes_pod_label_app]
+              target_label: app
+            - source_labels: [__meta_kubernetes_pod_label_version]
+              target_label: version
+            - source_labels: [__meta_kubernetes_pod_node_name]
+              target_label: node
+
+# External Secret for S3 credentials
+externalSecrets:
+  enabled: true
+  secretStore:
+    name: aws-parameter-store
+    kind: SecretStore
+
+  s3Credentials:
+    enabled: true
+    remoteRefs:
+      - key: /gaming-platform/prod/pyroscope/s3-access-key
+        property: access_key_id
+      - key: /gaming-platform/prod/pyroscope/s3-secret-key
+        property: secret_access_key
+
+# Service Monitor for Prometheus integration
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+
+  relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_name]
+      targetLabel: pod
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
+
+# Grafana integration
+grafana:
+  # Datasource will be created by Grafana provisioning
+  datasource:
+    enabled: true
+    name: Pyroscope
+    url: http://pyroscope-query-frontend.observability.svc.cluster.local:4040
+    jsonData:
+      httpMethod: POST
+
+      # Enable query splitting for better performance
+      queryTimeout: 300s
+      minStep: 15s
+
+# Network policies
+networkPolicy:
+  enabled: true
+
+  ingress:
+    # Allow ingress from application namespaces
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              profiling: enabled
+      ports:
+        - protocol: TCP
+          port: 4040
+
+    # Allow ingress from Grafana
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: grafana
+      ports:
+        - protocol: TCP
+          port: 4040
+
+# Additional labels for all resources
+commonLabels:
+  app.kubernetes.io/part-of: observability-stack
+  team: platform
+  component: profiling
+
+# Pod security
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Priority class for critical workloads
+priorityClassName: observability-high-priority

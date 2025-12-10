@@ -1,0 +1,38 @@
+# Grafana Dashboard ConfigMaps
+dashboardLabels:
+  grafana_dashboard: "1"
+
+namespace: observability
+
+dashboards:
+  enabled: true
+  clusterOverview:
+    enabled: true
+  nodeHealth:
+    enabled: true
+  karpenter:
+    enabled: true
+  serviceGoldenSignals:
+    enabled: true
+  serviceSlo:
+    enabled: true
+  lokiOverview:
+    enabled: true
+  tempoOverview:
+    enabled: true
+  pyroscopeOverview:
+    enabled: true
+  serviceDeepDive:
+    enabled: true
+
+datasources:
+  prometheus:
+    uid: "prometheus"
+  thanos:
+    uid: "thanos"
+  loki:
+    uid: "loki"
+  tempo:
+    uid: "tempo"
+  pyroscope:
+    uid: "pyroscope"

@@ -1,0 +1,285 @@
+---
+# ServiceMonitor for ArgoCD Application Controller
+# Monitors GitOps sync status, health, and performance
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-application-controller
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: argocd
+    app.kubernetes.io/component: application-controller
+    prometheus: kube-prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+    - argocd
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-application-controller
+
+  endpoints:
+  - port: metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+
+    relabelings:
+    - sourceLabels: []
+      targetLabel: cluster
+      replacement: eks-us-east-1
+    - sourceLabels: []
+      targetLabel: job
+      replacement: argocd-application-controller
+
+---
+# ServiceMonitor for ArgoCD API Server
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-server
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: argocd
+    app.kubernetes.io/component: server
+    prometheus: kube-prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+    - argocd
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-server
+
+  endpoints:
+  - port: metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+
+    relabelings:
+    - sourceLabels: []
+      targetLabel: cluster
+      replacement: eks-us-east-1
+    - sourceLabels: []
+      targetLabel: job
+      replacement: argocd-server
+
+---
+# ServiceMonitor for ArgoCD Repo Server
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-repo-server
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: argocd
+    app.kubernetes.io/component: repo-server
+    prometheus: kube-prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+    - argocd
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-repo-server
+
+  endpoints:
+  - port: metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+
+    relabelings:
+    - sourceLabels: []
+      targetLabel: cluster
+      replacement: eks-us-east-1
+    - sourceLabels: []
+      targetLabel: job
+      replacement: argocd-repo-server
+
+---
+# ServiceMonitor for ArgoCD ApplicationSet Controller
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-applicationset-controller
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: argocd
+    app.kubernetes.io/component: applicationset-controller
+    prometheus: kube-prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+    - argocd
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-applicationset-controller
+
+  endpoints:
+  - port: metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+
+    relabelings:
+    - sourceLabels: []
+      targetLabel: cluster
+      replacement: eks-us-east-1
+    - sourceLabels: []
+      targetLabel: job
+      replacement: argocd-applicationset-controller
+
+---
+# PrometheusRule for ArgoCD Alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: argocd-alerts
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus
+    app.kubernetes.io/name: argocd
+spec:
+  groups:
+  - name: argocd
+    interval: 30s
+    rules:
+    # Alert: ArgoCD application out of sync
+    - alert: ArgoCDApplicationOutOfSync
+      expr: |
+        argocd_app_info{sync_status="OutOfSync"} == 1
+      for: 15m
+      labels:
+        severity: warning
+        team: platform
+      annotations:
+        summary: "ArgoCD application {{ $labels.name }} is out of sync"
+        description: "Application {{ $labels.name }} in namespace {{ $labels.namespace }} has been out of sync for more than 15 minutes."
+        runbook_url: "https://runbooks.internal.example.com/argocd/out-of-sync"
+
+    # Alert: ArgoCD application degraded
+    - alert: ArgoCDApplicationDegraded
+      expr: |
+        argocd_app_info{health_status="Degraded"} == 1
+      for: 10m
+      labels:
+        severity: warning
+        team: platform
+      annotations:
+        summary: "ArgoCD application {{ $labels.name }} is degraded"
+        description: "Application {{ $labels.name }} health status is degraded."
+        runbook_url: "https://runbooks.internal.example.com/argocd/degraded"
+
+    # Alert: ArgoCD application sync failed
+    - alert: ArgoCDApplicationSyncFailed
+      expr: |
+        increase(argocd_app_sync_total{phase="Failed"}[5m]) > 0
+      for: 5m
+      labels:
+        severity: warning
+        team: platform
+      annotations:
+        summary: "ArgoCD application {{ $labels.name }} sync failed"
+        description: "Application {{ $labels.name }} failed to sync. Phase: {{ $labels.phase }}."
+        runbook_url: "https://runbooks.internal.example.com/argocd/sync-failed"
+
+    # Alert: ArgoCD controller high reconciliation time
+    - alert: ArgoCDHighReconciliationTime
+      expr: |
+        histogram_quantile(0.99,
+          rate(argocd_app_reconcile_bucket[5m])
+        ) > 300
+      for: 15m
+      labels:
+        severity: warning
+        team: platform
+      annotations:
+        summary: "ArgoCD controller high reconciliation time"
+        description: "P99 application reconciliation time is {{ $value }}s (threshold: 300s)."
+        runbook_url: "https://runbooks.internal.example.com/argocd/high-reconciliation-time"
+
+    # Alert: ArgoCD repo server high response time
+    - alert: ArgoCDRepoServerHighResponseTime
+      expr: |
+        histogram_quantile(0.99,
+          rate(argocd_repo_server_request_duration_seconds_bucket[5m])
+        ) > 10
+      for: 15m
+      labels:
+        severity: warning
+        team: platform
+      annotations:
+        summary: "ArgoCD repo server high response time"
+        description: "P99 repo server response time is {{ $value }}s (threshold: 10s)."
+        runbook_url: "https://runbooks.internal.example.com/argocd/repo-server-slow"
+
+    # Alert: ArgoCD cluster connection errors
+    - alert: ArgoCDClusterConnectionErrors
+      expr: |
+        sum by (server) (
+          rate(argocd_cluster_api_resource_objects{status_code=~"5.."}[5m])
+        ) > 1
+      for: 10m
+      labels:
+        severity: warning
+        team: platform
+      annotations:
+        summary: "ArgoCD cluster connection errors"
+        description: "ArgoCD is experiencing API errors connecting to cluster {{ $labels.server }}."
+        runbook_url: "https://runbooks.internal.example.com/argocd/cluster-connection-errors"
+
+    # Alert: ArgoCD application controller pod restart
+    - alert: ArgoCDControllerRestarting
+      expr: |
+        rate(kube_pod_container_status_restarts_total{
+          namespace="argocd",
+          container="application-controller"
+        }[15m]) > 0
+      for: 5m
+      labels:
+        severity: warning
+        team: platform
+      annotations:
+        summary: "ArgoCD application controller is restarting"
+        description: "Application controller pod {{ $labels.pod }} has restarted {{ $value }} times in the last 15 minutes."
+        runbook_url: "https://runbooks.internal.example.com/argocd/controller-restarting"
+
+    # Recording rule: Applications by sync status
+    - record: argocd:applications:by_sync_status
+      expr: |
+        sum by (sync_status) (
+          argocd_app_info
+        )
+
+    # Recording rule: Applications by health status
+    - record: argocd:applications:by_health_status
+      expr: |
+        sum by (health_status) (
+          argocd_app_info
+        )
+
+    # Recording rule: Sync success rate
+    - record: argocd:sync_success_rate
+      expr: |
+        sum(rate(argocd_app_sync_total{phase="Succeeded"}[5m]))
+        /
+        sum(rate(argocd_app_sync_total[5m]))
+
+    # Recording rule: P99 reconciliation time
+    - record: argocd:reconciliation_time:p99
+      expr: |
+        histogram_quantile(0.99,
+          rate(argocd_app_reconcile_bucket[5m])
+        )
+
+    # Recording rule: Total applications
+    - record: argocd:applications:total
+      expr: |
+        count(argocd_app_info)

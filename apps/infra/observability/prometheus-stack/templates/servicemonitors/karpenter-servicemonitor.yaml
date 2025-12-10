@@ -1,0 +1,197 @@
+---
+# ServiceMonitor for Karpenter Controller
+# Monitors node provisioning, deprovisioning, and resource utilization
+#
+# Key Metrics:
+# - karpenter_nodes_created_total
+# - karpenter_nodes_terminated_total
+# - karpenter_deprovisioning_actions_performed_total
+# - karpenter_cloudprovider_duration_seconds
+# - karpenter_provisioner_scheduling_duration_seconds
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: karpenter
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: karpenter
+    app.kubernetes.io/component: controller
+    prometheus: kube-prometheus
+spec:
+  # Namespace where Karpenter is installed
+  namespaceSelector:
+    matchNames:
+    - karpenter
+
+  # Selector for Karpenter service
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: karpenter
+
+  # Endpoint configuration
+  endpoints:
+  - port: http-metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+    scheme: http
+
+    # Relabel configs
+    relabelings:
+    # Add cluster label
+    - sourceLabels: []
+      targetLabel: cluster
+      replacement: eks-us-east-1
+
+    # Add job label
+    - sourceLabels: []
+      targetLabel: job
+      replacement: karpenter
+
+    # Preserve namespace
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
+
+    # Preserve pod name
+    - sourceLabels: [__meta_kubernetes_pod_name]
+      targetLabel: pod
+
+    # Preserve service name
+    - sourceLabels: [__meta_kubernetes_service_name]
+      targetLabel: service
+
+    # Metric relabeling (drop high-cardinality or unnecessary metrics)
+    metricRelabelings:
+    # Drop controller runtime metrics (too verbose)
+    - sourceLabels: [__name__]
+      regex: "controller_runtime_.*"
+      action: drop
+
+    # Drop Go runtime metrics (optional, uncomment if needed)
+    # - sourceLabels: [__name__]
+    #   regex: "go_(gc|memstats|threads|goroutines)_.*"
+    #   action: drop
+
+    # Keep only essential Karpenter metrics
+    - sourceLabels: [__name__]
+      regex: "karpenter_(nodes|pods|consolidation|deprovisioning|provisioner|cloudprovider|interruption)_.*"
+      action: keep
+
+---
+# PrometheusRule for Karpenter Alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: karpenter-alerts
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus
+    app.kubernetes.io/name: karpenter
+spec:
+  groups:
+  - name: karpenter
+    interval: 30s
+    rules:
+    # Alert: Karpenter controller is down
+    - alert: KarpenterControllerDown
+      expr: |
+        up{job="karpenter"} == 0
+      for: 5m
+      labels:
+        severity: critical
+        team: platform
+      annotations:
+        summary: "Karpenter controller is down"
+        description: "Karpenter controller has been down for more than 5 minutes. Node provisioning is impacted."
+        runbook_url: "https://runbooks.internal.example.com/karpenter/controller-down"
+
+    # Alert: High node provisioning failures
+    - alert: KarpenterHighProvisioningFailures
+      expr: |
+        rate(karpenter_nodes_created_total{reason="failed"}[5m]) > 0.1
+      for: 10m
+      labels:
+        severity: warning
+        team: platform
+      annotations:
+        summary: "High rate of Karpenter provisioning failures"
+        description: "Karpenter is failing to provision nodes at a rate of {{ $value }} nodes/sec."
+        runbook_url: "https://runbooks.internal.example.com/karpenter/provisioning-failures"
+
+    # Alert: Provisioning latency is high
+    - alert: KarpenterHighProvisioningLatency
+      expr: |
+        histogram_quantile(0.99,
+          rate(karpenter_provisioner_scheduling_duration_seconds_bucket[5m])
+        ) > 120
+      for: 15m
+      labels:
+        severity: warning
+        team: platform
+      annotations:
+        summary: "Karpenter provisioning latency is high"
+        description: "P99 node provisioning latency is {{ $value }}s (threshold: 120s). Pods are waiting longer for nodes."
+        runbook_url: "https://runbooks.internal.example.com/karpenter/high-latency"
+
+    # Alert: CloudProvider API errors
+    - alert: KarpenterCloudProviderErrors
+      expr: |
+        rate(karpenter_cloudprovider_errors_total[5m]) > 1
+      for: 10m
+      labels:
+        severity: warning
+        team: platform
+      annotations:
+        summary: "Karpenter CloudProvider API errors"
+        description: "Karpenter is experiencing CloudProvider API errors at {{ $value }} errors/sec."
+        runbook_url: "https://runbooks.internal.example.com/karpenter/cloudprovider-errors"
+
+    # Alert: Interrupted nodes not draining
+    - alert: KarpenterInterruptedNodesStuck
+      expr: |
+        karpenter_interruption_actions_performed_total{action="taint_node"}
+        - karpenter_interruption_actions_performed_total{action="delete_node"} > 5
+      for: 30m
+      labels:
+        severity: warning
+        team: platform
+      annotations:
+        summary: "Interrupted nodes not draining"
+        description: "{{ $value }} interrupted nodes are stuck and not draining properly."
+        runbook_url: "https://runbooks.internal.example.com/karpenter/stuck-nodes"
+
+    # Recording rule: Node creation rate by provisioner
+    - record: karpenter:node_creation_rate:by_provisioner
+      expr: |
+        sum by (provisioner) (
+          rate(karpenter_nodes_created_total[5m])
+        )
+
+    # Recording rule: Node termination rate by reason
+    - record: karpenter:node_termination_rate:by_reason
+      expr: |
+        sum by (reason) (
+          rate(karpenter_nodes_terminated_total[5m])
+        )
+
+    # Recording rule: P99 provisioning latency by provisioner
+    - record: karpenter:provisioning_latency:p99:by_provisioner
+      expr: |
+        histogram_quantile(0.99,
+          sum by (provisioner, le) (
+            rate(karpenter_provisioner_scheduling_duration_seconds_bucket[5m])
+          )
+        )
+
+    # Recording rule: Total nodes by provisioner and capacity type
+    - record: karpenter:nodes_total:by_provisioner_capacity_type
+      expr: |
+        sum by (provisioner, capacity_type) (
+          karpenter_nodes_allocatable
+        )
+
+    # Recording rule: Consolidation savings (theoretical)
+    - record: karpenter:consolidation_savings:nodes
+      expr: |
+        sum(karpenter_deprovisioning_actions_performed_total{action="consolidate"})

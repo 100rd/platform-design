@@ -1,0 +1,40 @@
+apiVersion: v2
+name: prometheus-stack
+description: Production-ready Prometheus + Thanos + Grafana stack for large-scale EKS clusters (1K-5K nodes, 100K+ pods)
+type: application
+version: 1.0.0
+appVersion: "v0.70.0"
+
+keywords:
+  - prometheus
+  - thanos
+  - grafana
+  - monitoring
+  - observability
+  - metrics
+  - alerting
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+dependencies:
+  # kube-prometheus-stack - Community operator for Prometheus, Grafana, Alertmanager
+  # Includes CRDs for ServiceMonitor, PrometheusRule, etc.
+  - name: kube-prometheus-stack
+    version: "~65.3.0"
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: kube-prometheus-stack.enabled
+
+  # Thanos - Long-term storage and global query view
+  - name: thanos
+    version: "~15.7.0"
+    repository: https://charts.bitnami.com/bitnami
+    condition: thanos.enabled
+
+annotations:
+  # Document scale capabilities
+  "platform.example.com/max-nodes": "5000"
+  "platform.example.com/max-pods": "100000"
+  "platform.example.com/retention-local": "2h"
+  "platform.example.com/retention-s3": "1y"

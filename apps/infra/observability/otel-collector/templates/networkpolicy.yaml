@@ -1,0 +1,265 @@
+{{- if .Values.gateway.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "otel-collector.fullname" . }}-gateway
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "otel-collector.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "otel-collector.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: gateway
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Allow telemetry from all application pods
+    - from:
+        - namespaceSelector: {}
+      ports:
+        # OTLP gRPC
+        - protocol: TCP
+          port: 4317
+        # OTLP HTTP
+        - protocol: TCP
+          port: 4318
+        # Jaeger gRPC
+        - protocol: TCP
+          port: 14250
+        # Jaeger Thrift HTTP
+        - protocol: TCP
+          port: 14268
+        # Zipkin
+        - protocol: TCP
+          port: 9411
+
+    # Allow Prometheus scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+          podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 8888
+
+    # Allow health checks from kubelet
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 13133
+
+    # Allow zpages debugging
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 55679
+
+  egress:
+    # Allow to Prometheus for remote write
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+          podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
+
+    # Allow to Loki for logs
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: loki
+      ports:
+        - protocol: TCP
+          port: 3100
+
+    # Allow to Tempo for traces
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: tempo
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 9096
+
+    # Allow to Pyroscope for profiling
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: pyroscope
+      ports:
+        - protocol: TCP
+          port: 4317
+
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+
+    # Allow Kubernetes API access (for k8sattributes processor)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+
+    # Allow HTTPS for external exporters (if needed)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+{{- end }}
+
+{{- if .Values.daemonset.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "otel-collector.fullname" . }}-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "otel-collector.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "otel-collector.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: agent
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Allow telemetry from pods on the same node
+    - from:
+        - namespaceSelector: {}
+      ports:
+        # OTLP gRPC
+        - protocol: TCP
+          port: 4317
+        # OTLP HTTP
+        - protocol: TCP
+          port: 4318
+
+    # Allow Prometheus scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+          podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 8888
+
+    # Allow health checks
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 13133
+
+  egress:
+    # Allow forwarding to gateway collector
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ include "otel-collector.name" . }}
+              app.kubernetes.io/component: gateway
+      ports:
+        - protocol: TCP
+          port: 4317
+
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+
+    # Allow Kubernetes API access (for metrics collection)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+        # Kubelet metrics
+        - protocol: TCP
+          port: 10250
+{{- end }}
+
+---
+# Helper templates
+{{- define "otel-collector.labels" -}}
+app.kubernetes.io/name: {{ include "otel-collector.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+helm.sh/chart: {{ include "otel-collector.chart" . }}
+{{- end }}
+
+{{- define "otel-collector.name" -}}
+{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "otel-collector.fullname" -}}
+{{- if .Values.fullnameOverride }}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- $name := default .Chart.Name .Values.nameOverride }}
+{{- if contains $name .Release.Name }}
+{{- .Release.Name | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- define "otel-collector.chart" -}}
+{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{- end }}

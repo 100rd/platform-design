@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: {{ .Values.namespace }}
+  labels:
+    grafana_datasource: "1"
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      # Prometheus (default, short-term queries)
+      - name: Prometheus
+        type: prometheus
+        uid: prometheus
+        access: proxy
+        url: http://prometheus-stack-kube-prom-prometheus.observability.svc.cluster.local:9090
+        isDefault: true
+        editable: false
+        jsonData:
+          timeInterval: 30s
+          queryTimeout: 60s
+          httpMethod: POST
+          exemplarTraceIdDestinations:
+            - name: trace_id
+              datasourceUid: tempo
+
+      # Thanos (long-term queries, >2h)
+      - name: Thanos
+        type: prometheus
+        uid: thanos
+        access: proxy
+        url: http://thanos-query-frontend.observability.svc.cluster.local:9090
+        editable: false
+        jsonData:
+          timeInterval: 30s
+          queryTimeout: 300s
+          httpMethod: POST
+          exemplarTraceIdDestinations:
+            - name: trace_id
+              datasourceUid: tempo
+
+      # Loki (logs)
+      - name: Loki
+        type: loki
+        uid: loki
+        access: proxy
+        url: http://loki-stack-gateway.observability.svc.cluster.local
+        editable: false
+        jsonData:
+          maxLines: 1000
+          derivedFields:
+            # Link trace IDs in logs to Tempo traces
+            - datasourceUid: tempo
+              matcherRegex: "trace_id=(\\w+)"
+              name: TraceID
+              url: "$${__value.raw}"
+            # Link to service in metrics
+            - datasourceUid: prometheus
+              matcherRegex: "service=([\\w-]+)"
+              name: Service
+              url: "$${__value.raw}"
+
+      # Tempo (distributed traces)
+      - name: Tempo
+        type: tempo
+        uid: tempo
+        access: proxy
+        url: http://tempo-query-frontend.observability.svc.cluster.local:3100
+        editable: false
+        jsonData:
+          httpMethod: GET
+          tracesToLogs:
+            # Link traces to logs in Loki
+            datasourceUid: loki
+            tags: ['job', 'instance', 'pod', 'namespace']
+            mappedTags:
+              - key: service.name
+                value: service
+            spanStartTimeShift: '-1m'
+            spanEndTimeShift: '1m'
+            filterByTraceID: true
+            filterBySpanID: false
+          tracesToMetrics:
+            # Link traces to metrics in Prometheus
+            datasourceUid: prometheus
+            tags:
+              - key: service.name
+                value: service
+            queries:
+              - name: 'Request rate'
+                query: 'sum(rate(http_requests_total{service="$${service}"}[5m]))'
+              - name: 'Error rate'
+                query: 'sum(rate(http_requests_total{service="$${service}", status=~"5.."}[5m]))'
+          serviceMap:
+            datasourceUid: prometheus
+          search:
+            hide: false
+          nodeGraph:
+            enabled: true
+
+      # Pyroscope (continuous profiling)
+      - name: Pyroscope
+        type: grafana-pyroscope-datasource
+        uid: pyroscope
+        access: proxy
+        url: http://pyroscope-query-frontend.observability.svc.cluster.local:4040
+        editable: false
+        jsonData:
+          minStep: 15s

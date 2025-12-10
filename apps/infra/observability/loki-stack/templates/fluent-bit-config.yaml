@@ -1,0 +1,305 @@
+{{- if .Values.fluent-bit.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-loki-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: fluent-bit
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: log-collector
+data:
+  # Main Fluent Bit configuration
+  fluent-bit.conf: |
+    [SERVICE]
+        Daemon Off
+        Flush 5
+        Log_Level info
+        Parsers_File parsers.conf
+        Parsers_File custom_parsers.conf
+        HTTP_Server On
+        HTTP_Listen 0.0.0.0
+        HTTP_Port 2020
+        Health_Check On
+        storage.path /var/fluent-bit/state/flb-storage/
+        storage.sync normal
+        storage.checksum off
+        storage.max_chunks_up 128
+        storage.backlog.mem_limit 20M
+        storage.metrics on
+
+    @INCLUDE input-kubernetes.conf
+    @INCLUDE input-systemd.conf
+    @INCLUDE filter-kubernetes.conf
+    @INCLUDE filter-modify.conf
+    @INCLUDE output-loki.conf
+
+  # Input: Kubernetes container logs
+  input-kubernetes.conf: |
+    [INPUT]
+        Name tail
+        Path /var/log/containers/*.log
+        multiline.parser docker, cri, go, java, python
+        Tag kube.*
+        Mem_Buf_Limit 50MB
+        Skip_Long_Lines On
+        Skip_Empty_Lines On
+        Refresh_Interval 10
+        Rotate_Wait 30
+        DB /var/fluent-bit/state/flb_kube.db
+        DB.sync normal
+        DB.locking true
+        storage.type filesystem
+        Buffer_Chunk_Size 256KB
+        Buffer_Max_Size 2MB
+        # Exclude noisy system namespaces
+        Exclude_Path /var/log/containers/*_kube-system_*.log,/var/log/containers/*_kube-public_*.log,/var/log/containers/*_kube-node-lease_*.log
+
+  # Input: Systemd logs (kubelet, containerd, etc.)
+  input-systemd.conf: |
+    [INPUT]
+        Name systemd
+        Tag host.*
+        Path /var/log/journal
+        Systemd_Filter _SYSTEMD_UNIT=kubelet.service
+        Systemd_Filter _SYSTEMD_UNIT=docker.service
+        Systemd_Filter _SYSTEMD_UNIT=containerd.service
+        Read_From_Tail On
+        Strip_Underscores On
+        DB /var/fluent-bit/state/flb_systemd.db
+        DB.sync normal
+        DB.locking true
+        storage.type filesystem
+
+  # Filter: Kubernetes metadata enrichment
+  filter-kubernetes.conf: |
+    [FILTER]
+        Name kubernetes
+        Match kube.*
+        Kube_URL https://kubernetes.default.svc:443
+        Kube_CA_File /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        Kube_Token_File /var/run/secrets/kubernetes.io/serviceaccount/token
+        Kube_Tag_Prefix kube.var.log.containers.
+        Merge_Log On
+        Keep_Log Off
+        K8S-Logging.Parser On
+        K8S-Logging.Exclude On
+        Labels On
+        Annotations On
+        Buffer_Size 512KB
+        Use_Kubelet On
+        Kubelet_Port 10250
+        Kube_Meta_Cache_TTL 3600
+
+    # Lift nested kubernetes labels to top level
+    [FILTER]
+        Name nest
+        Match kube.*
+        Operation lift
+        Nested_under kubernetes
+        Add_prefix k8s_
+
+    # Parse JSON logs if present
+    [FILTER]
+        Name parser
+        Match kube.*
+        Key_Name message
+        Parser json
+        Reserve_Data On
+        Preserve_Key On
+
+  # Filter: Add cluster and environment labels
+  filter-modify.conf: |
+    # Add global labels to all logs
+    [FILTER]
+        Name modify
+        Match kube.*
+        Add cluster {{ .Values.global.clusterName | default "gaming-production-eks" }}
+        Add environment {{ .Values.global.environment | default "production" }}
+        Add platform gaming
+        Add collector fluent-bit
+
+    [FILTER]
+        Name modify
+        Match host.*
+        Add cluster {{ .Values.global.clusterName | default "gaming-production-eks" }}
+        Add environment {{ .Values.global.environment | default "production" }}
+        Add platform gaming
+        Add source systemd
+        Add collector fluent-bit
+
+    # Rename log field to message for consistency
+    [FILTER]
+        Name modify
+        Match kube.*
+        Rename log message
+
+    # Add node name
+    [FILTER]
+        Name modify
+        Match *
+        Add node ${NODE_NAME}
+
+    # Remove empty messages
+    [FILTER]
+        Name grep
+        Match kube.*
+        Exclude message ^\s*$
+
+    # Filter out health check spam
+    [FILTER]
+        Name grep
+        Match kube.*
+        Exclude message GET /health
+        Exclude message GET /healthz
+        Exclude message GET /readyz
+
+  # Output: Send to Loki
+  output-loki.conf: |
+    # Application logs to Loki
+    [OUTPUT]
+        Name loki
+        Match kube.*
+        Host loki-stack-gateway.{{ .Release.Namespace }}.svc.cluster.local
+        Port 80
+        TLS Off
+
+        # Tenant ID for multi-tenancy
+        tenant_id game-platform
+
+        # Static labels (indexed)
+        Labels job=fluent-bit, cluster={{ .Values.global.clusterName | default "gaming-production-eks" }}
+
+        # Dynamic labels from log stream (indexed in Loki)
+        Label_keys k8s_namespace_name,k8s_pod_name,k8s_container_name,k8s_labels_app,k8s_labels_component,node
+
+        # Remove high-cardinality keys to reduce index size
+        Remove_keys k8s_host,k8s_pod_id,k8s_docker_id,k8s_container_hash,k8s_container_image
+
+        # Automatically use kubernetes labels
+        Auto_kubernetes_labels on
+
+        # Drop single labels with high cardinality
+        Drop_single_key on
+
+        # Retry configuration
+        Retry_Limit 3
+        Retry_Wait 30
+
+        # Buffer configuration for reliability
+        storage.total_limit_size 2G
+
+        # Line format
+        Line_format json
+
+        # Compression
+        compression gzip
+
+    # System logs to Loki (separate stream)
+    [OUTPUT]
+        Name loki
+        Match host.*
+        Host loki-stack-gateway.{{ .Release.Namespace }}.svc.cluster.local
+        Port 80
+        TLS Off
+        tenant_id game-platform
+        Labels job=fluent-bit-systemd, cluster={{ .Values.global.clusterName | default "gaming-production-eks" }}, source=systemd
+        Label_keys node
+        Retry_Limit 3
+        Retry_Wait 30
+        storage.total_limit_size 1G
+        Line_format json
+        compression gzip
+
+  # Parsers configuration
+  parsers.conf: |
+    # Docker JSON parser
+    [PARSER]
+        Name docker
+        Format json
+        Time_Key time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+        Time_Keep On
+        Decode_Field_As escaped_utf8 log do_next
+        Decode_Field_As json log
+
+    # CRI parser
+    [PARSER]
+        Name cri
+        Format regex
+        Regex ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>[^ ]*) (?<message>.*)$
+        Time_Key time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+        Time_Keep On
+
+    # JSON parser for structured logs
+    [PARSER]
+        Name json
+        Format json
+        Time_Key time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+        Time_Keep On
+
+    # Syslog parser
+    [PARSER]
+        Name syslog
+        Format regex
+        Regex ^\<(?<pri>[0-9]+)\>(?<time>[^ ]* {1,2}[^ ]* [^ ]*) (?<host>[^ ]*) (?<ident>[a-zA-Z0-9_\/\.\-]*)(?:\[(?<pid>[0-9]+)\])?(?:[^\:]*\:)? *(?<message>.*)$
+        Time_Key time
+        Time_Format %b %d %H:%M:%S
+
+  # Custom multiline parsers
+  custom_parsers.conf: |
+    # Go stack traces
+    [MULTILINE_PARSER]
+        name go
+        type regex
+        flush_timeout 1000
+        rule "start_state" "/^(panic|fatal|error):/i" "cont"
+        rule "cont" "/^\s+at\s/" "cont"
+        rule "cont" "/^goroutine\s\d+/" "cont"
+
+    # Java stack traces
+    [MULTILINE_PARSER]
+        name java
+        type regex
+        flush_timeout 1000
+        rule "start_state" "/^(\d{4}-\d{2}-\d{2}|\w{3}\s+\d{1,2})\s.*Exception/" "cont"
+        rule "cont" "/^\s+(at|\.{3})\s/" "cont"
+        rule "cont" "/^Caused by:/" "cont"
+
+    # Python stack traces
+    [MULTILINE_PARSER]
+        name python
+        type regex
+        flush_timeout 1000
+        rule "start_state" "/^Traceback/" "cont"
+        rule "cont" "/^\s+File/" "cont"
+        rule "cont" "/^\s{2,}/" "cont"
+        rule "cont" "/^\w+Error:/" "cont"
+
+    # Generic error continuation
+    [MULTILINE_PARSER]
+        name generic_error
+        type regex
+        flush_timeout 1000
+        rule "start_state" "/^(ERROR|FATAL|CRITICAL)/" "cont"
+        rule "cont" "/^\s+/" "cont"
+
+---
+# ConfigMap for Fluent Bit cluster info
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-cluster-info
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: fluent-bit
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  cluster.name: {{ .Values.global.clusterName | default "gaming-production-eks" | quote }}
+  environment: {{ .Values.global.environment | default "production" | quote }}
+  platform: "gaming"
+
+{{- end }}

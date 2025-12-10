@@ -1,0 +1,2260 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: {{ .Values.grafanaNamespace }}
+  labels:
+    {{- range $key, $val := .Values.dashboardLabels }}
+    {{ $key }}: {{ $val | quote }}
+    {{- end }}
+data:
+  cluster-overview.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "datasource": "{{ .Values.datasources.prometheus.name }}",
+            "enable": true,
+            "expr": "changes(kube_deployment_status_observed_generation{cluster=\"$cluster\"}[5m]) > 0",
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Deployments",
+            "tagKeys": "deployment,namespace"
+          }
+        ]
+      },
+      "description": "Single pane of glass for EKS cluster health and performance",
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [
+        {
+          "asDropdown": true,
+          "icon": "external link",
+          "includeVars": true,
+          "keepTime": true,
+          "tags": ["infrastructure"],
+          "title": "Infrastructure Dashboards",
+          "type": "dashboards"
+        },
+        {
+          "asDropdown": true,
+          "icon": "external link",
+          "includeVars": true,
+          "keepTime": true,
+          "tags": ["application"],
+          "title": "Application Dashboards",
+          "type": "dashboards"
+        }
+      ],
+      "panels": [
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 0.8},
+                  {"color": "green", "value": 0.95}
+                ]
+              },
+              "unit": "percentunit"
+            }
+          },
+          "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+          "id": 1,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "expr": "sum(kube_node_status_condition{condition=\"Ready\",status=\"true\",cluster=\"$cluster\"}) / sum(kube_node_info{cluster=\"$cluster\"})",
+              "refId": "A"
+            }
+          ],
+          "title": "Cluster Health",
+          "type": "gauge"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "off"}
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 4, "y": 0},
+          "id": 2,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "right"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "sum(kube_node_info{cluster=\"$cluster\"})",
+              "legendFormat": "Total Nodes",
+              "refId": "A"
+            },
+            {
+              "expr": "sum(kube_pod_info{cluster=\"$cluster\"})",
+              "legendFormat": "Total Pods",
+              "refId": "B"
+            },
+            {
+              "expr": "sum(kube_deployment_status_replicas{cluster=\"$cluster\"})",
+              "legendFormat": "Total Replicas",
+              "refId": "C"
+            }
+          ],
+          "title": "Cluster Resources Over Time",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 60},
+                  {"color": "orange", "value": 75},
+                  {"color": "red", "value": 85}
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 4, "w": 4, "x": 16, "y": 0},
+          "id": 3,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          },
+          "targets": [
+            {
+              "expr": "(1 - sum(node_memory_MemAvailable_bytes{cluster=\"$cluster\"}) / sum(node_memory_MemTotal_bytes{cluster=\"$cluster\"})) * 100",
+              "refId": "A"
+            }
+          ],
+          "title": "Memory Utilization",
+          "type": "gauge"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 60},
+                  {"color": "orange", "value": 75},
+                  {"color": "red", "value": 85}
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 4, "w": 4, "x": 20, "y": 0},
+          "id": 4,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          },
+          "targets": [
+            {
+              "expr": "(1 - avg(rate(node_cpu_seconds_total{mode=\"idle\",cluster=\"$cluster\"}[5m]))) * 100",
+              "refId": "A"
+            }
+          ],
+          "title": "CPU Utilization",
+          "type": "gauge"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "custom": {
+                "align": "auto",
+                "cellOptions": {"type": "auto"},
+                "inspect": false
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "CPU Usage"},
+                "properties": [
+                  {"id": "unit", "value": "percentunit"},
+                  {"id": "custom.cellOptions", "value": {"type": "gauge"}}
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Memory Usage"},
+                "properties": [
+                  {"id": "unit", "value": "percentunit"},
+                  {"id": "custom.cellOptions", "value": {"type": "gauge"}}
+                ]
+              }
+            ]
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 4},
+          "id": 5,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": "",
+              "reducer": ["sum"],
+              "show": false
+            },
+            "showHeader": true,
+            "sortBy": []
+          },
+          "targets": [
+            {
+              "expr": "topk(10, sum by (namespace) (rate(container_cpu_usage_seconds_total{cluster=\"$cluster\",namespace!=\"\"}[5m])))",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Top CPU Consumers by Namespace",
+          "transformations": [
+            {"id": "organize", "options": {"excludeByName": {"Time": true}}}
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false}
+              },
+              "mappings": []
+            }
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 4},
+          "id": 6,
+          "options": {
+            "displayLabels": ["percent"],
+            "legend": {"displayMode": "table", "placement": "right", "showLegend": true, "values": ["value", "percent"]},
+            "pieType": "donut",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "expr": "sum by (namespace) (kube_pod_info{cluster=\"$cluster\"})",
+              "refId": "A"
+            }
+          ],
+          "title": "Pods by Namespace",
+          "type": "piechart"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false}
+              },
+              "mappings": []
+            }
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 4},
+          "id": 7,
+          "options": {
+            "displayLabels": ["percent"],
+            "legend": {"displayMode": "table", "placement": "right", "showLegend": true, "values": ["value", "percent"]},
+            "pieType": "donut",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "expr": "sum by (label_karpenter_sh_capacity_type) (kube_node_labels{cluster=\"$cluster\",label_karpenter_sh_capacity_type!=\"\"})",
+              "legendFormat": "{{label_karpenter_sh_capacity_type}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Node Capacity Type (Spot vs On-Demand)",
+          "type": "piechart"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "custom": {
+                "align": "auto",
+                "cellOptions": {"type": "color-text"},
+                "inspect": false
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 1},
+                  {"color": "red", "value": 5}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 6, "w": 24, "x": 0, "y": 12},
+          "id": 8,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": "",
+              "reducer": ["sum"],
+              "show": false
+            },
+            "showHeader": true
+          },
+          "targets": [
+            {
+              "expr": "ALERTS{cluster=\"$cluster\",alertstate=\"firing\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Active Alerts",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {"Time": true, "__name__": true, "cluster": true},
+                "indexByName": {},
+                "renameByName": {
+                  "alertname": "Alert",
+                  "severity": "Severity",
+                  "namespace": "Namespace",
+                  "alertstate": "State"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        }
+      ],
+      "refresh": "{{ .Values.defaultRefresh }}",
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["infrastructure", "overview", "eks"],
+      "templating": {
+        "list": [
+          {
+            "current": {"selected": false, "text": "Prometheus", "value": "Prometheus"},
+            "hide": 0,
+            "includeAll": false,
+            "label": "Datasource",
+            "multi": false,
+            "name": "DS_PROMETHEUS",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "type": "datasource"
+          },
+          {
+            "current": {"selected": false, "text": "{{ .Values.cluster.name }}", "value": "{{ .Values.cluster.name }}"},
+            "hide": 0,
+            "label": "Cluster",
+            "name": "cluster",
+            "options": [
+              {"selected": true, "text": "{{ .Values.cluster.name }}", "value": "{{ .Values.cluster.name }}"}
+            ],
+            "query": "{{ .Values.cluster.name }}",
+            "skipUrlSync": false,
+            "type": "constant"
+          }
+        ]
+      },
+      "time": {
+        "from": "{{ .Values.defaultTimeRange.from }}",
+        "to": "{{ .Values.defaultTimeRange.to }}"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Cluster Overview",
+      "uid": "cluster-overview",
+      "version": 1,
+      "weekStart": ""
+    }
+
+  node-health.json: |
+    {
+      "annotations": {
+        "list": []
+      },
+      "description": "Detailed node-level health and performance metrics",
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [
+        {
+          "icon": "dashboard",
+          "includeVars": true,
+          "keepTime": true,
+          "tags": [],
+          "title": "Back to Cluster Overview",
+          "type": "link",
+          "url": "/d/cluster-overview"
+        }
+      ],
+      "panels": [
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "custom": {
+                "align": "auto",
+                "cellOptions": {"type": "auto"},
+                "inspect": false
+              },
+              "mappings": [
+                {"options": {"0": {"text": "Not Ready", "color": "red"}}, "type": "value"},
+                {"options": {"1": {"text": "Ready", "color": "green"}}, "type": "value"}
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Status"},
+                "properties": [
+                  {"id": "custom.cellOptions", "value": {"type": "color-background"}}
+                ]
+              }
+            ]
+          },
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+          "id": 1,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": "",
+              "reducer": ["sum"],
+              "show": false
+            },
+            "showHeader": true
+          },
+          "targets": [
+            {
+              "expr": "kube_node_info{cluster=\"$cluster\",node=~\"$node\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            },
+            {
+              "expr": "kube_node_status_condition{cluster=\"$cluster\",node=~\"$node\",condition=\"Ready\",status=\"true\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Node Status",
+          "transformations": [
+            {"id": "merge"},
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {"Time": true, "__name__": true, "cluster": true, "condition": true, "endpoint": true, "instance": true, "job": true, "service": true, "status": true},
+                "indexByName": {},
+                "renameByName": {
+                  "node": "Node",
+                  "kernel_version": "Kernel",
+                  "kubelet_version": "Kubelet",
+                  "os_image": "OS",
+                  "Value #B": "Status"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "off"}
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "id": 2,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "(1 - avg by (node) (rate(node_cpu_seconds_total{mode=\"idle\",cluster=\"$cluster\",node=~\"$node\"}[5m]))) * 100",
+              "legendFormat": "{{node}}",
+              "refId": "A"
+            }
+          ],
+          "title": "CPU Usage by Node",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "off"}
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "id": 3,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "(1 - node_memory_MemAvailable_bytes{cluster=\"$cluster\",node=~\"$node\"} / node_memory_MemTotal_bytes{cluster=\"$cluster\",node=~\"$node\"}) * 100",
+              "legendFormat": "{{node}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Memory Usage by Node",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "off"}
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              },
+              "unit": "Bps"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+          "id": 4,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "rate(node_network_receive_bytes_total{cluster=\"$cluster\",node=~\"$node\",device!~\"lo|veth.*|docker.*|flannel.*|cali.*|cbr.*\"}[5m])",
+              "legendFormat": "{{node}} - receive",
+              "refId": "A"
+            },
+            {
+              "expr": "rate(node_network_transmit_bytes_total{cluster=\"$cluster\",node=~\"$node\",device!~\"lo|veth.*|docker.*|flannel.*|cali.*|cbr.*\"}[5m])",
+              "legendFormat": "{{node}} - transmit",
+              "refId": "B"
+            }
+          ],
+          "title": "Network I/O by Node",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "off"}
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+          "id": 5,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "(1 - node_filesystem_avail_bytes{cluster=\"$cluster\",node=~\"$node\",fstype!~\"tmpfs|fuse.lxcfs|squashfs|vfat\"} / node_filesystem_size_bytes{cluster=\"$cluster\",node=~\"$node\",fstype!~\"tmpfs|fuse.lxcfs|squashfs|vfat\"}) * 100",
+              "legendFormat": "{{node}} - {{mountpoint}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Disk Usage by Node",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 5},
+                  {"color": "red", "value": 10}
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 24},
+          "id": 6,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          },
+          "targets": [
+            {
+              "expr": "sum(karpenter_nodes_created_total{cluster=\"$cluster\"})",
+              "refId": "A"
+            }
+          ],
+          "title": "Karpenter Nodes Created (Total)",
+          "type": "gauge"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              },
+              "unit": "currencyUSD"
+            }
+          },
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 24},
+          "id": 7,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "text": {}
+          },
+          "targets": [
+            {
+              "expr": "sum(kube_node_status_capacity{resource=\"cpu\",cluster=\"$cluster\",node=~\"$node\"} * on(node) group_left(label_karpenter_sh_capacity_type) (kube_node_labels{cluster=\"$cluster\",label_karpenter_sh_capacity_type=\"spot\"} * {{ .Values.costs.spotDiscount }} * {{ .Values.costs.onDemandRate }} + kube_node_labels{cluster=\"$cluster\",label_karpenter_sh_capacity_type=\"on-demand\"} * {{ .Values.costs.onDemandRate }}))",
+              "refId": "A"
+            }
+          ],
+          "title": "Estimated Hourly Cost",
+          "type": "gauge"
+        }
+      ],
+      "refresh": "{{ .Values.defaultRefresh }}",
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["infrastructure", "nodes", "karpenter"],
+      "templating": {
+        "list": [
+          {
+            "current": {"selected": false, "text": "Prometheus", "value": "Prometheus"},
+            "hide": 0,
+            "includeAll": false,
+            "label": "Datasource",
+            "multi": false,
+            "name": "DS_PROMETHEUS",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "type": "datasource"
+          },
+          {
+            "current": {"selected": false, "text": "{{ .Values.cluster.name }}", "value": "{{ .Values.cluster.name }}"},
+            "hide": 0,
+            "label": "Cluster",
+            "name": "cluster",
+            "options": [
+              {"selected": true, "text": "{{ .Values.cluster.name }}", "value": "{{ .Values.cluster.name }}"}
+            ],
+            "query": "{{ .Values.cluster.name }}",
+            "skipUrlSync": false,
+            "type": "constant"
+          },
+          {
+            "current": {"selected": false, "text": "All", "value": "$__all"},
+            "datasource": "${DS_PROMETHEUS}",
+            "definition": "label_values(kube_node_info{cluster=\"$cluster\"}, node)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Node",
+            "multi": true,
+            "name": "node",
+            "options": [],
+            "query": {
+              "query": "label_values(kube_node_info{cluster=\"$cluster\"}, node)",
+              "refId": "PrometheusVariableQueryEditor-VariableQuery"
+            },
+            "refresh": 2,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "type": "query"
+          }
+        ]
+      },
+      "time": {
+        "from": "{{ .Values.defaultTimeRange.from }}",
+        "to": "{{ .Values.defaultTimeRange.to }}"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Node Health",
+      "uid": "node-health",
+      "version": 1,
+      "weekStart": ""
+    }
+
+  karpenter.json: |
+    {
+      "annotations": {
+        "list": []
+      },
+      "description": "Karpenter autoscaler performance and cost optimization",
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [
+        {
+          "icon": "dashboard",
+          "includeVars": true,
+          "keepTime": true,
+          "tags": [],
+          "title": "Back to Node Health",
+          "type": "link",
+          "url": "/d/node-health"
+        }
+      ],
+      "panels": [
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "off"}
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              },
+              "unit": "s"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "id": 1,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(karpenter_provisioner_scheduling_duration_seconds_bucket{cluster=\"$cluster\"}[5m])) by (le))",
+              "legendFormat": "P50",
+              "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(karpenter_provisioner_scheduling_duration_seconds_bucket{cluster=\"$cluster\"}[5m])) by (le))",
+              "legendFormat": "P95",
+              "refId": "B"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(karpenter_provisioner_scheduling_duration_seconds_bucket{cluster=\"$cluster\"}[5m])) by (le))",
+              "legendFormat": "P99",
+              "refId": "C"
+            }
+          ],
+          "title": "Provisioning Latency",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "off"}
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "id": 2,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "sum(increase(karpenter_nodes_created_total{cluster=\"$cluster\"}[5m]))",
+              "legendFormat": "Nodes Created",
+              "refId": "A"
+            },
+            {
+              "expr": "sum(increase(karpenter_nodes_terminated_total{cluster=\"$cluster\"}[5m]))",
+              "legendFormat": "Nodes Terminated",
+              "refId": "B"
+            }
+          ],
+          "title": "Nodes Created vs Terminated",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false}
+              },
+              "mappings": []
+            }
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+          "id": 3,
+          "options": {
+            "displayLabels": ["percent"],
+            "legend": {"displayMode": "table", "placement": "right", "showLegend": true, "values": ["value", "percent"]},
+            "pieType": "donut",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "expr": "sum by (label_karpenter_sh_capacity_type) (kube_node_labels{cluster=\"$cluster\",label_karpenter_sh_capacity_type!=\"\"})",
+              "legendFormat": "{{label_karpenter_sh_capacity_type}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Spot vs On-Demand Distribution",
+          "type": "piechart"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false}
+              },
+              "mappings": []
+            }
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
+          "id": 4,
+          "options": {
+            "displayLabels": ["percent"],
+            "legend": {"displayMode": "table", "placement": "right", "showLegend": true, "values": ["value", "percent"]},
+            "pieType": "donut",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "expr": "sum by (label_kubernetes_io_arch) (kube_node_labels{cluster=\"$cluster\",label_kubernetes_io_arch!=\"\"})",
+              "legendFormat": "{{label_kubernetes_io_arch}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Architecture Distribution",
+          "type": "piechart"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 100},
+                  {"color": "red", "value": 500}
+                ]
+              },
+              "unit": "currencyUSD"
+            }
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
+          "id": 5,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "text": {"titleSize": 16, "valueSize": 40}
+          },
+          "targets": [
+            {
+              "expr": "sum(karpenter_consolidation_actions_performed_total{cluster=\"$cluster\",action=\"delete\"}) * {{ .Values.costs.onDemandRate }} * 24 * 30",
+              "refId": "A"
+            }
+          ],
+          "title": "Estimated Monthly Consolidation Savings",
+          "type": "gauge"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "off"}
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+          "id": 6,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "sum by (action) (rate(karpenter_consolidation_actions_performed_total{cluster=\"$cluster\"}[5m]))",
+              "legendFormat": "{{action}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Consolidation Actions",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "custom": {
+                "align": "auto",
+                "cellOptions": {"type": "auto"},
+                "inspect": false
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+          "id": 7,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": "",
+              "reducer": ["sum"],
+              "show": false
+            },
+            "showHeader": true
+          },
+          "targets": [
+            {
+              "expr": "kube_node_labels{cluster=\"$cluster\",label_karpenter_sh_provisioner_name!=\"\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Karpenter Managed Nodes",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "cluster": true,
+                  "endpoint": true,
+                  "instance": true,
+                  "job": true,
+                  "service": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "node": "Node",
+                  "label_karpenter_sh_provisioner_name": "Provisioner",
+                  "label_karpenter_sh_capacity_type": "Capacity Type",
+                  "label_kubernetes_io_arch": "Arch",
+                  "label_node_kubernetes_io_instance_type": "Instance Type"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        }
+      ],
+      "refresh": "{{ .Values.defaultRefresh }}",
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["infrastructure", "karpenter", "autoscaling"],
+      "templating": {
+        "list": [
+          {
+            "current": {"selected": false, "text": "Prometheus", "value": "Prometheus"},
+            "hide": 0,
+            "includeAll": false,
+            "label": "Datasource",
+            "multi": false,
+            "name": "DS_PROMETHEUS",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "type": "datasource"
+          },
+          {
+            "current": {"selected": false, "text": "{{ .Values.cluster.name }}", "value": "{{ .Values.cluster.name }}"},
+            "hide": 0,
+            "label": "Cluster",
+            "name": "cluster",
+            "options": [
+              {"selected": true, "text": "{{ .Values.cluster.name }}", "value": "{{ .Values.cluster.name }}"}
+            ],
+            "query": "{{ .Values.cluster.name }}",
+            "skipUrlSync": false,
+            "type": "constant"
+          }
+        ]
+      },
+      "time": {
+        "from": "{{ .Values.defaultTimeRange.from }}",
+        "to": "{{ .Values.defaultTimeRange.to }}"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Karpenter Autoscaler",
+      "uid": "karpenter",
+      "version": 1,
+      "weekStart": ""
+    }
+
+  service-golden-signals.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "datasource": "{{ .Values.datasources.prometheus.name }}",
+            "enable": true,
+            "expr": "changes(kube_deployment_status_observed_generation{cluster=\"$cluster\",namespace=\"$namespace\",deployment=\"$service\"}[5m]) > 0",
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Deployments",
+            "tagKeys": "deployment"
+          }
+        ]
+      },
+      "description": "RED metrics (Rate, Errors, Duration) for service monitoring",
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [
+        {
+          "icon": "dashboard",
+          "includeVars": true,
+          "keepTime": true,
+          "tags": [],
+          "title": "Service Deep Dive",
+          "type": "link",
+          "url": "/d/service-deep-dive?var-service=$service&var-namespace=$namespace"
+        },
+        {
+          "icon": "dashboard",
+          "includeVars": true,
+          "keepTime": true,
+          "tags": [],
+          "title": "Service SLO",
+          "type": "link",
+          "url": "/d/service-slo?var-service=$service&var-namespace=$namespace"
+        }
+      ],
+      "panels": [
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "off"}
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              },
+              "unit": "reqps"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "id": 1,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "datasource": "${DS_PROMETHEUS}",
+              "expr": "sum(rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\"}[5m])) by (method, path)",
+              "legendFormat": "{{method}} {{path}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Request Rate (RPS)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "line"}
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 1},
+                  {"color": "red", "value": 5}
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "id": 2,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "datasource": "${DS_PROMETHEUS}",
+              "expr": "(sum(rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\",status=~\"4..\"}[5m])) / sum(rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\"}[5m]))) * 100",
+              "legendFormat": "4xx Errors",
+              "refId": "A"
+            },
+            {
+              "datasource": "${DS_PROMETHEUS}",
+              "expr": "(sum(rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\",status=~\"5..\"}[5m])) / sum(rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\"}[5m]))) * 100",
+              "legendFormat": "5xx Errors",
+              "refId": "B"
+            }
+          ],
+          "title": "Error Rate",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "line"}
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 0.3},
+                  {"color": "red", "value": 0.5}
+                ]
+              },
+              "unit": "s"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "id": 3,
+          "options": {
+            "legend": {"calcs": ["mean", "p95", "p99"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "datasource": "${DS_PROMETHEUS}",
+              "expr": "histogram_quantile(0.50, sum(rate(http_server_request_duration_seconds_bucket{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\"}[5m])) by (le))",
+              "legendFormat": "P50",
+              "refId": "A"
+            },
+            {
+              "datasource": "${DS_PROMETHEUS}",
+              "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\"}[5m])) by (le))",
+              "legendFormat": "P95",
+              "refId": "B"
+            },
+            {
+              "datasource": "${DS_PROMETHEUS}",
+              "expr": "histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\"}[5m])) by (le))",
+              "legendFormat": "P99",
+              "refId": "C"
+            }
+          ],
+          "title": "Request Duration (Latency)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "off"}
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 60},
+                  {"color": "red", "value": 85}
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 6, "x": 12, "y": 8},
+          "id": 4,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "datasource": "${DS_PROMETHEUS}",
+              "expr": "(sum(rate(container_cpu_usage_seconds_total{cluster=\"$cluster\",namespace=\"$namespace\",pod=~\"$service.*\"}[5m])) / sum(kube_pod_container_resource_requests{cluster=\"$cluster\",namespace=\"$namespace\",pod=~\"$service.*\",resource=\"cpu\"})) * 100",
+              "legendFormat": "CPU",
+              "refId": "A"
+            }
+          ],
+          "title": "CPU Saturation",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "off"}
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 60},
+                  {"color": "red", "value": 85}
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 6, "x": 18, "y": 8},
+          "id": 5,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "datasource": "${DS_PROMETHEUS}",
+              "expr": "(sum(container_memory_working_set_bytes{cluster=\"$cluster\",namespace=\"$namespace\",pod=~\"$service.*\"}) / sum(kube_pod_container_resource_requests{cluster=\"$cluster\",namespace=\"$namespace\",pod=~\"$service.*\",resource=\"memory\"})) * 100",
+              "legendFormat": "Memory",
+              "refId": "A"
+            }
+          ],
+          "title": "Memory Saturation",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "custom": {
+                "align": "auto",
+                "cellOptions": {"type": "auto"},
+                "inspect": false
+              },
+              "links": [
+                {
+                  "title": "View Traces",
+                  "url": "/explore?orgId=1&left=%5B%22now-1h%22,%22now%22,%22Tempo%22,%7B%22query%22:%22%7Bservice%3D%5C%22${__data.fields.Service}%5C%22%7D%22%7D%5D"
+                }
+              ],
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Error Rate"},
+                "properties": [
+                  {"id": "unit", "value": "percent"},
+                  {"id": "custom.cellOptions", "value": {"type": "gauge"}}
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "P99 Latency"},
+                "properties": [
+                  {"id": "unit", "value": "s"},
+                  {"id": "custom.cellOptions", "value": {"type": "gauge"}}
+                ]
+              }
+            ]
+          },
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+          "id": 6,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": "",
+              "reducer": ["sum"],
+              "show": false
+            },
+            "showHeader": true
+          },
+          "targets": [
+            {
+              "datasource": "${DS_PROMETHEUS}",
+              "expr": "sum by (service) (rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\"}[5m]))",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            },
+            {
+              "datasource": "${DS_PROMETHEUS}",
+              "expr": "(sum by (service) (rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",status=~\"5..\"}[5m])) / sum by (service) (rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\"}[5m]))) * 100",
+              "format": "table",
+              "instant": true,
+              "refId": "B"
+            },
+            {
+              "datasource": "${DS_PROMETHEUS}",
+              "expr": "histogram_quantile(0.99, sum by (service, le) (rate(http_server_request_duration_seconds_bucket{cluster=\"$cluster\",namespace=\"$namespace\"}[5m])))",
+              "format": "table",
+              "instant": true,
+              "refId": "C"
+            }
+          ],
+          "title": "Services Summary",
+          "transformations": [
+            {
+              "id": "merge"
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {"Time": true},
+                "indexByName": {},
+                "renameByName": {
+                  "service": "Service",
+                  "Value #A": "RPS",
+                  "Value #B": "Error Rate",
+                  "Value #C": "P99 Latency"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        }
+      ],
+      "refresh": "{{ .Values.defaultRefresh }}",
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["application", "golden-signals", "RED"],
+      "templating": {
+        "list": [
+          {
+            "current": {"selected": false, "text": "Prometheus", "value": "Prometheus"},
+            "hide": 0,
+            "includeAll": false,
+            "label": "Datasource",
+            "multi": false,
+            "name": "DS_PROMETHEUS",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "type": "datasource"
+          },
+          {
+            "current": {"selected": false, "text": "{{ .Values.cluster.name }}", "value": "{{ .Values.cluster.name }}"},
+            "hide": 0,
+            "label": "Cluster",
+            "name": "cluster",
+            "options": [
+              {"selected": true, "text": "{{ .Values.cluster.name }}", "value": "{{ .Values.cluster.name }}"}
+            ],
+            "query": "{{ .Values.cluster.name }}",
+            "skipUrlSync": false,
+            "type": "constant"
+          },
+          {
+            "current": {"selected": false, "text": "", "value": ""},
+            "datasource": "${DS_PROMETHEUS}",
+            "definition": "label_values(http_server_requests_total{cluster=\"$cluster\"}, namespace)",
+            "hide": 0,
+            "includeAll": false,
+            "label": "Namespace",
+            "multi": false,
+            "name": "namespace",
+            "options": [],
+            "query": {
+              "query": "label_values(http_server_requests_total{cluster=\"$cluster\"}, namespace)",
+              "refId": "PrometheusVariableQueryEditor-VariableQuery"
+            },
+            "refresh": 2,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "type": "query"
+          },
+          {
+            "current": {"selected": false, "text": "", "value": ""},
+            "datasource": "${DS_PROMETHEUS}",
+            "definition": "label_values(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\"}, service)",
+            "hide": 0,
+            "includeAll": false,
+            "label": "Service",
+            "multi": false,
+            "name": "service",
+            "options": [],
+            "query": {
+              "query": "label_values(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\"}, service)",
+              "refId": "PrometheusVariableQueryEditor-VariableQuery"
+            },
+            "refresh": 2,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "type": "query"
+          }
+        ]
+      },
+      "time": {
+        "from": "{{ .Values.defaultTimeRange.from }}",
+        "to": "{{ .Values.defaultTimeRange.to }}"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Service Golden Signals",
+      "uid": "service-golden-signals",
+      "version": 1,
+      "weekStart": ""
+    }
+
+  service-slo.json: |
+    {
+      "annotations": {
+        "list": []
+      },
+      "description": "Service Level Objectives (SLO) monitoring and error budget tracking",
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [
+        {
+          "icon": "dashboard",
+          "includeVars": true,
+          "keepTime": true,
+          "tags": [],
+          "title": "Back to Golden Signals",
+          "type": "link",
+          "url": "/d/service-golden-signals?var-service=$service&var-namespace=$namespace"
+        }
+      ],
+      "panels": [
+        {
+          "datasource": "${DS_THANOS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "max": 100,
+              "min": 99,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 99.9},
+                  {"color": "green", "value": 99.95}
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+          "id": 1,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "text": {"titleSize": 16, "valueSize": 40}
+          },
+          "targets": [
+            {
+              "datasource": "${DS_THANOS}",
+              "expr": "(1 - (sum(rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\",status=~\"5..\"}[30d])) / sum(rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\"}[30d])))) * 100",
+              "refId": "A"
+            }
+          ],
+          "title": "Availability SLO (30d)",
+          "type": "gauge"
+        },
+        {
+          "datasource": "${DS_THANOS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 0.4},
+                  {"color": "green", "value": 0.5}
+                ]
+              },
+              "unit": "s"
+            }
+          },
+          "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
+          "id": 2,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "text": {"titleSize": 16, "valueSize": 40}
+          },
+          "targets": [
+            {
+              "datasource": "${DS_THANOS}",
+              "expr": "histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\"}[30d])) by (le))",
+              "refId": "A"
+            }
+          ],
+          "title": "Latency P99 (30d)",
+          "type": "gauge"
+        },
+        {
+          "datasource": "${DS_THANOS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 25},
+                  {"color": "green", "value": 50}
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+          "id": 3,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "text": {"titleSize": 16, "valueSize": 40}
+          },
+          "targets": [
+            {
+              "datasource": "${DS_THANOS}",
+              "expr": "(({{ .Values.slo.availability }} - (1 - (sum(rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\",status=~\"5..\"}[30d])) / sum(rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\"}[30d])))) * 100) / (100 - {{ .Values.slo.availability }})) * 100",
+              "refId": "A"
+            }
+          ],
+          "title": "Error Budget Remaining",
+          "type": "gauge"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 2},
+                  {"color": "red", "value": 10}
+                ]
+              },
+              "unit": "none"
+            }
+          },
+          "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+          "id": 4,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "text": {"titleSize": 16, "valueSize": 40}
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "datasource": "${DS_PROMETHEUS}",
+              "expr": "(sum(rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\",status=~\"5..\"}[1h])) / sum(rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\"}[1h]))) / ((100 - {{ .Values.slo.availability }}) / 100 / 30 / 24)",
+              "refId": "A"
+            }
+          ],
+          "title": "Burn Rate (1h)",
+          "type": "gauge"
+        },
+        {
+          "datasource": "${DS_THANOS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "line"}
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 99,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "red", "value": {{ .Values.slo.availability }}}
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "id": 5,
+          "options": {
+            "legend": {"calcs": ["mean", "min"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "datasource": "${DS_THANOS}",
+              "expr": "(1 - (sum(rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\",status=~\"5..\"}[$__rate_interval])) / sum(rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\"}[$__rate_interval])))) * 100",
+              "legendFormat": "Actual Availability",
+              "refId": "A"
+            },
+            {
+              "datasource": "${DS_THANOS}",
+              "expr": "{{ .Values.slo.availability }}",
+              "legendFormat": "SLO Target ({{ .Values.slo.availability }}%)",
+              "refId": "B"
+            }
+          ],
+          "title": "Availability Over Time",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_THANOS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "line"}
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "red", "value": {{ .Values.slo.latencyP99 }}}
+                ]
+              },
+              "unit": "ms"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "id": 6,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "datasource": "${DS_THANOS}",
+              "expr": "histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\"}[$__rate_interval])) by (le)) * 1000",
+              "legendFormat": "Actual P99 Latency",
+              "refId": "A"
+            },
+            {
+              "datasource": "${DS_THANOS}",
+              "expr": "{{ .Values.slo.latencyP99 }}",
+              "legendFormat": "SLO Target ({{ .Values.slo.latencyP99 }}ms)",
+              "refId": "B"
+            }
+          ],
+          "title": "Latency P99 Over Time",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_THANOS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "off"}
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+          "id": 7,
+          "options": {
+            "legend": {"calcs": ["mean", "min"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "datasource": "${DS_THANOS}",
+              "expr": "(({{ .Values.slo.availability }} - (1 - (sum(rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\",status=~\"5..\"}[$__rate_interval])) / sum(rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\"}[$__rate_interval])))) * 100) / (100 - {{ .Values.slo.availability }})) * 100",
+              "legendFormat": "Error Budget Remaining",
+              "refId": "A"
+            }
+          ],
+          "title": "Error Budget Burn Down (30d)",
+          "type": "timeseries"
+        }
+      ],
+      "refresh": "{{ .Values.defaultRefresh }}",
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["application", "slo", "error-budget"],
+      "templating": {
+        "list": [
+          {
+            "current": {"selected": false, "text": "Prometheus", "value": "Prometheus"},
+            "hide": 0,
+            "includeAll": false,
+            "label": "Prometheus Datasource",
+            "multi": false,
+            "name": "DS_PROMETHEUS",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "type": "datasource"
+          },
+          {
+            "current": {"selected": false, "text": "Thanos", "value": "Thanos"},
+            "hide": 0,
+            "includeAll": false,
+            "label": "Thanos Datasource",
+            "multi": false,
+            "name": "DS_THANOS",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": ".*[Tt]hanos.*",
+            "skipUrlSync": false,
+            "type": "datasource"
+          },
+          {
+            "current": {"selected": false, "text": "{{ .Values.cluster.name }}", "value": "{{ .Values.cluster.name }}"},
+            "hide": 0,
+            "label": "Cluster",
+            "name": "cluster",
+            "options": [
+              {"selected": true, "text": "{{ .Values.cluster.name }}", "value": "{{ .Values.cluster.name }}"}
+            ],
+            "query": "{{ .Values.cluster.name }}",
+            "skipUrlSync": false,
+            "type": "constant"
+          },
+          {
+            "current": {"selected": false, "text": "", "value": ""},
+            "datasource": "${DS_PROMETHEUS}",
+            "definition": "label_values(http_server_requests_total{cluster=\"$cluster\"}, namespace)",
+            "hide": 0,
+            "includeAll": false,
+            "label": "Namespace",
+            "multi": false,
+            "name": "namespace",
+            "options": [],
+            "query": {
+              "query": "label_values(http_server_requests_total{cluster=\"$cluster\"}, namespace)",
+              "refId": "PrometheusVariableQueryEditor-VariableQuery"
+            },
+            "refresh": 2,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "type": "query"
+          },
+          {
+            "current": {"selected": false, "text": "", "value": ""},
+            "datasource": "${DS_PROMETHEUS}",
+            "definition": "label_values(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\"}, service)",
+            "hide": 0,
+            "includeAll": false,
+            "label": "Service",
+            "multi": false,
+            "name": "service",
+            "options": [],
+            "query": {
+              "query": "label_values(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\"}, service)",
+              "refId": "PrometheusVariableQueryEditor-VariableQuery"
+            },
+            "refresh": 2,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "type": "query"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-30d",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Service SLO",
+      "uid": "service-slo",
+      "version": 1,
+      "weekStart": ""
+    }

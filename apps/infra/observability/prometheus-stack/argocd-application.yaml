@@ -1,0 +1,249 @@
+---
+# ArgoCD Application for Prometheus Stack
+# GitOps deployment of monitoring infrastructure
+#
+# Usage:
+#   kubectl apply -f argocd-application.yaml
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus-stack
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: prometheus-stack
+    app.kubernetes.io/component: monitoring
+    team: platform
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"  # Deploy after core infra (wave 0-9)
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  # Project
+  project: platform
+
+  # Source repository
+  source:
+    repoURL: https://github.com/your-org/platform-infrastructure.git
+    targetRevision: main
+    path: apps/infra/observability/prometheus-stack
+
+    # Helm configuration
+    helm:
+      # Use values files
+      valueFiles:
+      - values.yaml
+      - values-thanos.yaml
+
+      # Override values for specific environments
+      # values: |
+      #   kube-prometheus-stack:
+      #     prometheus:
+      #       prometheusSpec:
+      #         externalLabels:
+      #           cluster: eks-prod-us-east-1
+      #           environment: production
+
+      # Helm parameters (alternative to values)
+      parameters:
+      - name: kube-prometheus-stack.prometheus.prometheusSpec.externalLabels.cluster
+        value: eks-us-east-1
+
+      - name: kube-prometheus-stack.prometheus.prometheusSpec.externalLabels.region
+        value: us-east-1
+
+      - name: thanos.serviceAccount.annotations.eks\.amazonaws\.io/role-arn
+        value: arn:aws:iam::123456789012:role/thanos-s3-access
+
+      # Skip CRDs installation (manage separately)
+      skipCrds: false
+
+  # Destination cluster
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  # Sync policy
+  syncPolicy:
+    # Automated sync
+    automated:
+      prune: true        # Delete resources not in Git
+      selfHeal: true     # Automatically sync when cluster state deviates
+      allowEmpty: false  # Prevent accidental deletion of all resources
+
+    # Sync options
+    syncOptions:
+    - CreateNamespace=true      # Create namespace if it doesn't exist
+    - PrunePropagationPolicy=foreground  # Delete resources in order
+    - PruneLast=true            # Prune as last step
+    - RespectIgnoreDifferences=true
+    - ApplyOutOfSyncOnly=true   # Only apply resources that are out of sync
+
+    # Retry policy
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Ignore differences (prevent drift detection)
+  ignoreDifferences:
+  # Ignore replica count changes (HPA may modify)
+  - group: apps
+    kind: Deployment
+    jsonPointers:
+    - /spec/replicas
+
+  - group: apps
+    kind: StatefulSet
+    jsonPointers:
+    - /spec/replicas
+
+  # Ignore admission webhook CA bundle (injected by cert-manager)
+  - group: admissionregistration.k8s.io
+    kind: MutatingWebhookConfiguration
+    jsonPointers:
+    - /webhooks/0/clientConfig/caBundle
+
+  - group: admissionregistration.k8s.io
+    kind: ValidatingWebhookConfiguration
+    jsonPointers:
+    - /webhooks/0/clientConfig/caBundle
+
+  # Ignore metadata labels (added by operators)
+  - group: "*"
+    kind: "*"
+    managedFieldsManagers:
+    - kube-controller-manager
+
+  # Health assessment
+  revisionHistoryLimit: 3
+
+---
+# ArgoCD AppProject for Platform Infrastructure
+# Defines permissions and allowed resources
+#
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  labels:
+    team: platform
+spec:
+  description: Platform Infrastructure Components
+
+  # Source repositories
+  sourceRepos:
+  - https://github.com/your-org/platform-infrastructure.git
+  - https://prometheus-community.github.io/helm-charts
+  - https://charts.bitnami.com/bitnami
+
+  # Destinations
+  destinations:
+  # Allow deployment to monitoring namespace
+  - namespace: monitoring
+    server: https://kubernetes.default.svc
+    name: in-cluster
+
+  # Allow deployment to all namespaces (for ServiceMonitors)
+  - namespace: '*'
+    server: https://kubernetes.default.svc
+    name: in-cluster
+
+  # Cluster resource allowlist
+  clusterResourceWhitelist:
+  - group: ''
+    kind: Namespace
+  - group: ''
+    kind: PersistentVolume
+  - group: 'storage.k8s.io'
+    kind: StorageClass
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRole
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRoleBinding
+  - group: 'apiextensions.k8s.io'
+    kind: CustomResourceDefinition
+  - group: 'monitoring.coreos.com'
+    kind: ServiceMonitor
+  - group: 'monitoring.coreos.com'
+    kind: PodMonitor
+  - group: 'monitoring.coreos.com'
+    kind: PrometheusRule
+  - group: 'admissionregistration.k8s.io'
+    kind: MutatingWebhookConfiguration
+  - group: 'admissionregistration.k8s.io'
+    kind: ValidatingWebhookConfiguration
+
+  # Namespace resource allowlist (all resources in monitoring namespace)
+  namespaceResourceWhitelist:
+  - group: '*'
+    kind: '*'
+
+  # Orphaned resources monitoring
+  orphanedResources:
+    warn: true
+    ignore:
+    - group: ''
+      kind: Secret
+      name: sh.helm.release.*  # Ignore Helm release secrets
+
+---
+# ArgoCD Notifications for Prometheus Stack
+# Send alerts when sync fails or application becomes degraded
+#
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+data:
+  # Slack template
+  template.prometheus-stack-sync-failed: |
+    message: |
+      Prometheus Stack sync failed in {{ .app.metadata.name }}
+      Revision: {{ .app.status.sync.revision }}
+      Error: {{ .app.status.operationState.message }}
+    slack:
+      attachments: |
+        [{
+          "title": "Prometheus Stack Sync Failed",
+          "color": "danger",
+          "fields": [
+            {
+              "title": "Application",
+              "value": "{{ .app.metadata.name }}",
+              "short": true
+            },
+            {
+              "title": "Namespace",
+              "value": "{{ .app.spec.destination.namespace }}",
+              "short": true
+            },
+            {
+              "title": "Revision",
+              "value": "{{ .app.status.sync.revision }}",
+              "short": true
+            },
+            {
+              "title": "Error",
+              "value": "{{ .app.status.operationState.message }}"
+            }
+          ]
+        }]
+
+  # Trigger for sync failure
+  trigger.prometheus-stack-sync-failed: |
+    - when: app.status.operationState.phase in ['Error', 'Failed']
+      oncePer: app.status.sync.revision
+      send: [prometheus-stack-sync-failed]
+
+  # Subscribe prometheus-stack application
+  subscriptions: |
+    - recipients:
+      - slack:platform-alerts
+      triggers:
+      - prometheus-stack-sync-failed
+      selector: app.kubernetes.io/name=prometheus-stack

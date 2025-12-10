@@ -1,0 +1,19 @@
+{
+    "metadata": {
+        "id": "WA_REL_RDS_1",
+        "name": "Ensure RDS instances have backup retention enabled",
+        "category": "AWS Well-Architected",
+        "severity": "MEDIUM",
+        "description": "Reliability Pillar: Perform automated backups"
+    },
+    "scope": "resource",
+    "definition": {
+        "cond_type": "attribute",
+        "resource_types": [
+            "aws_db_instance"
+        ],
+        "attribute": "backup_retention_period",
+        "operator": "greater_than",
+        "value": 0
+    }
+}

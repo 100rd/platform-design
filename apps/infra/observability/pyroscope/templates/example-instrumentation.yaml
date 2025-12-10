@@ -1,0 +1,467 @@
+---
+# Example: Go Application with pprof profiling
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: game-server-go
+  namespace: gaming
+  labels:
+    app: game-server
+    language: go
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: game-server
+  template:
+    metadata:
+      labels:
+        app: game-server
+        version: v1.5.0
+        language: go
+      annotations:
+        # Enable Pyroscope scraping
+        pyroscope.io/scrape: "true"
+        pyroscope.io/language: "go"
+        pyroscope.io/port: "6060"
+        pyroscope.io/profile-path: "/debug/pprof"
+        pyroscope.io/application-name: "game-server"
+    spec:
+      containers:
+        - name: game-server
+          image: gaming-platform/game-server:v1.5.0
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: pprof
+              containerPort: 6060  # pprof endpoint
+
+          env:
+            # Enable pprof HTTP server
+            - name: PPROF_ENABLED
+              value: "true"
+            - name: PPROF_PORT
+              value: "6060"
+
+            # Optional: Push to Pyroscope directly
+            - name: PYROSCOPE_SERVER_ADDRESS
+              value: "http://pyroscope-distributor.observability.svc.cluster.local:4040"
+            - name: PYROSCOPE_APPLICATION_NAME
+              value: "game-server"
+            - name: PYROSCOPE_LOG_LEVEL
+              value: "info"
+
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+
+          # Liveness probe should avoid pprof endpoint
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+---
+# Example: Java Application with async-profiler sidecar
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: matchmaking-service-java
+  namespace: matchmaking
+  labels:
+    app: matchmaking-service
+    language: java
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: matchmaking-service
+  template:
+    metadata:
+      labels:
+        app: matchmaking-service
+        version: v2.3.1
+        language: java
+      annotations:
+        pyroscope.io/scrape: "true"
+        pyroscope.io/language: "java"
+        pyroscope.io/port: "8849"
+        pyroscope.io/application-name: "matchmaking-service"
+    spec:
+      shareProcessNamespace: true  # Required for async-profiler
+
+      containers:
+        # Main Java application
+        - name: matchmaking-service
+          image: gaming-platform/matchmaking-service:v2.3.1
+          ports:
+            - name: http
+              containerPort: 8080
+
+          env:
+            - name: JAVA_OPTS
+              value: >-
+                -Xmx2g
+                -XX:+UseG1GC
+                -XX:MaxGCPauseMillis=200
+                -XX:+UnlockDiagnosticVMOptions
+                -XX:+DebugNonSafepoints
+
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 2Gi
+            limits:
+              cpu: 4000m
+              memory: 4Gi
+
+        # async-profiler sidecar
+        - name: async-profiler
+          image: grafana/pyroscope-java:1.7.0
+          ports:
+            - name: profiler
+              containerPort: 8849
+
+          env:
+            - name: PYROSCOPE_SERVER_ADDRESS
+              value: "http://pyroscope-distributor.observability.svc.cluster.local:4040"
+            - name: PYROSCOPE_APPLICATION_NAME
+              value: "matchmaking-service"
+            - name: PYROSCOPE_FORMAT
+              value: "jfr"  # Java Flight Recorder format
+            - name: PYROSCOPE_PROFILER_EVENT
+              value: "cpu,alloc,lock"
+            - name: PYROSCOPE_PROFILER_INTERVAL
+              value: "10s"
+            - name: JAVA_PROFILER_ALLOC
+              value: "512k"  # Sample every 512KB allocated
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+
+          securityContext:
+            capabilities:
+              add:
+                - SYS_PTRACE  # Required for profiling other process
+
+---
+# Example: Node.js Application with direct SDK integration
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway-nodejs
+  namespace: api-gateway
+  labels:
+    app: api-gateway
+    language: nodejs
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+        version: v3.2.0
+        language: nodejs
+      annotations:
+        pyroscope.io/scrape: "true"
+        pyroscope.io/language: "nodejs"
+        pyroscope.io/application-name: "api-gateway"
+
+        # For SDK integration, scraping is optional (app pushes directly)
+        pyroscope.io/push-mode: "true"
+    spec:
+      containers:
+        - name: api-gateway
+          image: gaming-platform/api-gateway:v3.2.0
+          ports:
+            - name: http
+              containerPort: 3000
+
+          env:
+            # Pyroscope SDK configuration
+            - name: PYROSCOPE_SERVER_ADDRESS
+              value: "http://pyroscope-distributor.observability.svc.cluster.local:4040"
+            - name: PYROSCOPE_APPLICATION_NAME
+              value: "api-gateway"
+            - name: PYROSCOPE_LOG_LEVEL
+              value: "info"
+
+            # Node.js V8 profiler settings
+            - name: NODE_OPTIONS
+              value: "--max-old-space-size=2048 --expose-gc"
+
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+
+---
+# Example: Python Application with py-spy sidecar
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service-python
+  namespace: analytics
+  labels:
+    app: analytics-service
+    language: python
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: analytics-service
+  template:
+    metadata:
+      labels:
+        app: analytics-service
+        version: v1.8.0
+        language: python
+      annotations:
+        pyroscope.io/scrape: "true"
+        pyroscope.io/language: "python"
+        pyroscope.io/port: "9090"
+        pyroscope.io/application-name: "analytics-service"
+    spec:
+      shareProcessNamespace: true  # Required for py-spy
+
+      containers:
+        # Main Python application
+        - name: analytics-service
+          image: gaming-platform/analytics-service:v1.8.0
+          ports:
+            - name: http
+              containerPort: 8080
+
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 2Gi
+            limits:
+              cpu: 4000m
+              memory: 4Gi
+
+        # py-spy profiler sidecar
+        - name: py-spy
+          image: grafana/pyroscope-py-spy:1.7.0
+          ports:
+            - name: profiler
+              containerPort: 9090
+
+          env:
+            - name: PYROSCOPE_SERVER_ADDRESS
+              value: "http://pyroscope-distributor.observability.svc.cluster.local:4040"
+            - name: PYROSCOPE_APPLICATION_NAME
+              value: "analytics-service"
+            - name: PYSPY_SAMPLING_RATE
+              value: "100"  # 100 Hz
+            - name: PYSPY_SUBPROCESSES
+              value: "true"
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+
+          securityContext:
+            capabilities:
+              add:
+                - SYS_PTRACE
+
+---
+# Example: Multi-language application with eBPF profiling
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service-multi
+  namespace: payment
+  labels:
+    app: payment-service
+    language: multi
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+        version: v2.0.0
+      annotations:
+        # Enable eBPF-based profiling (language-agnostic)
+        pyroscope.io/ebpf: "true"
+        pyroscope.io/application-name: "payment-service"
+    spec:
+      containers:
+        - name: payment-service
+          image: gaming-platform/payment-service:v2.0.0
+          ports:
+            - name: http
+              containerPort: 8080
+
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 1Gi
+            limits:
+              cpu: 4000m
+              memory: 2Gi
+
+---
+# ConfigMap: Code instrumentation examples
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pyroscope-code-examples
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "pyroscope.name" . }}
+    app.kubernetes.io/component: documentation
+data:
+  go-example.go: |
+    package main
+
+    import (
+        "net/http"
+        _ "net/http/pprof"  // Enable pprof endpoints
+
+        "github.com/grafana/pyroscope-go"
+    )
+
+    func main() {
+        // Option 1: Enable pprof HTTP server (for scraping)
+        go func() {
+            http.ListenAndServe("localhost:6060", nil)
+        }()
+
+        // Option 2: Push to Pyroscope directly
+        pyroscope.Start(pyroscope.Config{
+            ApplicationName: "game-server",
+            ServerAddress:   "http://pyroscope-distributor.observability.svc.cluster.local:4040",
+
+            // Enable different profile types
+            ProfileTypes: []pyroscope.ProfileType{
+                pyroscope.ProfileCPU,
+                pyroscope.ProfileAllocObjects,
+                pyroscope.ProfileAllocSpace,
+                pyroscope.ProfileInuseObjects,
+                pyroscope.ProfileInuseSpace,
+                pyroscope.ProfileGoroutines,
+                pyroscope.ProfileMutexCount,
+                pyroscope.ProfileMutexDuration,
+                pyroscope.ProfileBlockCount,
+                pyroscope.ProfileBlockDuration,
+            },
+
+            // Add custom labels
+            Tags: map[string]string{
+                "version":     "v1.5.0",
+                "environment": "production",
+                "region":      "us-west-2",
+            },
+        })
+
+        // Your application code
+        // ...
+    }
+
+  java-example.java: |
+    // Add Pyroscope Java agent to your Docker image
+    // Dockerfile:
+    // RUN wget https://github.com/grafana/pyroscope-java/releases/download/v0.12.0/pyroscope.jar
+
+    // ENTRYPOINT ["java", \
+    //   "-javaagent:/app/pyroscope.jar", \
+    //   "-Dpyroscope.application.name=matchmaking-service", \
+    //   "-Dpyroscope.server.address=http://pyroscope-distributor.observability.svc.cluster.local:4040", \
+    //   "-Dpyroscope.format=jfr", \
+    //   "-Dpyroscope.profiler.event=cpu,alloc,lock", \
+    //   "-jar", "app.jar"]
+
+    public class MatchmakingService {
+        public static void main(String[] args) {
+            // Your application code
+            // The Java agent handles profiling automatically
+        }
+    }
+
+  nodejs-example.js: |
+    // npm install @pyroscope/nodejs
+
+    const Pyroscope = require('@pyroscope/nodejs');
+
+    Pyroscope.init({
+      serverAddress: 'http://pyroscope-distributor.observability.svc.cluster.local:4040',
+      appName: 'api-gateway',
+
+      // Enable different profile types
+      wallProfileRate: 100,  // Wall time profiling at 100 Hz
+      heapProfileRate: 512 * 1024,  // Heap profiling every 512KB
+
+      // Add custom tags
+      tags: {
+        version: 'v3.2.0',
+        environment: 'production',
+      },
+    });
+
+    Pyroscope.start();
+
+    // Your Express app or other Node.js code
+    const express = require('express');
+    const app = express();
+
+    app.get('/api/endpoint', (req, res) => {
+      // Optionally add labels for specific requests
+      Pyroscope.wrapWithLabels(
+        { endpoint: '/api/endpoint', user_type: req.user.type },
+        () => {
+          // Your handler code
+          res.json({ success: true });
+        }
+      );
+    });
+
+  python-example.py: |
+    # pip install pyroscope-io
+
+    import pyroscope
+
+    pyroscope.configure(
+        application_name="analytics-service",
+        server_address="http://pyroscope-distributor.observability.svc.cluster.local:4040",
+
+        # Add custom tags
+        tags={
+            "version": "v1.8.0",
+            "environment": "production",
+        },
+    )
+
+    # Your application code
+    # Pyroscope automatically profiles the entire application
+
+    # Optional: Add labels to specific code sections
+    with pyroscope.tag_wrapper({"endpoint": "/api/analytics"}):
+        # Code to profile with additional context
+        result = perform_analysis()

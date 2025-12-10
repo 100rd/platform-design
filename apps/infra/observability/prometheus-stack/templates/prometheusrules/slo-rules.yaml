@@ -1,0 +1,376 @@
+---
+# PrometheusRules for SLO (Service Level Objective) Monitoring
+# Implements SLI/SLO/SLA framework for platform reliability
+#
+# SLO Framework:
+# - Availability: 99.95% (4.38h downtime/year)
+# - Latency: P99 < 500ms
+# - Error Rate: < 0.1%
+# - Saturation: < 80% resource utilization
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: slo-monitoring
+  namespace: monitoring
+  labels:
+    prometheus: kube-prometheus
+    app.kubernetes.io/name: slo-monitoring
+spec:
+  groups:
+  # =========================================================================
+  # API Server SLOs
+  # =========================================================================
+  - name: apiserver-slo
+    interval: 30s
+    rules:
+    # SLI: API server availability
+    - record: apiserver:availability:sli
+      expr: |
+        1 - (
+          sum(rate(apiserver_request_total{code=~"5.."}[5m]))
+          /
+          sum(rate(apiserver_request_total[5m]))
+        )
+
+    # SLI: API server P99 latency
+    - record: apiserver:latency:p99:sli
+      expr: |
+        histogram_quantile(0.99,
+          sum by (verb, le) (
+            rate(apiserver_request_duration_seconds_bucket{verb!="WATCH"}[5m])
+          )
+        )
+
+    # SLO Alert: API server availability below 99.95%
+    - alert: APIServerAvailabilityBelowSLO
+      expr: |
+        apiserver:availability:sli < 0.9995
+      for: 5m
+      labels:
+        severity: critical
+        team: platform
+        slo: availability
+      annotations:
+        summary: "API server availability below SLO"
+        description: "API server availability is {{ $value | humanizePercentage }} (SLO: 99.95%)"
+        runbook_url: "https://runbooks.internal.example.com/slo/apiserver-availability"
+
+    # SLO Alert: API server latency above SLO
+    - alert: APIServerLatencyAboveSLO
+      expr: |
+        apiserver:latency:p99:sli > 1
+      for: 10m
+      labels:
+        severity: warning
+        team: platform
+        slo: latency
+      annotations:
+        summary: "API server P99 latency above SLO"
+        description: "API server P99 latency is {{ $value }}s (SLO: 1s) for verb {{ $labels.verb }}"
+        runbook_url: "https://runbooks.internal.example.com/slo/apiserver-latency"
+
+  # =========================================================================
+  # DNS (CoreDNS) SLOs
+  # =========================================================================
+  - name: coredns-slo
+    interval: 30s
+    rules:
+    # SLI: DNS success rate
+    - record: coredns:success_rate:sli
+      expr: |
+        1 - (
+          sum(rate(coredns_dns_responses_total{rcode="SERVFAIL"}[5m]))
+          /
+          sum(rate(coredns_dns_responses_total[5m]))
+        )
+
+    # SLI: DNS P99 latency
+    - record: coredns:latency:p99:sli
+      expr: |
+        histogram_quantile(0.99,
+          sum by (le) (
+            rate(coredns_dns_request_duration_seconds_bucket[5m])
+          )
+        )
+
+    # SLO Alert: DNS success rate below 99.9%
+    - alert: CoreDNSSuccessRateBelowSLO
+      expr: |
+        coredns:success_rate:sli < 0.999
+      for: 5m
+      labels:
+        severity: critical
+        team: platform
+        slo: availability
+      annotations:
+        summary: "CoreDNS success rate below SLO"
+        description: "DNS success rate is {{ $value | humanizePercentage }} (SLO: 99.9%)"
+        runbook_url: "https://runbooks.internal.example.com/slo/coredns-availability"
+
+    # SLO Alert: DNS latency above 30ms
+    - alert: CoreDNSLatencyAboveSLO
+      expr: |
+        coredns:latency:p99:sli > 0.030
+      for: 10m
+      labels:
+        severity: warning
+        team: platform
+        slo: latency
+      annotations:
+        summary: "CoreDNS P99 latency above SLO"
+        description: "DNS P99 latency is {{ $value }}s (SLO: 30ms)"
+        runbook_url: "https://runbooks.internal.example.com/slo/coredns-latency"
+
+  # =========================================================================
+  # Container Runtime SLOs
+  # =========================================================================
+  - name: container-runtime-slo
+    interval: 30s
+    rules:
+    # SLI: Pod startup time P99
+    - record: kubelet:pod_start_duration:p99:sli
+      expr: |
+        histogram_quantile(0.99,
+          sum by (le) (
+            rate(kubelet_pod_start_duration_seconds_bucket[5m])
+          )
+        )
+
+    # SLO Alert: Pod startup time above 60s
+    - alert: PodStartupTimeAboveSLO
+      expr: |
+        kubelet:pod_start_duration:p99:sli > 60
+      for: 10m
+      labels:
+        severity: warning
+        team: platform
+        slo: latency
+      annotations:
+        summary: "Pod startup time above SLO"
+        description: "P99 pod startup time is {{ $value }}s (SLO: 60s)"
+        runbook_url: "https://runbooks.internal.example.com/slo/pod-startup-time"
+
+  # =========================================================================
+  # Network SLOs
+  # =========================================================================
+  - name: network-slo
+    interval: 30s
+    rules:
+    # SLI: Network error rate
+    - record: network:error_rate:sli
+      expr: |
+        sum(rate(node_network_receive_errs_total[5m]))
+        +
+        sum(rate(node_network_transmit_errs_total[5m]))
+
+    # SLO Alert: High network error rate
+    - alert: NetworkErrorRateAboveSLO
+      expr: |
+        network:error_rate:sli > 10
+      for: 10m
+      labels:
+        severity: warning
+        team: platform
+        slo: reliability
+      annotations:
+        summary: "Network error rate above SLO"
+        description: "Network error rate is {{ $value }} errors/sec (SLO: < 10)"
+        runbook_url: "https://runbooks.internal.example.com/slo/network-errors"
+
+  # =========================================================================
+  # Storage SLOs
+  # =========================================================================
+  - name: storage-slo
+    interval: 30s
+    rules:
+    # SLI: PVC provisioning success rate
+    - record: storage:pvc_provisioning_success_rate:sli
+      expr: |
+        1 - (
+          sum(rate(storage_operation_duration_seconds_count{
+            status="fail-unknown",
+            operation_name="volume_provision"
+          }[5m]))
+          /
+          sum(rate(storage_operation_duration_seconds_count{
+            operation_name="volume_provision"
+          }[5m]))
+        )
+
+    # SLI: PVC provisioning P99 latency
+    - record: storage:pvc_provisioning_latency:p99:sli
+      expr: |
+        histogram_quantile(0.99,
+          sum by (le) (
+            rate(storage_operation_duration_seconds_bucket{
+              operation_name="volume_provision"
+            }[5m])
+          )
+        )
+
+    # SLO Alert: PVC provisioning success rate below 99%
+    - alert: PVCProvisioningSuccessRateBelowSLO
+      expr: |
+        storage:pvc_provisioning_success_rate:sli < 0.99
+      for: 10m
+      labels:
+        severity: warning
+        team: platform
+        slo: availability
+      annotations:
+        summary: "PVC provisioning success rate below SLO"
+        description: "PVC provisioning success rate is {{ $value | humanizePercentage }} (SLO: 99%)"
+        runbook_url: "https://runbooks.internal.example.com/slo/pvc-provisioning"
+
+    # SLO Alert: PVC provisioning latency above 60s
+    - alert: PVCProvisioningLatencyAboveSLO
+      expr: |
+        storage:pvc_provisioning_latency:p99:sli > 60
+      for: 10m
+      labels:
+        severity: warning
+        team: platform
+        slo: latency
+      annotations:
+        summary: "PVC provisioning P99 latency above SLO"
+        description: "PVC provisioning P99 latency is {{ $value }}s (SLO: 60s)"
+        runbook_url: "https://runbooks.internal.example.com/slo/pvc-provisioning-latency"
+
+  # =========================================================================
+  # Node SLOs
+  # =========================================================================
+  - name: node-slo
+    interval: 30s
+    rules:
+    # SLI: Node availability
+    - record: node:availability:sli
+      expr: |
+        sum(kube_node_status_condition{condition="Ready",status="true"})
+        /
+        sum(kube_node_status_condition{condition="Ready"})
+
+    # SLI: Node CPU saturation
+    - record: node:cpu_saturation:sli
+      expr: |
+        avg(
+          1 - rate(node_cpu_seconds_total{mode="idle"}[5m])
+        )
+
+    # SLI: Node memory saturation
+    - record: node:memory_saturation:sli
+      expr: |
+        1 - (
+          sum(node_memory_MemAvailable_bytes)
+          /
+          sum(node_memory_MemTotal_bytes)
+        )
+
+    # SLO Alert: Node availability below 99%
+    - alert: NodeAvailabilityBelowSLO
+      expr: |
+        node:availability:sli < 0.99
+      for: 5m
+      labels:
+        severity: critical
+        team: platform
+        slo: availability
+      annotations:
+        summary: "Node availability below SLO"
+        description: "Node availability is {{ $value | humanizePercentage }} (SLO: 99%)"
+        runbook_url: "https://runbooks.internal.example.com/slo/node-availability"
+
+    # SLO Alert: Cluster CPU saturation above 80%
+    - alert: NodeCPUSaturationAboveSLO
+      expr: |
+        node:cpu_saturation:sli > 0.80
+      for: 15m
+      labels:
+        severity: warning
+        team: platform
+        slo: saturation
+      annotations:
+        summary: "Node CPU saturation above SLO"
+        description: "Cluster CPU utilization is {{ $value | humanizePercentage }} (SLO: < 80%)"
+        runbook_url: "https://runbooks.internal.example.com/slo/cpu-saturation"
+
+    # SLO Alert: Cluster memory saturation above 80%
+    - alert: NodeMemorySaturationAboveSLO
+      expr: |
+        node:memory_saturation:sli > 0.80
+      for: 15m
+      labels:
+        severity: warning
+        team: platform
+        slo: saturation
+      annotations:
+        summary: "Node memory saturation above SLO"
+        description: "Cluster memory utilization is {{ $value | humanizePercentage }} (SLO: < 80%)"
+        runbook_url: "https://runbooks.internal.example.com/slo/memory-saturation"
+
+  # =========================================================================
+  # Error Budget Tracking
+  # =========================================================================
+  - name: error-budget
+    interval: 1h
+    rules:
+    # Error budget: 30-day rolling window
+    # SLO: 99.95% availability = 0.05% error budget
+
+    # API Server error budget remaining
+    - record: apiserver:error_budget:remaining:30d
+      expr: |
+        1 - (
+          (1 - avg_over_time(apiserver:availability:sli[30d]))
+          /
+          (1 - 0.9995)
+        )
+
+    # CoreDNS error budget remaining
+    - record: coredns:error_budget:remaining:30d
+      expr: |
+        1 - (
+          (1 - avg_over_time(coredns:success_rate:sli[30d]))
+          /
+          (1 - 0.999)
+        )
+
+    # Alert: Error budget exhausted
+    - alert: ErrorBudgetExhausted
+      expr: |
+        apiserver:error_budget:remaining:30d < 0
+        or
+        coredns:error_budget:remaining:30d < 0
+      for: 1h
+      labels:
+        severity: critical
+        team: platform
+        slo: error-budget
+      annotations:
+        summary: "Error budget exhausted"
+        description: "30-day error budget has been exhausted. Stop non-essential changes."
+        runbook_url: "https://runbooks.internal.example.com/slo/error-budget-exhausted"
+
+    # Alert: Error budget critically low (< 10%)
+    - alert: ErrorBudgetCriticallyLow
+      expr: |
+        (
+          apiserver:error_budget:remaining:30d < 0.10
+          and
+          apiserver:error_budget:remaining:30d > 0
+        )
+        or
+        (
+          coredns:error_budget:remaining:30d < 0.10
+          and
+          coredns:error_budget:remaining:30d > 0
+        )
+      for: 1h
+      labels:
+        severity: warning
+        team: platform
+        slo: error-budget
+      annotations:
+        summary: "Error budget critically low"
+        description: "Error budget remaining: {{ $value | humanizePercentage }}. Prioritize reliability."
+        runbook_url: "https://runbooks.internal.example.com/slo/error-budget-low"

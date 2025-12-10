@@ -1,0 +1,347 @@
+---
+# Production Environment Overrides
+# Apply on top of values.yaml and values-thanos.yaml
+#
+# Usage:
+#   helm upgrade prometheus-stack . \
+#     -f values.yaml \
+#     -f values-thanos.yaml \
+#     -f values-production.yaml
+
+kube-prometheus-stack:
+  prometheus:
+    prometheusSpec:
+      # Production-specific labels
+      externalLabels:
+        cluster: eks-prod-us-east-1
+        environment: production
+        region: us-east-1
+        datacenter: us-east-1a
+
+      # Increase retention for production
+      retention: 4h
+      retentionSize: "90GB"
+
+      # More aggressive resource limits for production scale
+      resources:
+        requests:
+          cpu: 8000m
+          memory: 64Gi
+        limits:
+          cpu: 16000m
+          memory: 128Gi
+
+      # Larger storage for production
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: gp3
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 100Gi
+
+      # Enable sharding for production scale
+      shards: 2
+
+      # Remote write to backup Prometheus (optional)
+      remoteWrite:
+      - url: http://prometheus-backup.monitoring.svc:9090/api/v1/write
+        queueConfig:
+          capacity: 10000
+          maxShards: 50
+          minShards: 1
+          maxSamplesPerSend: 5000
+          batchSendDeadline: 5s
+        writeRelabelConfigs:
+        # Only send critical metrics to backup
+        - sourceLabels: [__name__]
+          regex: "up|.*:availability:sli|.*:error_budget:.*"
+          action: keep
+
+  grafana:
+    # Production Grafana configuration
+    replicas: 2  # HA for production
+
+    # Use RDS for persistence
+    persistence:
+      enabled: false  # Using external DB
+
+    # Production admin password (use External Secret)
+    adminPassword: ""  # Provided by external-secrets
+
+    # Production Grafana configuration
+    grafana.ini:
+      server:
+        root_url: https://grafana.prod.example.com
+        serve_from_sub_path: false
+        enforce_domain: true
+
+      database:
+        type: postgres
+        host: grafana-prod.cluster-xxx.us-east-1.rds.amazonaws.com:5432
+        name: grafana
+        user: grafana
+        # Password from external secret
+        password: $__file{/etc/secrets/db-password}
+        ssl_mode: require
+
+      security:
+        admin_user: admin
+        admin_password: $__file{/etc/secrets/admin-password}
+        secret_key: $__file{/etc/secrets/secret-key}
+        disable_gravatar: true
+        cookie_secure: true
+        cookie_samesite: strict
+        strict_transport_security: true
+        x_content_type_options: true
+        x_xss_protection: true
+        content_security_policy: true
+
+      # Production OAuth (AWS Cognito)
+      auth:
+        disable_login_form: false
+        oauth_auto_login: true
+        disable_signout_menu: false
+
+      auth.generic_oauth:
+        enabled: true
+        name: AWS Cognito
+        allow_sign_up: true
+        client_id: $__file{/etc/secrets/oauth-client-id}
+        client_secret: $__file{/etc/secrets/oauth-client-secret}
+        scopes: openid profile email
+        auth_url: https://your-domain.auth.us-east-1.amazoncognito.com/oauth2/authorize
+        token_url: https://your-domain.auth.us-east-1.amazoncognito.com/oauth2/token
+        api_url: https://your-domain.auth.us-east-1.amazoncognito.com/oauth2/userInfo
+        role_attribute_path: "contains(cognito:groups[*], 'GrafanaAdmins') && 'Admin' || contains(cognito:groups[*], 'GrafanaEditors') && 'Editor' || 'Viewer'"
+        tls_skip_verify_insecure: false
+
+      # Logging
+      log:
+        mode: console
+        level: info
+
+      # Metrics
+      metrics:
+        enabled: true
+        basic_auth_username: prometheus
+        basic_auth_password: $__file{/etc/secrets/metrics-password}
+
+    # Production ingress
+    ingress:
+      enabled: true
+      ingressClassName: alb
+      annotations:
+        alb.ingress.kubernetes.io/scheme: internet-facing
+        alb.ingress.kubernetes.io/target-type: ip
+        alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123456789012:certificate/xxx
+        alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS-1-2-Ext-2018-06
+        alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+        alb.ingress.kubernetes.io/healthcheck-path: /api/health
+        alb.ingress.kubernetes.io/healthcheck-interval-seconds: '15'
+        alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
+        alb.ingress.kubernetes.io/success-codes: '200'
+        alb.ingress.kubernetes.io/backend-protocol: HTTP
+        # WAF
+        alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:us-east-1:123456789012:regional/webacl/grafana-waf/xxx
+      hosts:
+      - grafana.prod.example.com
+      tls:
+      - secretName: grafana-tls
+        hosts:
+        - grafana.prod.example.com
+
+    # Production resources
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+
+    # Anti-affinity for HA
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+              - grafana
+          topologyKey: kubernetes.io/hostname
+
+    # External secrets for sensitive data
+    extraSecretMounts:
+    - name: grafana-secrets
+      secretName: grafana-secrets
+      defaultMode: 0440
+      mountPath: /etc/secrets
+      readOnly: true
+
+  alertmanager:
+    alertmanagerSpec:
+      # Production alerting configuration
+      config:
+        global:
+          resolve_timeout: 5m
+          slack_api_url_file: /etc/alertmanager/secrets/slack-webhook
+          pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+        # Production inhibition rules
+        inhibit_rules:
+        - source_matchers:
+          - severity = critical
+          - alertname = PlatformDown
+          target_matchers:
+          - severity =~ warning|info
+          equal: []  # Inhibit all lower severity alerts
+
+        # Production routing
+        route:
+          receiver: 'pagerduty-critical'
+          group_by: ['alertname', 'cluster', 'namespace', 'severity']
+          group_wait: 10s
+          group_interval: 5m
+          repeat_interval: 4h
+
+          routes:
+          # Critical production alerts -> PagerDuty + Slack
+          - matchers:
+            - severity = critical
+            - environment = production
+            receiver: 'pagerduty-critical'
+            continue: true
+            group_wait: 10s
+            repeat_interval: 5m
+
+          - matchers:
+            - severity = critical
+            receiver: 'slack-critical'
+            group_wait: 10s
+
+          # Warning alerts -> Slack only
+          - matchers:
+            - severity = warning
+            receiver: 'slack-platform'
+            group_wait: 5m
+
+          # SLO violations -> Dedicated channel
+          - matchers:
+            - slo =~ "availability|latency|error-budget"
+            receiver: 'slack-slo-violations'
+            group_wait: 5m
+
+        # Production receivers
+        receivers:
+        - name: 'pagerduty-critical'
+          pagerduty_configs:
+          - service_key_file: /etc/alertmanager/secrets/pagerduty-service-key
+            description: '{{ .GroupLabels.alertname }}: {{ .GroupLabels.namespace }}'
+            severity: '{{ .CommonLabels.severity }}'
+            client: 'Prometheus ({{ .GroupLabels.cluster }})'
+            details:
+              firing: '{{ .Alerts.Firing | len }}'
+              resolved: '{{ .Alerts.Resolved | len }}'
+              alertname: '{{ .GroupLabels.alertname }}'
+              cluster: '{{ .GroupLabels.cluster }}'
+              namespace: '{{ .GroupLabels.namespace }}'
+              runbook: '{{ .CommonAnnotations.runbook_url }}'
+
+        - name: 'slack-critical'
+          slack_configs:
+          - api_url_file: /etc/alertmanager/secrets/slack-webhook
+            channel: '#prod-alerts-critical'
+            title: 'CRITICAL: {{ .GroupLabels.alertname }}'
+            text: "{{ range .Alerts }}{{ .Annotations.description }}\n{{ end }}"
+            send_resolved: true
+            color: 'danger'
+            actions:
+            - type: button
+              text: 'Runbook'
+              url: '{{ .CommonAnnotations.runbook_url }}'
+            - type: button
+              text: 'Silence'
+              url: '{{ .ExternalURL }}/#/silences/new?filter=%7Balertname%3D%22{{ .GroupLabels.alertname }}%22%7D'
+
+        - name: 'slack-platform'
+          slack_configs:
+          - api_url_file: /etc/alertmanager/secrets/slack-webhook
+            channel: '#platform-alerts'
+            title: '{{ .GroupLabels.alertname }}'
+            text: "{{ range .Alerts }}{{ .Annotations.description }}\n{{ end }}"
+            send_resolved: true
+
+        - name: 'slack-slo-violations'
+          slack_configs:
+          - api_url_file: /etc/alertmanager/secrets/slack-webhook
+            channel: '#slo-violations'
+            title: 'SLO Violation: {{ .GroupLabels.alertname }}'
+            text: "{{ range .Alerts }}{{ .Annotations.description }}\n{{ end }}"
+            send_resolved: true
+            color: 'warning'
+
+      # External secrets for alertmanager
+      secrets:
+      - alertmanager-secrets
+
+# Thanos production overrides
+thanos:
+  objstoreConfig: |-
+    type: S3
+    config:
+      bucket: "thanos-metrics-prod-us-east-1"
+      endpoint: "s3.us-east-1.amazonaws.com"
+      region: "us-east-1"
+      sse_config:
+        type: "SSE-S3"
+      http_config:
+        idle_conn_timeout: 90s
+        response_header_timeout: 2m
+      trace:
+        enable: true
+      part_size: 134217728
+
+  queryFrontend:
+    replicaCount: 3  # More replicas for production
+
+  query:
+    replicaCount: 3
+
+  storegateway:
+    replicaCount: 3
+    # Larger index cache for production
+    extraFlags:
+    - --index-cache-size=4GB
+    - --chunk-pool-size=4GB
+    resources:
+      requests:
+        cpu: 2000m
+        memory: 8Gi
+      limits:
+        cpu: 4000m
+        memory: 16Gi
+    persistence:
+      size: 100Gi
+
+  compactor:
+    # Production retention policies
+    extraFlags:
+    - --retention.resolution-raw=30d
+    - --retention.resolution-5m=90d
+    - --retention.resolution-1h=365d
+    resources:
+      requests:
+        cpu: 4000m
+        memory: 8Gi
+      limits:
+        cpu: 8000m
+        memory: 16Gi
+    persistence:
+      size: 200Gi
+
+  serviceAccount:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/thanos-s3-access-prod

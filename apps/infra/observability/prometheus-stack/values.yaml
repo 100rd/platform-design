@@ -1,0 +1,823 @@
+---
+# Production Prometheus Stack for Large-Scale EKS
+# Optimized for: 1,000-5,000 nodes, 100K+ pods
+# Architecture: Prometheus (2h retention) -> Thanos Sidecar -> S3 (1y retention)
+
+global:
+  # Multi-architecture support (ARM64 Graviton + x86)
+  nodeSelector:
+    kubernetes.io/os: linux
+
+  # Enable if using Istio/Service Mesh
+  # podAnnotations:
+  #   sidecar.istio.io/inject: "false"
+
+# ============================================================================
+# kube-prometheus-stack Configuration
+# ============================================================================
+kube-prometheus-stack:
+  enabled: true
+
+  # --------------------------------------------------------------------------
+  # Prometheus Configuration
+  # --------------------------------------------------------------------------
+  prometheus:
+    enabled: true
+
+    # Service configuration
+    service:
+      type: ClusterIP
+      port: 9090
+      targetPort: 9090
+      # Annotations for internal NLB if needed
+      # annotations:
+      #   service.beta.kubernetes.io/aws-load-balancer-type: "nlb-ip"
+      #   service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+
+    # ServiceMonitor for self-monitoring
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+      scrapeTimeout: 10s
+      # Additional labels for prometheus-operator to discover
+      additionalLabels:
+        prometheus: kube-prometheus
+
+    prometheusSpec:
+      # HA Configuration - 2 replicas with anti-affinity
+      replicas: 2
+
+      # Retention: 2 hours local (Thanos handles long-term)
+      retention: 2h
+      retentionSize: "45GB"  # ~90% of PVC size
+
+      # WAL compression for better performance
+      walCompression: true
+
+      # Sharding configuration for large clusters
+      # Functional sharding: different Prometheus instances scrape different targets
+      # Controlled via ServiceMonitor/PodMonitor selectors
+      shards: 1  # Start with 1, increase to 2-4 if metrics volume > 5M samples/s
+
+      # Each shard needs selector to split workload
+      # Example sharding strategy (enable when scaling):
+      # shard 0: system components (kube-system, monitoring)
+      # shard 1: application namespaces (default, apps-*)
+      # Configure via serviceMonitorSelector below
+
+      # ServiceMonitor Discovery
+      serviceMonitorSelector:
+        matchLabels:
+          prometheus: kube-prometheus
+      serviceMonitorNamespaceSelector:
+        any: true  # Discover ServiceMonitors in all namespaces
+
+      # PodMonitor Discovery
+      podMonitorSelector:
+        matchLabels:
+          prometheus: kube-prometheus
+      podMonitorNamespaceSelector:
+        any: true
+
+      # PrometheusRule Discovery
+      ruleSelector:
+        matchLabels:
+          prometheus: kube-prometheus
+      ruleNamespaceSelector:
+        any: true
+
+      # Resource Limits - Sized for large cluster
+      # Expect ~10M active series at 5K nodes, 100K pods
+      resources:
+        requests:
+          cpu: 4000m      # 4 cores baseline
+          memory: 32Gi    # ~3KB per series = 30GB for 10M series
+        limits:
+          cpu: 8000m      # Allow bursting
+          memory: 64Gi    # 2x headroom for query load
+
+      # Storage - Local SSD for 2h retention
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: gp3  # AWS EBS gp3 for cost-effective performance
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 50Gi  # 2h @ ~10M series ≈ 50GB
+
+      # Pod Disruption Budget for HA
+      podDisruptionBudget:
+        enabled: true
+        minAvailable: 1
+
+      # Anti-affinity: spread replicas across nodes
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                - prometheus
+            topologyKey: kubernetes.io/hostname
+          # Prefer different AZs
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - prometheus
+              topologyKey: topology.kubernetes.io/zone
+
+      # Security Context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534  # nobody
+        fsGroup: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Container Security
+      containers:
+      - name: prometheus
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+
+      # Tolerate system taints for critical monitoring
+      tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+
+      # Priority Class for critical workload
+      priorityClassName: system-cluster-critical
+
+      # External Labels (for Thanos multi-cluster)
+      externalLabels:
+        cluster: eks-us-east-1  # Replace with actual cluster name
+        region: us-east-1
+        replica: $(POD_NAME)  # Unique per replica
+
+      # Thanos Sidecar Configuration
+      thanos:
+        enabled: true
+        image: quay.io/thanos/thanos:v0.36.1
+        version: v0.36.1
+
+        # Object Storage for long-term retention
+        objectStorageConfig:
+          existingSecret:
+            name: thanos-objstore-secret
+            key: objstore.yml
+
+        # Resource limits for sidecar
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+
+      # Remote Write (optional: send to central Prometheus or other systems)
+      # remoteWrite:
+      # - url: http://mimir-gateway/api/v1/push
+      #   queueConfig:
+      #     capacity: 10000
+      #     maxShards: 50
+      #     minShards: 1
+      #     maxSamplesPerSend: 5000
+      #     batchSendDeadline: 5s
+      #   writeRelabelConfigs:
+      #   - sourceLabels: [__name__]
+      #     regex: "up|scrape_.*"
+      #     action: drop  # Don't send internal metrics
+
+      # Additional Scrape Configs (for non-ServiceMonitor targets)
+      additionalScrapeConfigs:
+      - job_name: 'kubernetes-nodes-cadvisor'
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+        - role: node
+        relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+        - source_labels: [__meta_kubernetes_node_name]
+          regex: (.+)
+          target_label: __metrics_path__
+          replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+        metric_relabel_configs:
+        # Drop high-cardinality container metrics
+        - source_labels: [__name__]
+          regex: 'container_network_tcp_usage_total|container_network_udp_usage_total'
+          action: drop
+
+  # --------------------------------------------------------------------------
+  # Grafana Configuration
+  # --------------------------------------------------------------------------
+  grafana:
+    enabled: true
+
+    replicas: 1  # Stateless, can scale horizontally if needed
+
+    # Admin credentials (use External Secrets in production)
+    adminPassword: changeme  # TODO: Replace with ExternalSecret
+
+    # Persistence disabled - dashboards as code via ConfigMaps
+    persistence:
+      enabled: false
+
+    # Service configuration
+    service:
+      type: ClusterIP
+      port: 80
+      targetPort: 3000
+
+    # Ingress configuration (optional, use ALB Ingress Controller)
+    ingress:
+      enabled: false
+      # ingressClassName: alb
+      # annotations:
+      #   alb.ingress.kubernetes.io/scheme: internal
+      #   alb.ingress.kubernetes.io/target-type: ip
+      #   alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:...
+      # hosts:
+      # - grafana.internal.example.com
+      # tls:
+      # - secretName: grafana-tls
+      #   hosts:
+      #   - grafana.internal.example.com
+
+    # Resource limits
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+    # Security Context
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 472
+      fsGroup: 472
+      seccompProfile:
+        type: RuntimeDefault
+
+    # Data Sources
+    datasources:
+      datasources.yaml:
+        apiVersion: 1
+        datasources:
+        # Primary: Prometheus (short-term, fast queries)
+        - name: Prometheus
+          type: prometheus
+          url: http://prometheus-stack-kube-prometheus-prometheus:9090
+          access: proxy
+          isDefault: true
+          jsonData:
+            timeInterval: 30s
+            queryTimeout: 300s
+            httpMethod: POST
+
+        # Secondary: Thanos Query (long-term, cross-cluster)
+        - name: Thanos
+          type: prometheus
+          url: http://thanos-query-frontend:9090
+          access: proxy
+          isDefault: false
+          jsonData:
+            timeInterval: 30s
+            queryTimeout: 300s
+            httpMethod: POST
+
+        # Loki for logs correlation
+        - name: Loki
+          type: loki
+          url: http://loki-gateway:80
+          access: proxy
+          jsonData:
+            timeout: 300
+            maxLines: 1000
+
+        # Tempo for distributed tracing
+        - name: Tempo
+          type: tempo
+          url: http://tempo-query-frontend:3100
+          access: proxy
+          jsonData:
+            httpMethod: GET
+            tracesToLogsV2:
+              datasourceUid: loki
+              spanStartTimeShift: -1h
+              spanEndTimeShift: 1h
+              filterByTraceID: true
+
+        # Pyroscope for continuous profiling
+        - name: Pyroscope
+          type: phlare
+          url: http://pyroscope:4040
+          access: proxy
+          jsonData:
+            minStep: 15s
+
+    # Default Dashboards
+    dashboardProviders:
+      dashboardproviders.yaml:
+        apiVersion: 1
+        providers:
+        - name: 'default'
+          orgId: 1
+          folder: 'Kubernetes'
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/default
+        - name: 'platform'
+          orgId: 1
+          folder: 'Platform'
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/platform
+
+    # Pre-configured dashboards
+    dashboards:
+      default:
+        # Kubernetes cluster overview
+        kubernetes-cluster:
+          gnetId: 7249
+          revision: 1
+          datasource: Prometheus
+
+        # Node exporter full
+        node-exporter:
+          gnetId: 1860
+          revision: 37
+          datasource: Prometheus
+
+        # Prometheus stats
+        prometheus-stats:
+          gnetId: 19105
+          revision: 3
+          datasource: Prometheus
+
+        # CoreDNS
+        coredns:
+          gnetId: 14981
+          revision: 4
+          datasource: Prometheus
+
+      platform:
+        # Karpenter metrics
+        karpenter:
+          gnetId: 20524
+          revision: 1
+          datasource: Prometheus
+
+        # EBS CSI Driver
+        ebs-csi:
+          gnetId: 16924
+          revision: 1
+          datasource: Prometheus
+
+        # VPC CNI
+        vpc-cni:
+          gnetId: 17942
+          revision: 2
+          datasource: Prometheus
+
+    # OAuth/SSO Configuration (example: AWS Cognito, Okta, Google)
+    grafana.ini:
+      server:
+        root_url: https://grafana.internal.example.com
+        serve_from_sub_path: false
+
+      # Database (use RDS for HA in production)
+      database:
+        type: sqlite3
+        # For production:
+        # type: postgres
+        # host: grafana-db.cluster-xxx.us-east-1.rds.amazonaws.com:5432
+        # name: grafana
+        # user: grafana
+        # password: $__file{/etc/secrets/db-password}
+
+      # Analytics
+      analytics:
+        reporting_enabled: false
+        check_for_updates: false
+        check_for_plugin_updates: false
+
+      # Security
+      security:
+        admin_user: admin
+        admin_password: $__file{/etc/secrets/admin-password}
+        disable_gravatar: true
+        cookie_secure: true
+        strict_transport_security: true
+        x_content_type_options: true
+        x_xss_protection: true
+
+      # Auth (example: OAuth with AWS Cognito)
+      # auth:
+      #   disable_login_form: false
+      #   oauth_auto_login: true
+      #
+      # auth.generic_oauth:
+      #   enabled: true
+      #   name: AWS Cognito
+      #   allow_sign_up: true
+      #   client_id: $__file{/etc/secrets/oauth-client-id}
+      #   client_secret: $__file{/etc/secrets/oauth-client-secret}
+      #   scopes: openid profile email
+      #   auth_url: https://your-domain.auth.us-east-1.amazoncognito.com/oauth2/authorize
+      #   token_url: https://your-domain.auth.us-east-1.amazoncognito.com/oauth2/token
+      #   api_url: https://your-domain.auth.us-east-1.amazoncognito.com/oauth2/userInfo
+      #   role_attribute_path: "contains(cognito:groups[*], 'Admins') && 'Admin' || 'Viewer'"
+
+      # Logging
+      log:
+        mode: console
+        level: info
+
+      # Alerting
+      alerting:
+        enabled: true
+        execute_alerts: true
+
+  # --------------------------------------------------------------------------
+  # Alertmanager Configuration
+  # --------------------------------------------------------------------------
+  alertmanager:
+    enabled: true
+
+    service:
+      type: ClusterIP
+      port: 9093
+
+    alertmanagerSpec:
+      # HA Configuration - 3 replicas for quorum
+      replicas: 3
+
+      # Resource limits
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 200m
+          memory: 512Mi
+
+      # Storage for notification state
+      storage:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: gp3
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 10Gi
+
+      # Pod Disruption Budget
+      podDisruptionBudget:
+        enabled: true
+        minAvailable: 2
+
+      # Anti-affinity
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                - alertmanager
+            topologyKey: kubernetes.io/hostname
+
+      # Security Context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Priority Class
+      priorityClassName: system-cluster-critical
+
+      # Alertmanager Configuration
+      config:
+        global:
+          resolve_timeout: 5m
+          # Slack webhook (use External Secret)
+          slack_api_url: 'https://hooks.slack.com/services/XXX/YYY/ZZZ'  # TODO: Replace with ExternalSecret
+          # PagerDuty integration key
+          pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+        # Inhibition rules - prevent alert spam
+        inhibit_rules:
+        # Inhibit warning if critical is firing
+        - source_matchers:
+          - severity = critical
+          target_matchers:
+          - severity =~ warning|info
+          equal:
+          - namespace
+          - alertname
+
+        # Inhibit pod alerts if node is down
+        - source_matchers:
+          - alertname = NodeDown
+          target_matchers:
+          - alertname = PodNotReady
+          equal:
+          - node
+
+        # Inhibit disk full if node is being drained
+        - source_matchers:
+          - alertname = NodeDraining
+          target_matchers:
+          - alertname = NodeFilesystemAlmostOutOfSpace
+          equal:
+          - node
+
+        # Routing tree
+        route:
+          receiver: 'slack-general'
+          group_by: ['alertname', 'cluster', 'namespace']
+          group_wait: 30s
+          group_interval: 5m
+          repeat_interval: 4h
+
+          routes:
+          # Critical alerts -> PagerDuty + Slack
+          - matchers:
+            - severity = critical
+            receiver: 'pagerduty-critical'
+            continue: true
+            group_wait: 10s
+            repeat_interval: 5m
+
+          - matchers:
+            - severity = critical
+            receiver: 'slack-critical'
+            group_wait: 10s
+
+          # Platform team alerts
+          - matchers:
+            - team = platform
+            receiver: 'slack-platform'
+            group_wait: 30s
+
+          # Application team alerts (route by namespace)
+          - matchers:
+            - namespace =~ "app-.*"
+            receiver: 'slack-apps'
+            group_wait: 1m
+
+          # Watchdog - health check alert (always firing)
+          - matchers:
+            - alertname = Watchdog
+            receiver: 'null'
+
+        # Receivers
+        receivers:
+        - name: 'null'
+
+        - name: 'slack-general'
+          slack_configs:
+          - channel: '#alerts'
+            title: '{{ .GroupLabels.alertname }}'
+            text: "{{ range .Alerts }}{{ .Annotations.description }}\n{{ end }}"
+            send_resolved: true
+            color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+
+        - name: 'slack-critical'
+          slack_configs:
+          - channel: '#alerts-critical'
+            title: 'CRITICAL: {{ .GroupLabels.alertname }}'
+            text: "{{ range .Alerts }}{{ .Annotations.description }}\n{{ end }}"
+            send_resolved: true
+            color: 'danger'
+
+        - name: 'slack-platform'
+          slack_configs:
+          - channel: '#platform-alerts'
+            title: '{{ .GroupLabels.alertname }}'
+            text: "{{ range .Alerts }}{{ .Annotations.description }}\n{{ end }}"
+            send_resolved: true
+
+        - name: 'slack-apps'
+          slack_configs:
+          - channel: '#app-alerts'
+            title: '{{ .GroupLabels.alertname }}'
+            text: "{{ range .Alerts }}{{ .Annotations.description }}\n{{ end }}"
+            send_resolved: true
+
+        - name: 'pagerduty-critical'
+          pagerduty_configs:
+          - service_key: 'YOUR_PAGERDUTY_SERVICE_KEY'  # TODO: Replace with ExternalSecret
+            description: '{{ .GroupLabels.alertname }}: {{ .GroupLabels.namespace }}'
+            severity: '{{ .CommonLabels.severity }}'
+            client: 'Prometheus ({{ .GroupLabels.cluster }})'
+            details:
+              firing: '{{ .Alerts.Firing | len }}'
+              resolved: '{{ .Alerts.Resolved | len }}'
+              alertname: '{{ .GroupLabels.alertname }}'
+
+  # --------------------------------------------------------------------------
+  # Node Exporter Configuration
+  # --------------------------------------------------------------------------
+  nodeExporter:
+    enabled: true
+
+    # DaemonSet - runs on every node
+    hostNetwork: true
+    hostPID: true
+
+    # Tolerate all taints to run on all nodes
+    tolerations:
+    - operator: Exists
+
+    # Resource limits
+    resources:
+      requests:
+        cpu: 100m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+    # Security Context
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      fsGroup: 65534
+
+  # --------------------------------------------------------------------------
+  # Kube-State-Metrics Configuration
+  # --------------------------------------------------------------------------
+  kubeStateMetrics:
+    enabled: true
+
+    # Sharding for large clusters (enable when objects > 10K)
+    # Splits metric collection across multiple pods
+    replicas: 1
+    # Enable sharding:
+    # replicas: 3
+    # extraArgs:
+    # - --shard=$(SHARD_ID)
+    # - --total-shards=3
+
+    # Resource limits
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+    # Custom metric labels for Karpenter nodes
+    customLabels:
+      karpenter.sh/capacity-type: "on-demand"
+      karpenter.sh/provisioner-name: "default"
+      node.kubernetes.io/instance-type: ".*"
+
+    # Collect metrics for these resources
+    collectors:
+    - certificatesigningrequests
+    - configmaps
+    - cronjobs
+    - daemonsets
+    - deployments
+    - endpoints
+    - horizontalpodautoscalers
+    - ingresses
+    - jobs
+    - leases
+    - limitranges
+    - mutatingwebhookconfigurations
+    - namespaces
+    - networkpolicies
+    - nodes
+    - persistentvolumeclaims
+    - persistentvolumes
+    - poddisruptionbudgets
+    - pods
+    - replicasets
+    - replicationcontrollers
+    - resourcequotas
+    - secrets
+    - services
+    - statefulsets
+    - storageclasses
+    - validatingwebhookconfigurations
+    - volumeattachments
+
+    # Security Context
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      fsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+
+  # --------------------------------------------------------------------------
+  # Prometheus Operator Configuration
+  # --------------------------------------------------------------------------
+  prometheusOperator:
+    enabled: true
+
+    # Resource limits for operator
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+    # Security Context
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      fsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+
+    # Admission webhook for validation
+    admissionWebhooks:
+      enabled: true
+      patch:
+        enabled: true
+
+  # --------------------------------------------------------------------------
+  # Default Prometheus Rules (Alerts)
+  # --------------------------------------------------------------------------
+  defaultRules:
+    create: true
+    rules:
+      alertmanager: true
+      etcd: false  # Not applicable for EKS (managed control plane)
+      configReloaders: true
+      general: true
+      k8s: true
+      kubeApiserverAvailability: true
+      kubeApiserverSlos: true
+      kubeApiserverHistogram: false  # High cardinality
+      kubelet: true
+      kubeProxy: true
+      kubePrometheusGeneral: true
+      kubePrometheusNodeRecording: true
+      kubernetesApps: true
+      kubernetesResources: true
+      kubernetesStorage: true
+      kubernetesSystem: true
+      kubeScheduler: false  # Not accessible in EKS
+      kubeStateMetrics: true
+      network: true
+      node: true
+      nodeExporterAlerting: true
+      nodeExporterRecording: true
+      prometheus: true
+      prometheusOperator: true
+
+    # Customize alert labels
+    labels:
+      prometheus: kube-prometheus
+
+    # Adjust alert thresholds for large clusters
+    appNamespacesTarget: ".*"
+    additionalRuleLabels:
+      team: platform
+      cluster: eks-us-east-1
+
+# ============================================================================
+# Additional Prometheus Rules for SLO Monitoring
+# ============================================================================
+
+# Custom PrometheusRules will be created via templates/prometheusrules/
+# See: templates/prometheusrules/slo-rules.yaml

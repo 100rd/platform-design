@@ -2,8 +2,13 @@ terraform {
   source = "../terraform"
 }
 
+locals {
+  region      = "us-east-1"
+  environment = "dev"
+}
+
 inputs = {
-  region                 = "us-east-1"
+  region                 = local.region
   name                   = "platform"
   cluster_name           = "platform-eks"
   enable_hetzner_nodes   = true
@@ -12,10 +17,6 @@ inputs = {
   hetzner_server_type    = "cx31"
   hetzner_image          = "ubuntu-22.04"
   hetzner_location       = "fsn1"
-=======
-locals {
-  region      = "us-east-1"
-  environment = "dev"
 }
 
 remote_state {

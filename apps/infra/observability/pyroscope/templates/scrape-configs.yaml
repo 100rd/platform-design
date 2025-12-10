@@ -1,0 +1,427 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pyroscope-scrape-configs
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "pyroscope.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: agent
+    {{- with .Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+data:
+  scrape-configs.yaml: |
+    # Pyroscope Agent Scrape Configurations
+    # Auto-discover and scrape profiling endpoints across the cluster
+
+    scrape_configs:
+      # =====================================================
+      # Go Applications - pprof endpoints
+      # =====================================================
+      - job_name: 'kubernetes/go-applications'
+
+        enabled_profiles:
+          - cpu
+          - memory
+          - goroutine
+          - mutex
+          - block
+
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - gaming
+                - matchmaking
+                - leaderboard
+                - payment
+                - notification
+
+        relabel_configs:
+          # Only scrape pods with the annotation
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_scrape]
+            action: keep
+            regex: "true"
+
+          # Only scrape Go applications
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_language]
+            action: keep
+            regex: "(go|golang)"
+
+          # Get port from annotation or default to 6060
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_port]
+            action: replace
+            target_label: __address__
+            regex: (.+)
+            replacement: ${1}:${2}
+          - source_labels: [__meta_kubernetes_pod_ip]
+            action: replace
+            target_label: __address__
+            regex: (.+)
+            replacement: ${1}:6060
+
+          # Set profile path - default to /debug/pprof
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_profile_path]
+            action: replace
+            target_label: __profile_path__
+            regex: (.+)
+          - action: replace
+            target_label: __profile_path__
+            replacement: /debug/pprof
+
+          # Application name
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_application_name]
+            action: replace
+            target_label: __name__
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: replace
+            target_label: __name__
+            regex: (.+)
+
+          # Add Kubernetes labels
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_label_version]
+            target_label: version
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
+          - source_labels: [__meta_kubernetes_pod_label_component]
+            target_label: component
+
+        # Go-specific scrape parameters
+        params:
+          seconds: ['10']  # CPU profile duration
+
+      # =====================================================
+      # Java Applications - async-profiler
+      # =====================================================
+      - job_name: 'kubernetes/java-applications'
+
+        enabled_profiles:
+          - cpu
+          - alloc
+          - lock
+          - wall
+
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - gaming
+                - matchmaking
+                - payment
+
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_scrape]
+            action: keep
+            regex: "true"
+
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_language]
+            action: keep
+            regex: "java"
+
+          # Java profiling endpoint (via async-profiler sidecar)
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_port]
+            action: replace
+            target_label: __address__
+            regex: (.+)
+            replacement: ${1}
+          - source_labels: [__meta_kubernetes_pod_ip]
+            action: replace
+            target_label: __address__
+            regex: (.+)
+            replacement: ${1}:8080
+
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_profile_path]
+            action: replace
+            target_label: __profile_path__
+            regex: (.+)
+          - action: replace
+            target_label: __profile_path__
+            replacement: /profiler/profile
+
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: replace
+            target_label: __name__
+
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_label_version]
+            target_label: version
+
+        # Java async-profiler parameters
+        params:
+          duration: ['10']
+          event: ['cpu']
+
+      # =====================================================
+      # Node.js Applications - V8 profiler
+      # =====================================================
+      - job_name: 'kubernetes/nodejs-applications'
+
+        enabled_profiles:
+          - cpu
+          - heap
+
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - gaming
+                - notification
+                - api-gateway
+
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_scrape]
+            action: keep
+            regex: "true"
+
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_language]
+            action: keep
+            regex: "(nodejs|node|javascript)"
+
+          # Node.js profiling endpoint
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_port]
+            action: replace
+            target_label: __address__
+            regex: (.+)
+            replacement: ${1}
+          - source_labels: [__meta_kubernetes_pod_ip]
+            action: replace
+            target_label: __address__
+            regex: (.+)
+            replacement: ${1}:3000
+
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_profile_path]
+            action: replace
+            target_label: __profile_path__
+            regex: (.+)
+          - action: replace
+            target_label: __profile_path__
+            replacement: /profiler/v8/profile
+
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: replace
+            target_label: __name__
+
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_label_version]
+            target_label: version
+
+      # =====================================================
+      # Python Applications - py-spy
+      # =====================================================
+      - job_name: 'kubernetes/python-applications'
+
+        enabled_profiles:
+          - cpu
+          - memory
+
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - gaming
+                - analytics
+                - ml-services
+
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_scrape]
+            action: keep
+            regex: "true"
+
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_language]
+            action: keep
+            regex: "python"
+
+          # Python profiling endpoint (via py-spy sidecar)
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_port]
+            action: replace
+            target_label: __address__
+            regex: (.+)
+            replacement: ${1}
+          - source_labels: [__meta_kubernetes_pod_ip]
+            action: replace
+            target_label: __address__
+            regex: (.+)
+            replacement: ${1}:9090
+
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_profile_path]
+            action: replace
+            target_label: __profile_path__
+            regex: (.+)
+          - action: replace
+            target_label: __profile_path__
+            replacement: /profiler/py-spy
+
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: replace
+            target_label: __name__
+
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_label_version]
+            target_label: version
+
+      # =====================================================
+      # eBPF-based profiling (all languages)
+      # =====================================================
+      - job_name: 'kubernetes/ebpf-profiling'
+
+        enabled_profiles:
+          - cpu
+
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - gaming
+                - matchmaking
+                - leaderboard
+                - payment
+
+        relabel_configs:
+          # Only scrape pods with eBPF profiling enabled
+          - source_labels: [__meta_kubernetes_pod_annotation_pyroscope_io_ebpf]
+            action: keep
+            regex: "true"
+
+          # eBPF profiler runs as DaemonSet, targets all pods on node
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_label_version]
+            target_label: version
+
+          # Set profile source
+          - action: replace
+            target_label: profiler
+            replacement: ebpf
+
+---
+# ConfigMap with profiling best practices
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pyroscope-profiling-guidelines
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ include "pyroscope.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: documentation
+data:
+  guidelines.md: |
+    # Continuous Profiling Guidelines
+
+    ## Overhead Considerations
+
+    ### CPU Profiling
+    - **Go**: ~1-2% overhead with 10s samples
+    - **Java**: ~2-3% overhead with async-profiler
+    - **Node.js**: ~3-5% overhead with V8 profiler
+    - **Python**: ~5-10% overhead with py-spy
+    - **eBPF**: ~1% overhead, language-agnostic
+
+    ### Memory Profiling
+    - Go heap profiling: <1% overhead
+    - Java allocation profiling: 2-5% overhead
+    - Monitor RSS to detect profiler memory usage
+
+    ## Sampling Rates
+
+    ### Production Environments
+    - CPU: 100 Hz (every 10ms)
+    - Memory: On allocation, sampled at 512KB
+    - Block/Mutex: Sampled at 10%
+
+    ### Development Environments
+    - Can use higher sampling rates for more detail
+    - CPU: 250 Hz or higher
+    - Memory: Lower sampling threshold (128KB)
+
+    ## What to Look For
+
+    ### CPU Flame Graphs
+    - Wide bars = expensive functions
+    - Deep stacks = complex call chains
+    - Flat profiles = tight loops
+    - Look for unexpected third-party library costs
+
+    ### Memory Flame Graphs
+    - Allocation hotspots
+    - Memory leaks (growing over time)
+    - Large object allocations
+    - GC pressure indicators
+
+    ### Goroutine/Thread Profiles
+    - Goroutine leaks (count growing)
+    - Blocked goroutines
+    - Lock contention
+    - Channel operations
+
+    ## Common Performance Issues
+
+    ### 1. Serialization Overhead
+    - JSON marshaling/unmarshaling
+    - Protobuf encoding
+    - Look for encoding/* packages in flame graphs
+
+    ### 2. Database Queries
+    - N+1 query patterns
+    - Missing indexes
+    - Inefficient ORM usage
+
+    ### 3. Memory Allocations
+    - String concatenation in loops
+    - Unnecessary copies
+    - Large slice pre-allocations
+
+    ### 4. Lock Contention
+    - Hot mutex locks
+    - Read/write lock imbalance
+    - Fine-grained locking opportunities
+
+    ### 5. Garbage Collection
+    - High GC time percentage
+    - Frequent GC cycles
+    - Large heap sizes
+
+    ## Integration with Alerts
+
+    Alert on:
+    - CPU profile showing >50% time in single function
+    - Memory allocations >10x baseline
+    - Goroutine count >10x baseline
+    - Mutex contention >100ms cumulative
+
+    ## Comparing Profiles
+
+    Use diff view to compare:
+    - Before/after optimization
+    - Different versions
+    - Different load levels
+    - Different configurations

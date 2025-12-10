@@ -1,0 +1,441 @@
+tempo-distributed:
+  enabled: true
+
+  # Global configuration
+  global:
+    image:
+      registry: docker.io
+    clusterDomain: cluster.local
+    priorityClassName: system-cluster-critical
+
+  # Tempo configuration
+  tempo:
+    repository: grafana/tempo
+    tag: 2.3.1
+    pullPolicy: IfNotPresent
+
+    # Multi-tenancy configuration
+    multitenancyEnabled: false
+
+    # Trace retention
+    retention: 336h  # 14 days
+
+    # Search configuration
+    searchEnabled: true
+
+    # Storage configuration
+    storage:
+      trace:
+        backend: s3
+        s3:
+          # S3 bucket for trace storage
+          bucket: tempo-traces-prod
+          endpoint: s3.us-east-1.amazonaws.com
+          region: us-east-1
+          access_key: ${S3_ACCESS_KEY}
+          secret_key: ${S3_SECRET_KEY}
+          insecure: false
+          # Path prefix for multi-cluster support
+          prefix: traces/
+        pool:
+          max_workers: 100
+          queue_depth: 10000
+        wal:
+          path: /var/tempo/wal
+        block:
+          # Block configuration
+          bloom_filter_false_positive: 0.01
+          index_downsample_bytes: 1000000
+          encoding: zstd
+          # Retention
+          retention: 336h  # 14 days
+        cache:
+          # Cache configuration
+          background:
+            writeback_goroutines: 10
+          memcached:
+            consistent_hash: true
+            host: memcached
+            service: memcached-client
+            timeout: 500ms
+
+    # Ingestion limits
+    limits:
+      # Per-tenant limits
+      max_bytes_per_trace: 52428800  # 50MB
+      max_traces_per_user: 10000
+      ingestion_rate_strategy: local
+      ingestion_rate_limit_bytes: 15000000  # 15MB/s
+      ingestion_burst_size_bytes: 20000000  # 20MB
+
+    # Metrics generator configuration
+    metricsGenerator:
+      enabled: true
+      remoteWriteUrl: "http://prometheus-server.monitoring.svc.cluster.local:80/api/v1/write"
+      processor:
+        span_metrics:
+          dimensions:
+            - service.name
+            - span.name
+            - span.kind
+            - status.code
+        service_graphs:
+          dimensions:
+            - service.name
+            - status.code
+
+    # Query configuration
+    querier:
+      max_concurrent_queries: 20
+      search:
+        default_result_limit: 20
+        max_result_limit: 1000
+        query_timeout: 30s
+
+    # TraceQL configuration
+    traceql:
+      enabled: true
+      max_duration: 0s  # No limit
+
+  # Distributor - Receives traces from collectors
+  distributor:
+    replicas: 3
+
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 80
+      targetMemoryUtilizationPercentage: 80
+
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+
+    # Pod disruption budget
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 2
+
+    # Anti-affinity for high availability
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/component
+                    operator: In
+                    values:
+                      - distributor
+              topologyKey: kubernetes.io/hostname
+
+    # Service configuration
+    service:
+      type: ClusterIP
+      annotations: {}
+
+    # Receiver ports - support multiple protocols
+    config:
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:4317
+            http:
+              endpoint: 0.0.0.0:4318
+        jaeger:
+          protocols:
+            thrift_http:
+              endpoint: 0.0.0.0:14268
+            grpc:
+              endpoint: 0.0.0.0:14250
+            thrift_compact:
+              endpoint: 0.0.0.0:6831
+            thrift_binary:
+              endpoint: 0.0.0.0:6832
+        zipkin:
+          endpoint: 0.0.0.0:9411
+
+  # Ingester - Writes traces to storage
+  ingester:
+    replicas: 3
+
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 80
+      targetMemoryUtilizationPercentage: 80
+
+    resources:
+      limits:
+        cpu: 3000m
+        memory: 8Gi
+      requests:
+        cpu: 1500m
+        memory: 4Gi
+
+    persistence:
+      enabled: true
+      size: 50Gi
+      storageClass: gp3-encrypted
+      accessModes:
+        - ReadWriteOnce
+
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 2
+
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/component
+                    operator: In
+                    values:
+                      - ingester
+              topologyKey: kubernetes.io/hostname
+
+    # Complete traces before flushing
+    config:
+      complete_block_timeout: 15m
+      max_block_duration: 30m
+      max_block_bytes: 524288000  # 500MB
+
+  # Querier - Serves trace queries
+  querier:
+    replicas: 2
+
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      targetCPUUtilizationPercentage: 75
+
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/component
+                    operator: In
+                    values:
+                      - querier
+              topologyKey: kubernetes.io/hostname
+
+    # Query configuration
+    config:
+      frontend_worker:
+        frontend_address: tempo-stack-query-frontend:9095
+        parallelism: 10
+
+  # Query Frontend - Query caching and splitting
+  queryFrontend:
+    replicas: 2
+
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 75
+
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/component
+                    operator: In
+                    values:
+                      - query-frontend
+              topologyKey: kubernetes.io/hostname
+
+    # Query configuration
+    query:
+      enabled: true
+      # Expose query frontend for Grafana
+      service:
+        type: ClusterIP
+        port: 3100
+
+    config:
+      search:
+        concurrent_jobs: 1000
+        target_bytes_per_job: 104857600  # 100MB
+      trace_by_id:
+        query_shards: 50
+
+  # Compactor - Block compaction and retention
+  compactor:
+    replicas: 1
+
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+
+    persistence:
+      enabled: true
+      size: 50Gi
+      storageClass: gp3-encrypted
+
+    config:
+      compaction:
+        block_retention: 336h  # 14 days
+        compaction_window: 1h
+        chunk_size_bytes: 5242880  # 5MB
+        flush_size_bytes: 524288000  # 500MB
+        max_compaction_objects: 6000000
+        max_block_bytes: 107374182400  # 100GB
+        retention_concurrency: 10
+        v2_in_buffer_bytes: 5242880
+        v2_out_buffer_bytes: 20971520
+        v2_prefetch_traces_count: 1000
+
+  # Metrics Generator - Generate RED metrics from traces
+  metricsGenerator:
+    enabled: true
+    replicas: 1
+
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+
+    config:
+      processor:
+        span_metrics:
+          # Generate metrics for service RED metrics
+          dimensions:
+            - service.name
+            - service.namespace
+            - span.name
+            - span.kind
+            - status.code
+          # Histogram buckets for latency
+          histogram_buckets: [0.002, 0.004, 0.008, 0.016, 0.032, 0.064, 0.128, 0.256, 0.512, 1.024, 2.048, 4.096, 8.192, 16.384]
+        service_graphs:
+          # Generate service dependency graphs
+          dimensions:
+            - service.name
+            - service.namespace
+          histogram_buckets: [0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4, 12.8]
+          wait: 10s
+          max_items: 10000
+      storage:
+        path: /var/tempo/wal
+        remote_write:
+          - url: http://prometheus-server.monitoring.svc.cluster.local:80/api/v1/write
+            send_exemplars: true
+
+  # Memcached for caching
+  memcached:
+    enabled: true
+    replicas: 3
+
+    resources:
+      limits:
+        cpu: 500m
+        memory: 2Gi
+      requests:
+        cpu: 250m
+        memory: 1Gi
+
+    # Memcached configuration
+    extraArgs:
+      - -m 1536  # 1.5GB memory limit
+      - -I 5m    # Max item size
+      - -c 1024  # Max connections
+      - -v       # Verbose
+
+  # Gateway (optional) - Single entry point
+  gateway:
+    enabled: false
+
+  # Global pod labels
+  podLabels:
+    app: tempo
+    environment: production
+    team: platform
+
+  # Global pod annotations
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3100"
+
+  # Service monitor for Prometheus
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    labels:
+      release: prometheus
+
+  # Security context
+  securityContext:
+    fsGroup: 10001
+    runAsGroup: 10001
+    runAsNonRoot: true
+    runAsUser: 10001
+
+  # Node selector (optional)
+  nodeSelector: {}
+    # node.kubernetes.io/instance-type: r6i.2xlarge
+
+  # Tolerations (optional)
+  tolerations: []
+
+# Environment-specific overrides
+# Can be overridden via values-<env>.yaml files
+
+# Example for staging environment:
+# tempo-distributed:
+#   tempo:
+#     retention: 168h  # 7 days
+#   distributor:
+#     replicas: 2
+#   ingester:
+#     replicas: 2

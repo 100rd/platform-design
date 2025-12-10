@@ -1,0 +1,174 @@
+========================================
+ PROMETHEUS STACK INSTALLATION COMPLETE
+========================================
+
+Thank you for installing {{ .Chart.Name }} v{{ .Chart.Version }}!
+
+Your release is named: {{ .Release.Name }}
+Deployed to namespace: {{ .Release.Namespace }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 ACCESS YOUR SERVICES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Prometheus UI:
+
+   kubectl port-forward -n {{ .Release.Namespace }} \
+     svc/{{ .Release.Name }}-kube-prometheus-prometheus 9090:9090
+
+   Then visit: http://localhost:9090
+
+2. Grafana Dashboard:
+
+   kubectl port-forward -n {{ .Release.Namespace }} \
+     svc/{{ .Release.Name }}-grafana 3000:80
+
+   Then visit: http://localhost:3000
+
+   Username: admin
+   Password: Run to get password:
+     kubectl get secret -n {{ .Release.Namespace }} \
+       {{ .Release.Name }}-grafana \
+       -o jsonpath="{.data.admin-password}" | base64 -d
+
+3. Alertmanager UI:
+
+   kubectl port-forward -n {{ .Release.Namespace }} \
+     svc/{{ .Release.Name }}-kube-prometheus-alertmanager 9093:9093
+
+   Then visit: http://localhost:9093
+
+{{- if index .Values "thanos" "enabled" }}
+
+4. Thanos Query UI:
+
+   kubectl port-forward -n {{ .Release.Namespace }} \
+     svc/thanos-query 9090:9090
+
+   Then visit: http://localhost:9090
+
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ VERIFY INSTALLATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Check pod status:
+  kubectl get pods -n {{ .Release.Namespace }}
+
+Check Prometheus targets:
+  kubectl port-forward -n {{ .Release.Namespace }} \
+    svc/{{ .Release.Name }}-kube-prometheus-prometheus 9090:9090
+  # Visit: http://localhost:9090/targets
+
+Check ServiceMonitors:
+  kubectl get servicemonitor -n {{ .Release.Namespace }}
+
+Check PrometheusRules:
+  kubectl get prometheusrule -n {{ .Release.Namespace }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📈 SCALE CHARACTERISTICS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+This stack is configured for:
+- Nodes: 1,000 - 5,000
+- Pods: 100,000+
+- Active Series: ~10M
+- Local Retention: 2h
+- Long-term Retention: 1y (via Thanos + S3)
+
+Monitor these metrics to determine when to scale:
+  - prometheus_tsdb_head_series (current: aim for < 10M)
+  - rate(prometheus_tsdb_head_samples_appended_total[5m]) (< 5M samples/s)
+  - histogram_quantile(0.99, rate(prometheus_http_request_duration_seconds_bucket[5m])) (< 5s)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔍 TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+View logs:
+  Prometheus:
+    kubectl logs -n {{ .Release.Namespace }} -f \
+      prometheus-{{ .Release.Name }}-kube-prometheus-prometheus-0 -c prometheus
+
+  Grafana:
+    kubectl logs -n {{ .Release.Namespace }} -f \
+      deployment/{{ .Release.Name }}-grafana
+
+  Alertmanager:
+    kubectl logs -n {{ .Release.Namespace }} -f \
+      alertmanager-{{ .Release.Name }}-kube-prometheus-alertmanager-0
+
+{{- if index .Values "thanos" "enabled" }}
+
+  Thanos Sidecar:
+    kubectl logs -n {{ .Release.Namespace }} -f \
+      prometheus-{{ .Release.Name }}-kube-prometheus-prometheus-0 -c thanos-sidecar
+
+{{- end }}
+
+Common issues:
+  - Prometheus OOMKilled: Increase memory or enable sharding
+  - No metrics: Check ServiceMonitor labels match Prometheus selector
+  - High latency: Reduce query time range or use recording rules
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📚 DOCUMENTATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Full documentation: See README.md in the chart directory
+
+Dashboards:
+  - Kubernetes Cluster (GrafanaID: 7249)
+  - Node Exporter (GrafanaID: 1860)
+  - Prometheus Stats (GrafanaID: 19105)
+  - Karpenter (GrafanaID: 20524)
+
+Pre-configured alerts:
+  - API Server SLOs
+  - CoreDNS SLOs
+  - Node availability
+  - Karpenter provisioning
+  - ArgoCD sync status
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚙️  NEXT STEPS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{{- if not (index .Values "thanos" "enabled") }}
+
+1. Enable Thanos for long-term storage:
+   - Create S3 bucket
+   - Configure IRSA role
+   - Set thanos.enabled=true
+
+{{- end }}
+
+2. Configure Alertmanager:
+   - Set Slack webhook URL
+   - Set PagerDuty service key
+   - Customize routing rules
+
+3. Set up Grafana:
+   - Configure OAuth/SSO
+   - Import custom dashboards
+   - Set up external database (RDS)
+
+4. Deploy ServiceMonitors:
+   - For your applications
+   - For custom infrastructure
+
+5. Create PrometheusRules:
+   - Application-specific alerts
+   - Custom SLO definitions
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+For support, contact:
+  Platform Team: #platform-observability
+  On-call: PagerDuty "Platform-Monitoring"
+  Runbooks: https://runbooks.internal.example.com/
+
+Happy monitoring! 🚀

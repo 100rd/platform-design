@@ -1,0 +1,27 @@
+apiVersion: v2
+name: pyroscope
+description: Grafana Pyroscope continuous profiling for production gaming platform
+type: application
+version: 1.0.0
+appVersion: "1.7.1"
+
+dependencies:
+  - name: pyroscope
+    version: ~1.7.0
+    repository: https://grafana.github.io/helm-charts
+    condition: pyroscope.enabled
+
+maintainers:
+  - name: Platform Team
+    email: platform@gaming-company.com
+
+keywords:
+  - profiling
+  - performance
+  - observability
+  - continuous-profiling
+  - flame-graphs
+
+annotations:
+  category: Observability
+  platform: EKS

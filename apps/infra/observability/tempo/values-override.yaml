@@ -1,0 +1,31 @@
+# Override values for custom S3 secret configuration
+# This file provides values for the custom templates
+
+# S3 Secret configuration
+tempoS3Secret:
+  enabled: true
+
+  # External Secrets Operator configuration
+  secretStore: aws-secrets-manager
+  secretStoreKind: SecretStore
+
+  # AWS Secrets Manager secret name
+  awsSecretName: tempo/s3-credentials
+
+  # S3 bucket configuration
+  bucket: tempo-traces-prod
+  endpoint: s3.us-east-1.amazonaws.com
+  region: us-east-1
+  prefix: traces/
+
+  # Refresh interval for secret rotation
+  refreshInterval: 1h
+
+# Service Monitor configuration
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  labels:
+    release: prometheus
+    prometheus: kube-prometheus

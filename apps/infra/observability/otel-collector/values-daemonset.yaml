@@ -1,0 +1,472 @@
+# OpenTelemetry Collector - DaemonSet Mode (Per-Node Collection)
+# Runs on every node to collect local telemetry and forward to gateway
+
+# Disable gateway when using daemonset-only deployment
+gateway:
+  enabled: false
+
+daemonset:
+  enabled: true
+
+  nameOverride: otel-agent
+  fullnameOverride: otel-collector-agent
+
+  mode: daemonset
+
+  # Resource allocation - lower footprint for per-node collector
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8888"
+
+  # Host metrics collection requires hostNetwork
+  hostNetwork: false
+
+  # Mount host paths for log collection
+  extraVolumes:
+    - name: varlog
+      hostPath:
+        path: /var/log
+    - name: varlibdockercontainers
+      hostPath:
+        path: /var/lib/docker/containers
+
+  extraVolumeMounts:
+    - name: varlog
+      mountPath: /var/log
+      readOnly: true
+    - name: varlibdockercontainers
+      mountPath: /var/lib/docker/containers
+      readOnly: true
+
+  ports:
+    # OTLP gRPC receiver
+    otlp:
+      enabled: true
+      containerPort: 4317
+      servicePort: 4317
+      protocol: TCP
+      appProtocol: grpc
+    # OTLP HTTP receiver
+    otlp-http:
+      enabled: true
+      containerPort: 4318
+      servicePort: 4318
+      protocol: TCP
+    # Metrics
+    metrics:
+      enabled: true
+      containerPort: 8888
+      servicePort: 8888
+      protocol: TCP
+
+  # OpenTelemetry Collector Configuration for Agent Mode
+  config:
+    receivers:
+      # OTLP receiver for local pods
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+      # Host metrics receiver
+      hostmetrics:
+        collection_interval: 30s
+        scrapers:
+          cpu:
+            metrics:
+              system.cpu.utilization:
+                enabled: true
+          disk:
+          filesystem:
+            metrics:
+              system.filesystem.utilization:
+                enabled: true
+          load:
+          memory:
+            metrics:
+              system.memory.utilization:
+                enabled: true
+          network:
+          paging:
+          processes:
+          process:
+            metrics:
+              process.cpu.utilization:
+                enabled: true
+              process.memory.utilization:
+                enabled: true
+
+      # Kubernetes cluster metrics
+      k8s_cluster:
+        auth_type: serviceAccount
+        node_conditions_to_report: [Ready, MemoryPressure, DiskPressure, PIDPressure]
+        allocatable_types_to_report: [cpu, memory, storage, ephemeral-storage]
+        collection_interval: 30s
+
+      # Kubernetes events
+      k8s_events:
+        auth_type: serviceAccount
+
+      # Kubelet stats
+      kubeletstats:
+        collection_interval: 30s
+        auth_type: serviceAccount
+        endpoint: "https://${K8S_NODE_NAME}:10250"
+        insecure_skip_verify: true
+        metric_groups:
+          - node
+          - pod
+          - container
+          - volume
+
+      # Filelog receiver for container logs (if not using Fluent Bit)
+      filelog:
+        include:
+          - /var/log/pods/*/*/*.log
+        exclude:
+          # Exclude collector's own logs to prevent loop
+          - /var/log/pods/*/otel-collector*/*.log
+        start_at: end
+        include_file_path: true
+        include_file_name: false
+        operators:
+          # Parse CRI-O / containerd format
+          - type: regex_parser
+            regex: '^(?P<time>[^ ^Z]+Z) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) (?P<log>.*)$'
+            timestamp:
+              parse_from: attributes.time
+              layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+          # Extract k8s metadata from file path
+          - type: regex_parser
+            regex: '^.*\/(?P<namespace>[^_]+)_(?P<pod_name>[^_]+)_(?P<uid>[^\/]+)\/(?P<container_name>[^\/]+)\/.*\.log$'
+            parse_from: attributes["log.file.path"]
+          # Move log content to body
+          - type: move
+            from: attributes.log
+            to: body
+
+    processors:
+      # Memory limiter
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+
+      # Batch processor
+      batch:
+        send_batch_size: 512
+        timeout: 5s
+        send_batch_max_size: 1024
+
+      # Resource detection
+      resource:
+        attributes:
+          - key: cluster.name
+            value: gaming-platform-prod
+            action: upsert
+          - key: environment
+            value: production
+            action: upsert
+          - key: deployment.type
+            value: daemonset
+            action: upsert
+
+      resourcedetection:
+        detectors: [env, system, docker, gcp, eks, ec2]
+        timeout: 5s
+
+      # K8s attributes processor
+      k8sattributes:
+        auth_type: serviceAccount
+        passthrough: false
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.ip
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.uid
+          - sources:
+              - from: connection
+        extract:
+          metadata:
+            - k8s.namespace.name
+            - k8s.deployment.name
+            - k8s.statefulset.name
+            - k8s.daemonset.name
+            - k8s.cronjob.name
+            - k8s.job.name
+            - k8s.node.name
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.pod.start_time
+          labels:
+            - tag_name: app.name
+              key: app.kubernetes.io/name
+              from: pod
+            - tag_name: app.version
+              key: app.kubernetes.io/version
+              from: pod
+
+      # Filter health checks
+      filter:
+        error_mode: ignore
+        traces:
+          span:
+            - 'attributes["http.target"] == "/health"'
+            - 'attributes["http.target"] == "/healthz"'
+
+    exporters:
+      # Debug exporter
+      debug:
+        verbosity: basic
+        sampling_initial: 2
+        sampling_thereafter: 500
+
+      # Forward to gateway collector
+      otlp/gateway:
+        endpoint: otel-collector-gateway.monitoring.svc.cluster.local:4317
+        tls:
+          insecure: true
+        compression: gzip
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1000
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+
+    service:
+      extensions: [health_check]
+
+      pipelines:
+        # Traces pipeline - forward to gateway
+        traces:
+          receivers: [otlp]
+          processors:
+            - memory_limiter
+            - resource
+            - resourcedetection
+            - k8sattributes
+            - filter
+            - batch
+          exporters: [otlp/gateway]
+
+        # Metrics pipeline - collect and forward
+        metrics:
+          receivers: [otlp, hostmetrics, kubeletstats, k8s_cluster]
+          processors:
+            - memory_limiter
+            - resource
+            - resourcedetection
+            - k8sattributes
+            - batch
+          exporters: [otlp/gateway]
+
+        # Logs pipeline - collect from files and forward
+        logs:
+          receivers: [otlp, filelog, k8s_events]
+          processors:
+            - memory_limiter
+            - resource
+            - resourcedetection
+            - k8sattributes
+            - batch
+          exporters: [otlp/gateway]
+
+      telemetry:
+        logs:
+          level: info
+        metrics:
+          level: detailed
+          address: 0.0.0.0:8888
+
+  # Service Account with RBAC
+  serviceAccount:
+    create: true
+
+  # RBAC for k8sattributes and cluster metrics
+  clusterRole:
+    create: true
+    rules:
+      - apiGroups: [""]
+        resources:
+          - events
+          - namespaces
+          - namespaces/status
+          - nodes
+          - nodes/spec
+          - nodes/stats
+          - nodes/proxy
+          - pods
+          - pods/status
+          - replicationcontrollers
+          - replicationcontrollers/status
+          - resourcequotas
+          - services
+        verbs: [get, list, watch]
+      - apiGroups: ["apps"]
+        resources:
+          - daemonsets
+          - deployments
+          - replicasets
+          - statefulsets
+        verbs: [get, list, watch]
+      - apiGroups: ["extensions"]
+        resources:
+          - daemonsets
+          - deployments
+          - replicasets
+        verbs: [get, list, watch]
+      - apiGroups: ["batch"]
+        resources:
+          - jobs
+          - cronjobs
+        verbs: [get, list, watch]
+      - apiGroups: ["autoscaling"]
+        resources:
+          - horizontalpodautoscalers
+        verbs: [get, list, watch]
+
+  clusterRoleBinding:
+    create: true
+
+  # Monitoring
+  podMonitor:
+    enabled: true
+    metricsEndpoints:
+      - port: metrics
+        interval: 30s
+
+  # Security
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  # Probes
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 13133
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    timeoutSeconds: 5
+
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 13133
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+
+  # Environment variables
+  env:
+    - name: GOMEMLIMIT
+      value: "400MiB"
+    - name: K8S_NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+    - name: K8S_POD_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: K8S_POD_NAMESPACE
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.namespace
+    - name: K8S_POD_IP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.podIP
+
+  # Update strategy - rolling update one node at a time
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+
+  # Priority class for essential daemonset
+  priorityClassName: system-node-critical
+
+  # Tolerations to run on all nodes including master
+  tolerations:
+    - effect: NoSchedule
+      operator: Exists
+    - effect: NoExecute
+      operator: Exists
+
+# Network policy for daemonset
+networkPolicy:
+  enabled: true
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from local pods on the node
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+  egress:
+    # Allow to gateway collector
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: otel-collector-gateway
+      ports:
+        - protocol: TCP
+          port: 4317
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow to Kubernetes API for metrics collection
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 10250  # Kubelet
