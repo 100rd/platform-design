@@ -1,0 +1,25 @@
+---
+providers:
+  config:
+    class: octodns.provider.yaml.YamlProvider
+    directory: ./zones
+    default_ttl: 300
+    enforce_order: True
+
+  cloudflare:
+    class: octodns_cloudflare.CloudflareProvider
+    token: env/CLOUDFLARE_TOKEN
+    # strict_supports: true
+
+  route53:
+    class: octodns_route53.Route53Provider
+    # Credentials handled via IRSA (AWS_ROLE_ARN / AWS_WEB_IDENTITY_TOKEN_FILE)
+    # strict_supports: true
+
+zones:
+  example.com.:
+    sources:
+      - config
+    targets:
+      - cloudflare
+      - route53

@@ -1,0 +1,56 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: dns-failover-rules
+  namespace: dns-failover
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: dns-failover.rules
+      rules:
+        # Critical Alerts
+        - alert: DNSProviderDown
+          expr: dns_provider_health_score < 20
+          for: 3m
+          labels:
+            severity: critical
+          annotations:
+            summary: "DNS provider {{ $labels.provider }} is down"
+            description: "Health score is {{ $value }} (below 20) for more than 3 minutes."
+
+        - alert: DNSFailoverInitiated
+          expr: dns_failover_state{state="FAILING_OVER"} == 1
+          labels:
+            severity: critical
+          annotations:
+            summary: "DNS failover initiated for {{ $labels.domain }}"
+            description: "System is actively removing failed provider from NS records."
+
+        - alert: DNSSyncFailed
+          expr: rate(dns_sync_errors_total[5m]) > 0
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "DNS Sync failing"
+            description: "OctoDNS sync has been failing for 15 minutes."
+
+        # Warning Alerts
+        - alert: DNSProviderDegraded
+          expr: dns_provider_health_score < 70
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "DNS provider {{ $labels.provider }} is degraded"
+            description: "Health score is {{ $value }} (below 70)."
+
+        - alert: DNSHighQueryLatency
+          expr: histogram_quantile(0.95, rate(dns_query_duration_seconds_bucket[5m])) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High DNS query latency"
+            description: "95th percentile latency is above 500ms."

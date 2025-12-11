@@ -1,0 +1,28 @@
+---
+'':
+  - type: A
+    value: 1.2.3.4
+    ttl: 300
+  - type: MX
+    values:
+      - exchange: mail.example.com.
+        preference: 10
+    ttl: 3600
+  - type: TXT
+    value: v=spf1 include:_spf.google.com ~all
+    ttl: 3600
+
+www:
+  - type: A
+    value: 1.2.3.4
+    ttl: 300
+
+api:
+  - type: CNAME
+    value: api-lb.us-east-1.elb.amazonaws.com.
+    ttl: 300
+
+_health-check:
+  - type: TXT
+    value: canary-record-for-monitoring
+    ttl: 60

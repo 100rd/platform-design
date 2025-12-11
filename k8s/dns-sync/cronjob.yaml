@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dns-sync
+  namespace: dns-failover
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: dns-sync
+          volumes:
+            - name: config-volume
+              configMap:
+                name: octodns-config
+            - name: zones-volume
+              configMap:
+                name: dns-zones
+          containers:
+            - name: octodns
+              image: octodns/octodns:latest
+              command: ["octodns-sync", "--config-file=/config/octodns-config.yaml", "--doit"]
+              env:
+                - name: CLOUDFLARE_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: dns-provider-secrets
+                      key: cloudflare-token
+              volumeMounts:
+                - name: config-volume
+                  mountPath: /config
+                - name: zones-volume
+                  mountPath: /zones
+              resources:
+                requests:
+                  memory: "256Mi"
+                  cpu: "100m"
+                limits:
+                  memory: "512Mi"
+                  cpu: "500m"
+          restartPolicy: OnFailure

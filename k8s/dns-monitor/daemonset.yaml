@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: dns-monitor
+  namespace: dns-failover
+  labels:
+    app: dns-monitor
+spec:
+  selector:
+    matchLabels:
+      app: dns-monitor
+  template:
+    metadata:
+      labels:
+        app: dns-monitor
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: dns-monitor
+      containers:
+        - name: dns-monitor
+          image: dns-monitor:latest # In prod, this would be a real registry URL
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: dns-provider-secrets
+                  key: database-url
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          ports:
+            - containerPort: 8080
+              name: metrics
+      tolerations:
+        # Allow running on master nodes if needed for coverage
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule

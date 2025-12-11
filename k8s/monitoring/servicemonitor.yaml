@@ -1,0 +1,22 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: dns-failover-monitor
+  namespace: dns-failover
+  labels:
+    release: kube-prometheus-stack # Must match Prometheus label selector
+spec:
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - dns-monitor
+          - failover-controller
+  endpoints:
+    - port: metrics
+      interval: 15s
+      path: /metrics
+  namespaceSelector:
+    matchNames:
+      - dns-failover

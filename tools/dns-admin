@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+import argparse
+import requests
+import sys
+import json
+import os
+
+# Configuration
+CONTROLLER_URL = os.getenv("CONTROLLER_URL", "http://localhost:8081")
+
+def get_status(args):
+    try:
+        resp = requests.get(f"{CONTROLLER_URL}/status")
+        resp.raise_for_status()
+        print(json.dumps(resp.json(), indent=2))
+    except Exception as e:
+        print(f"Error getting status: {e}")
+        sys.exit(1)
+
+def trigger_failover(args):
+    print(f"Triggering failover for provider: {args.provider}")
+    if not args.force:
+        confirm = input("Are you sure? This will modify NS records. [y/N] ")
+        if confirm.lower() != 'y':
+            print("Aborted.")
+            return
+
+    try:
+        resp = requests.post(f"{CONTROLLER_URL}/failover/trigger", json={"provider": args.provider, "force": args.force})
+        resp.raise_for_status()
+        print("Failover triggered successfully.")
+    except Exception as e:
+        print(f"Error triggering failover: {e}")
+        sys.exit(1)
+
+def start_recovery(args):
+    print(f"Starting recovery for provider: {args.provider}")
+    try:
+        resp = requests.post(f"{CONTROLLER_URL}/recovery/start", json={"provider": args.provider})
+        resp.raise_for_status()
+        print("Recovery started successfully.")
+    except Exception as e:
+        print(f"Error starting recovery: {e}")
+        sys.exit(1)
+
+def main():
+    parser = argparse.ArgumentParser(description="DNS Failover Admin CLI")
+    subparsers = parser.add_subparsers(dest="command", help="Command to execute")
+
+    # Status Command
+    parser_status = subparsers.add_parser("status", help="Get system status")
+
+    # Failover Command
+    parser_failover = subparsers.add_parser("failover", help="Trigger manual failover")
+    parser_failover.add_argument("provider", help="Provider to failover (e.g., cloudflare)")
+    parser_failover.add_argument("--force", action="store_true", help="Skip confirmation and safety checks")
+
+    # Recovery Command
+    parser_recovery = subparsers.add_parser("recovery", help="Start manual recovery")
+    parser_recovery.add_argument("provider", help="Provider to recover")
+
+    args = parser.parse_args()
+
+    if args.command == "status":
+        get_status(args)
+    elif args.command == "failover":
+        trigger_failover(args)
+    elif args.command == "recovery":
+        start_recovery(args)
+    else:
+        parser.print_help()
+
+if __name__ == "__main__":
+    main()
