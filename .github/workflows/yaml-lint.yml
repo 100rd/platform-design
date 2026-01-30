@@ -9,9 +9,9 @@ jobs:
   yamllint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4  # Updated from v3
       - name: Install yamllint
         run: pip install yamllint
       - name: Lint Helm charts
         run: |
-          find . -name Chart.yaml -exec dirname {} ';' | xargs yamllint
+          find . -name Chart.yaml -not -path './.git/*' -exec dirname {} ';' | xargs yamllint

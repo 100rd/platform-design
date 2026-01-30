@@ -3,7 +3,7 @@ name: otel-collector
 description: OpenTelemetry Collector - Central telemetry pipeline for gaming platform
 type: application
 version: 1.0.0
-appVersion: "0.96.0"
+appVersion: "0.143.0"
 
 keywords:
   - opentelemetry
@@ -15,17 +15,18 @@ keywords:
 
 maintainers:
   - name: Platform Team
-    email: platform@gaming.com
+    email: platform@example.com
 
 dependencies:
+  # Updated: 2026-01-28 from 0.96.0 to 0.143.0
   - name: opentelemetry-collector
-    version: ~0.96.0
+    version: ~0.143.0
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
     alias: gateway
     condition: gateway.enabled
 
   - name: opentelemetry-collector
-    version: ~0.96.0
+    version: ~0.143.0
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
     alias: daemonset
     condition: daemonset.enabled

@@ -38,3 +38,15 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_ha_nat" {
+  description = "Enable HA NAT Gateway (one per AZ). Set to true for production environments."
+  type        = bool
+  default     = false
+}
+
+variable "environment" {
+  description = "Environment name (dev, staging, prod). Affects NAT Gateway configuration."
+  type        = string
+  default     = "dev"
+}

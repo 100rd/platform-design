@@ -4,7 +4,7 @@ resource "helm_release" "kube_prometheus_stack" {
   name       = "kube-prometheus-stack"
   repository = "https://prometheus-community.github.io/helm-charts"
   chart      = "kube-prometheus-stack"
-  version    = "56.0.0" # Pin version for stability
+  version    = "81.2.2" # Updated 2026-01-28 from 56.0.0
   namespace  = "monitoring"
   create_namespace = true
 
@@ -16,7 +16,8 @@ resource "helm_release" "kube_prometheus_stack" {
           storageSpec = {
             volumeClaimTemplate = {
               spec = {
-                accessModes = ["ReadWriteOnce"]
+                storageClassName = "gp3"
+                accessModes      = ["ReadWriteOnce"]
                 resources = {
                   requests = {
                     storage = "50Gi"
@@ -33,7 +34,12 @@ resource "helm_release" "kube_prometheus_stack" {
           enabled = true
           size    = "10Gi"
         }
-        adminPassword = "admin" # Should be changed/managed via secrets in prod
+        # Admin password managed via ExternalSecret - see apps/infra/observability/prometheus-stack/templates/external-secrets.yaml
+        admin = {
+          existingSecret = "grafana-admin-credentials"
+          userKey        = "admin-user"
+          passwordKey    = "admin-password"
+        }
       }
       alertmanager = {
         enabled = true
@@ -41,7 +47,8 @@ resource "helm_release" "kube_prometheus_stack" {
           storage = {
             volumeClaimTemplate = {
               spec = {
-                accessModes = ["ReadWriteOnce"]
+                storageClassName = "gp3"
+                accessModes      = ["ReadWriteOnce"]
                 resources = {
                   requests = {
                     storage = "10Gi"

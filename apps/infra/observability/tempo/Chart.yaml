@@ -6,14 +6,15 @@ version: 1.0.0
 appVersion: "2.3.1"
 
 dependencies:
+  # Updated: 2026-01-28 from 1.9.0 to 1.24.3
   - name: tempo-distributed
-    version: ~1.9.0
+    version: ~1.24.0
     repository: https://grafana.github.io/helm-charts
     condition: tempo-distributed.enabled
 
 maintainers:
   - name: Platform Team
-    email: platform@company.com
+    email: platform@example.com
 
 keywords:
   - tracing

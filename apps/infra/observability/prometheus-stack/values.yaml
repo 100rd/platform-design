@@ -165,9 +165,10 @@ kube-prometheus-stack:
       priorityClassName: system-cluster-critical
 
       # External Labels (for Thanos multi-cluster)
+      # Set cluster and region via ArgoCD ApplicationSet or --set
       externalLabels:
-        cluster: eks-us-east-1  # Replace with actual cluster name
-        region: us-east-1
+        cluster: '{{ .Values.global.clusterName | default "eks-cluster" }}'
+        region: '{{ .Values.global.region | default "us-east-1" }}'
         replica: $(POD_NAME)  # Unique per replica
 
       # Thanos Sidecar Configuration
@@ -238,7 +239,11 @@ kube-prometheus-stack:
     replicas: 1  # Stateless, can scale horizontally if needed
 
     # Admin credentials (use External Secrets in production)
-    adminPassword: changeme  # TODO: Replace with ExternalSecret
+    # Admin password injected via ExternalSecret (see external-secrets/grafana-secrets.yaml)
+    admin:
+      existingSecret: grafana-admin-credentials
+      userKey: admin-user
+      passwordKey: admin-password
 
     # Persistence disabled - dashboards as code via ConfigMaps
     persistence:
@@ -532,7 +537,8 @@ kube-prometheus-stack:
         global:
           resolve_timeout: 5m
           # Slack webhook (use External Secret)
-          slack_api_url: 'https://hooks.slack.com/services/XXX/YYY/ZZZ'  # TODO: Replace with ExternalSecret
+          # Slack webhook URL injected via ExternalSecret
+          slack_api_url_file: '/etc/alertmanager/secrets/alertmanager-slack-secret/slack-webhook-url'
           # PagerDuty integration key
           pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
 
@@ -638,7 +644,8 @@ kube-prometheus-stack:
 
         - name: 'pagerduty-critical'
           pagerduty_configs:
-          - service_key: 'YOUR_PAGERDUTY_SERVICE_KEY'  # TODO: Replace with ExternalSecret
+          # PagerDuty service key injected via ExternalSecret
+          - service_key_file: '/etc/alertmanager/secrets/alertmanager-pagerduty-secret/service-key'
             description: '{{ .GroupLabels.alertname }}: {{ .GroupLabels.namespace }}'
             severity: '{{ .CommonLabels.severity }}'
             client: 'Prometheus ({{ .GroupLabels.cluster }})'

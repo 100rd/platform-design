@@ -3,11 +3,11 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = ">= 5.0"
+      version = "~> 5.70"  # Updated 2026-01-28, pinned to 5.x for stability
     }
     hcloud = {
       source  = "hetznercloud/hcloud"
-      version = ">= 1.39.0"
+      version = "~> 1.49"  # Updated 2026-01-28 from >= 1.39.0
     }
   }
 }

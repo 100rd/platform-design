@@ -1,0 +1,72 @@
+---
+# ConstraintTemplate: Block privileged containers
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sblockprivileged
+  annotations:
+    description: Blocks pods from running privileged containers
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sBlockPrivileged
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedImages:
+              type: array
+              items:
+                type: string
+              description: "Images allowed to run as privileged (regex patterns)"
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sblockprivileged
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          container.securityContext.privileged == true
+          not is_allowed_image(container.image)
+          msg := sprintf("Privileged container %v is not allowed. Image: %v", [container.name, container.image])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.initContainers[_]
+          container.securityContext.privileged == true
+          not is_allowed_image(container.image)
+          msg := sprintf("Privileged init container %v is not allowed. Image: %v", [container.name, container.image])
+        }
+
+        is_allowed_image(image) {
+          allowed := input.parameters.allowedImages[_]
+          regex.match(allowed, image)
+        }
+
+        # If no allowedImages defined, nothing is allowed
+        is_allowed_image(_) = false {
+          not input.parameters.allowedImages
+        }
+---
+# Constraint: Block privileged containers
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sBlockPrivileged
+metadata:
+  name: block-privileged-containers
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    excludedNamespaces:
+      - kube-system
+      - kube-public
+      - gatekeeper-system
+  parameters:
+    # Allow specific system images that require privileged mode
+    allowedImages:
+      - "^gcr.io/google-containers/.*"
+      - "^registry.k8s.io/.*"
+      - "^602401143452.dkr.ecr.*.amazonaws.com/amazon-k8s-cni.*"

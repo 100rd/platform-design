@@ -1,0 +1,106 @@
+# AWS Load Balancer Controller Configuration
+# https://kubernetes-sigs.github.io/aws-load-balancer-controller/
+
+aws-load-balancer-controller:
+  enabled: true
+
+  # Cluster name - REQUIRED: Set this to your EKS cluster name
+  clusterName: ""  # Set via ArgoCD ApplicationSet or --set
+
+  # Service account configuration
+  # Uses EKS Pod Identity (recommended for EKS 1.24+)
+  serviceAccount:
+    create: true
+    name: aws-load-balancer-controller
+    annotations: {}
+      # If using IRSA instead of Pod Identity:
+      # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/AmazonEKSLoadBalancerControllerRole
+
+  # Replica count for HA
+  replicaCount: 2
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  # Pod anti-affinity for HA
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                    - aws-load-balancer-controller
+            topologyKey: kubernetes.io/hostname
+
+  # Tolerations for system nodes
+  tolerations:
+    - key: CriticalAddonsOnly
+      operator: Exists
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+
+  # Priority class
+  priorityClassName: system-cluster-critical
+
+  # Pod disruption budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    fsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  # Default Ingress class
+  ingressClass: alb
+  createIngressClassResource: true
+  ingressClassParams:
+    create: true
+    name: alb
+
+  # Enable WAF integration
+  enableWaf: true
+  enableWafv2: true
+  enableShield: true
+
+  # Controller configuration
+  defaultSSLPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+
+  # Webhook configuration
+  webhookTLS:
+    caCert: ""
+    cert: ""
+    key: ""
+
+  # Service monitor for Prometheus
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
+    interval: 30s
+    additionalLabels:
+      prometheus: kube-prometheus
+
+  # Log level
+  logLevel: info

@@ -9,8 +9,13 @@ module "vpc" {
   public_subnets  = local.public_subnets
   private_subnets = local.private_subnets
 
-  enable_nat_gateway   = true
-  single_nat_gateway   = true
+  # NAT Gateway Configuration
+  # Production: one NAT Gateway per AZ for HA (eliminates SPOF)
+  # Dev/Staging: single NAT Gateway to reduce costs
+  enable_nat_gateway     = true
+  single_nat_gateway     = var.enable_ha_nat ? false : true
+  one_nat_gateway_per_az = var.enable_ha_nat
+
   enable_dns_hostnames = true
   enable_dns_support   = true
 

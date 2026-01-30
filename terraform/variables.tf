@@ -14,6 +14,11 @@ variable "vpc_cidr" {
   description = "CIDR block for VPC"
   type        = string
   default     = "10.0.0.0/16"
+
+  validation {
+    condition     = can(cidrhost(var.vpc_cidr, 0))
+    error_message = "vpc_cidr must be a valid CIDR block."
+  }
 }
 
 variable "cluster_name" {
@@ -23,15 +28,35 @@ variable "cluster_name" {
 }
 
 variable "cluster_version" {
-  description = "Kubernetes version"
+  description = "Kubernetes version for EKS cluster"
   type        = string
-  default     = "1.33"
+  default     = "1.32"  # Updated 2026-01-28 from invalid 1.33
+
+  validation {
+    condition     = can(regex("^1\\.(2[89]|3[0-2])$", var.cluster_version))
+    error_message = "cluster_version must be a supported EKS version (1.28-1.32)."
+  }
 }
 
 variable "tags" {
-  description = "Tags to apply"
+  description = "Tags to apply to all resources for cost allocation and organization"
   type        = map(string)
-  default     = {}
+  default = {
+    ManagedBy   = "terraform"
+    Project     = "platform-design"
+    Environment = "dev"
+  }
+}
+
+variable "environment" {
+  description = "Environment name (dev, staging, prod)"
+  type        = string
+  default     = "dev"
+
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be one of: dev, staging, prod."
+  }
 }
 
 variable "enable_hetzner_nodes" {
