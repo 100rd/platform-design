@@ -61,3 +61,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "environment" {
+  description = "Environment name (dev, staging, prod). Controls snapshot behavior."
+  type        = string
+  default     = "dev"
+}

@@ -1,0 +1,144 @@
+# cert-manager Configuration
+# https://cert-manager.io/docs/
+
+cert-manager:
+  enabled: true
+
+  # Install CRDs
+  installCRDs: true
+
+  # Replica count for HA
+  replicaCount: 2
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  # Webhook configuration
+  webhook:
+    replicaCount: 2
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+    # Security context
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      fsGroup: 65534
+      seccompProfile:
+        type: RuntimeDefault
+
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+
+  # CA Injector for webhook CA management
+  cainjector:
+    enabled: true
+    replicaCount: 2
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    fsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  # Pod anti-affinity for HA
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                    - cert-manager
+            topologyKey: kubernetes.io/hostname
+
+  # Tolerations
+  tolerations:
+    - key: CriticalAddonsOnly
+      operator: Exists
+
+  # Priority class
+  priorityClassName: system-cluster-critical
+
+  # Pod disruption budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  # Prometheus metrics
+  prometheus:
+    enabled: true
+    servicemonitor:
+      enabled: true
+      namespace: monitoring
+      interval: 30s
+      labels:
+        prometheus: kube-prometheus
+
+  # Log level
+  logLevel: 2
+
+  # Enable experimental features
+  featureGates: ""
+
+  # DNS01 solver for Route53 (AWS)
+  # Requires IRSA or Pod Identity with Route53 permissions
+  # See ClusterIssuer templates below
+
+# ClusterIssuer configuration
+clusterIssuers:
+  enabled: true
+  email: ""  # REQUIRED: Set to your email for Let's Encrypt
+
+  # DNS01 challenge (for wildcard certs) - requires Route53 permissions
+  dns01:
+    enabled: true
+    route53:
+      region: us-east-1
+      hostedZoneID: ""  # Optional: restrict to specific hosted zone
+      role: ""  # Optional: IAM role ARN for cross-account access
+    dnsZones:
+      - example.com  # Replace with your domain(s)
+
+  # HTTP01 challenge (for non-wildcard certs)
+  http01:
+    enabled: true
+    ingressClass: alb
+
+  # Self-signed issuer for internal services
+  selfSigned:
+    enabled: true

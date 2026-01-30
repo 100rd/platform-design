@@ -21,8 +21,9 @@ maintainers:
 dependencies:
   # kube-prometheus-stack - Community operator for Prometheus, Grafana, Alertmanager
   # Includes CRDs for ServiceMonitor, PrometheusRule, etc.
+  # Updated: 2026-01-28 from 65.3.0 to 81.2.2
   - name: kube-prometheus-stack
-    version: "~65.3.0"
+    version: "~81.2.0"
     repository: https://prometheus-community.github.io/helm-charts
     condition: kube-prometheus-stack.enabled
 

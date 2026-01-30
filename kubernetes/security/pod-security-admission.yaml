@@ -1,0 +1,95 @@
+---
+# Pod Security Admission (PSA) Labels
+# Apply to namespaces to enforce Pod Security Standards
+# https://kubernetes.io/docs/concepts/security/pod-security-admission/
+#
+# Levels:
+#   privileged - Unrestricted (system components only)
+#   baseline   - Minimally restrictive (prevents known privilege escalation)
+#   restricted - Heavily restricted (security best practice)
+#
+# Modes:
+#   enforce - Reject non-compliant pods
+#   audit   - Log violations (allows creation)
+#   warn    - Show warnings to user (allows creation)
+#
+# Usage:
+#   kubectl apply -f pod-security-admission.yaml
+#   Or apply per-namespace: kubectl label ns <name> pod-security.kubernetes.io/enforce=restricted
+
+# Application namespaces - restricted
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: default
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+# Monitoring namespace - baseline (some components need host access)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+# Observability namespace - baseline
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+# Velero namespace - baseline (needs host access for backups)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: velero
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: restricted
+---
+# cert-manager namespace - restricted
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+# External Secrets namespace - restricted
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-secrets
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+# Gatekeeper namespace - baseline (webhook needs capabilities)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gatekeeper-system
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

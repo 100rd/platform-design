@@ -1,0 +1,120 @@
+# OPA Gatekeeper Configuration
+# https://open-policy-agent.github.io/gatekeeper/website/docs/
+
+gatekeeper:
+  # HA Configuration - 3 replicas for production
+  replicas: 3
+
+  # Audit configuration
+  auditInterval: 60
+  auditMatchKindOnly: false
+  auditFromCache: false
+  auditChunkSize: 500
+
+  # Constraint violation limit per constraint
+  constraintViolationsLimit: 20
+
+  # Mutation support (enabled for PSS enforcement)
+  enableMutation: true
+  mutationAnnotations: true
+
+  # External data support
+  enableExternalData: false
+
+  # Resource limits
+  controllerManager:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+    # Anti-affinity for HA
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - gatekeeper
+              topologyKey: kubernetes.io/hostname
+
+    # Tolerate system node taints
+    tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+
+    # Priority class
+    priorityClassName: system-cluster-critical
+
+    # Security context
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      fsGroup: 1000
+      seccompProfile:
+        type: RuntimeDefault
+
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+
+  audit:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    # Security context
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      fsGroup: 1000
+      seccompProfile:
+        type: RuntimeDefault
+
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+
+  # Pod Disruption Budget
+  pdb:
+    controllerManager:
+      minAvailable: 1
+
+  # Metrics for Prometheus
+  metricsBackends:
+    - prometheus
+
+  # Exempt namespaces from policy enforcement
+  exemptNamespaces:
+    - kube-system
+    - kube-public
+    - kube-node-lease
+    - gatekeeper-system
+    - cert-manager
+    - external-secrets
+
+  # Log level
+  logLevel: INFO
+
+  # Enable constraint template expansion for debugging
+  logDenies: true

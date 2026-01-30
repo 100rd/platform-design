@@ -1,0 +1,16 @@
+apiVersion: v2
+name: gatekeeper
+description: OPA Gatekeeper for Kubernetes policy enforcement
+version: 3.18.2
+appVersion: "v3.18.2"
+type: application
+
+dependencies:
+  # Updated 2026-01-28, pinned at 3.18.2 (latest stable in 3.18.x line)
+  - name: gatekeeper
+    version: "3.18.2"
+    repository: https://open-policy-agent.github.io/gatekeeper/charts
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com

@@ -1,0 +1,175 @@
+# Velero Backup Configuration for EKS
+# https://velero.io/docs/
+
+velero:
+  enabled: true
+
+  # Velero configuration
+  configuration:
+    # Primary AWS S3 backup location
+    backupStorageLocation:
+      - name: aws-primary
+        provider: aws
+        bucket: ""  # REQUIRED: Set to your S3 bucket name
+        prefix: velero
+        default: true
+        config:
+          region: us-east-1  # Set to your region
+          s3ForcePathStyle: false
+
+      # Cross-region backup for disaster recovery
+      # Enable by setting the bucket name to your DR region bucket
+      - name: aws-dr
+        provider: aws
+        bucket: ""  # REQUIRED for DR: Set to DR region S3 bucket
+        prefix: velero-dr
+        config:
+          region: us-west-2  # DR region
+          s3ForcePathStyle: false
+
+    # Volume snapshots (EBS)
+    volumeSnapshotLocation:
+      - name: aws-primary
+        provider: aws
+        config:
+          region: us-east-1  # Set to your region
+
+      # Cross-region volume snapshots
+      - name: aws-dr
+        provider: aws
+        config:
+          region: us-west-2  # DR region
+
+    # Features
+    features: EnableCSI
+
+    # Default backup TTL
+    defaultBackupTTL: 720h  # 30 days
+
+    # Log level
+    logLevel: info
+    logFormat: json
+
+  # Credentials - use Pod Identity or IRSA
+  credentials:
+    useSecret: false
+    # If using IRSA:
+    # secretContents:
+    #   cloud: |
+    #     [default]
+    #     aws_access_key_id=<REDACTED>
+    #     aws_secret_access_key=<REDACTED>
+
+  # Service account
+  serviceAccount:
+    server:
+      create: true
+      name: velero
+      annotations: {}
+        # If using IRSA:
+        # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/VeleroRole
+
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Init containers for AWS plugin
+  initContainers:
+    - name: velero-plugin-for-aws
+      image: velero/velero-plugin-for-aws:v1.11.0
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - mountPath: /target
+          name: plugins
+
+    - name: velero-plugin-for-csi
+      image: velero/velero-plugin-for-csi:v0.8.0
+      imagePullPolicy: IfNotPresent
+      volumeMounts:
+        - mountPath: /target
+          name: plugins
+
+  # Deploy node agent (for file system backups)
+  deployNodeAgent: true
+
+  nodeAgent:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    # Tolerate all nodes for backup coverage
+    tolerations:
+      - operator: Exists
+
+  # Priority class
+  priorityClassName: system-cluster-critical
+
+  # Prometheus metrics
+  metrics:
+    enabled: true
+    scrapeInterval: 30s
+    serviceMonitor:
+      enabled: true
+      namespace: monitoring
+      additionalLabels:
+        prometheus: kube-prometheus
+
+  # Backup schedules
+  schedules:
+    # Daily backup of all namespaces (except system)
+    daily-full:
+      disabled: false
+      schedule: "0 2 * * *"  # 2 AM daily
+      useOwnerReferencesInBackup: false
+      template:
+        includedNamespaces:
+          - "*"
+        excludedNamespaces:
+          - kube-system
+          - kube-public
+          - kube-node-lease
+          - velero
+        includeClusterResources: true
+        snapshotVolumes: true
+        ttl: 720h  # 30 days
+
+    # Weekly backup with longer retention
+    weekly-full:
+      disabled: false
+      schedule: "0 3 * * 0"  # 3 AM Sunday
+      useOwnerReferencesInBackup: false
+      template:
+        includedNamespaces:
+          - "*"
+        excludedNamespaces:
+          - kube-system
+          - kube-public
+          - kube-node-lease
+          - velero
+        includeClusterResources: true
+        snapshotVolumes: true
+        ttl: 2160h  # 90 days
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    fsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL

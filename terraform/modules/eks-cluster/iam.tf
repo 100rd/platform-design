@@ -16,7 +16,37 @@ module "vpc_cni_irsa" {
   tags = var.tags
 }
 
-# DNS Sync Role - Needs Route53 Full Access for Syncing
+# Least-privilege Route53 policy for DNS sync (replaces AmazonRoute53FullAccess)
+resource "aws_iam_policy" "dns_sync_policy" {
+  name        = "${var.cluster_name}-dns-sync-policy"
+  description = "Least-privilege Route53 access for DNS sync controller"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "route53:ChangeResourceRecordSets",
+          "route53:ListResourceRecordSets"
+        ]
+        Resource = "arn:aws:route53:::hostedzone/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "route53:ListHostedZones",
+          "route53:ListHostedZonesByName",
+          "route53:GetChange"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# DNS Sync Role - Restricted Route53 permissions
+# Updated 2026-01-28: Replaced AmazonRoute53FullAccess with least-privilege custom policy
 module "dns_sync_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   version = "~> 5.0"
@@ -24,7 +54,7 @@ module "dns_sync_irsa" {
   role_name_prefix = "dns-sync-irsa"
 
   role_policy_arns = {
-    route53 = "arn:aws:iam::aws:policy/AmazonRoute53FullAccess"
+    route53 = aws_iam_policy.dns_sync_policy.arn
   }
 
   oidc_providers = {
@@ -51,7 +81,8 @@ resource "aws_iam_policy" "failover_controller_policy" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret"
         ]
-        Resource = ["arn:aws:secretsmanager:*:*:secret:/dns-failover/*"]
+        # Scoped to specific region - update the region to match your deployment
+        Resource = ["arn:aws:secretsmanager:us-east-1:*:secret:/dns-failover/*"]
       },
       {
         Effect = "Allow"

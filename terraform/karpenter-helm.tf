@@ -157,7 +157,7 @@ variable "cluster_name" {
 variable "karpenter_version" {
   description = "Karpenter Helm chart version"
   type        = string
-  default     = "1.1.1"
+  default     = "1.8.1"  # Updated 2026-01-28 from 1.1.1
 }
 
 variable "karpenter_controller_role_arn" {

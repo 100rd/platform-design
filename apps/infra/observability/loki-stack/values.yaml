@@ -1,7 +1,7 @@
 global:
-  # Global cluster information
-  clusterName: gaming-production-eks
-  environment: production
+  # Global cluster information - set these per-environment via ArgoCD ApplicationSet
+  clusterName: ""  # Set via ArgoCD --set or values override
+  environment: ""  # Set via ArgoCD --set or values override
 
   # Multi-architecture support
   image:
@@ -59,6 +59,8 @@ loki:
       per_stream_rate_limit_burst: 20MB
 
     # Storage configuration - S3 backend
+    # Uses IRSA (IAM Roles for Service Accounts) for authentication.
+    # No static credentials needed - the Loki service account assumes an IAM role.
     storage:
       type: s3
       bucketNames:
@@ -68,8 +70,6 @@ loki:
       s3:
         region: us-east-1
         endpoint: s3.us-east-1.amazonaws.com
-        secretAccessKey: ${S3_SECRET_KEY}  # Injected from secret
-        accessKeyId: ${S3_ACCESS_KEY}      # Injected from secret
         s3ForcePathStyle: false
         insecure: false
         http_config:
@@ -536,10 +536,10 @@ fluent-bit:
           rule "cont" "/^\s+File/" "cont"
           rule "cont" "/^\s{2,}/" "cont"
 
-  # Environment variables
+  # Environment variables - set cluster name per-environment
   env:
     - name: CLUSTER_NAME
-      value: gaming-production-eks
+      value: '{{ .Values.global.clusterName | default "eks-cluster" }}'
 
   # Liveness probe
   livenessProbe:

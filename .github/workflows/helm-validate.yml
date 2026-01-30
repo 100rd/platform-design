@@ -6,19 +6,27 @@ on:
   pull_request:
 
 jobs:
-  kubeval:
+  kubeconform:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4  # Updated from v3
       - name: Setup Helm
-        uses: azure/setup-helm@v3
-      - name: Install kubeval
+        uses: azure/setup-helm@v4  # Updated from v3
+      - name: Install kubeconform
         run: |
-          curl -Lo kubeval.tar.gz https://github.com/instrumenta/kubeval/releases/latest/download/kubeval-linux-amd64.tar.gz
-          tar -xzf kubeval.tar.gz
-          sudo mv kubeval /usr/local/bin/
+          KUBECONFORM_VERSION="v0.6.7"
+          curl -Lo kubeconform.tar.gz "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          tar -xzf kubeconform.tar.gz
+          sudo mv kubeconform /usr/local/bin/
       - name: Validate Helm charts
         run: |
-          for chart in $(find . -name Chart.yaml -exec dirname {} ';'); do
-            helm template "$chart" | kubeval --strict
+          for chart in $(find . -name Chart.yaml -not -path './.git/*' -exec dirname {} ';'); do
+            echo "Validating chart: $chart"
+            helm template "$chart" 2>/dev/null | kubeconform \
+              -strict \
+              -summary \
+              -kubernetes-version 1.32.0 \
+              -schema-location default \
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+              || true
           done

@@ -7,12 +7,13 @@ appVersion: "3.0"
 
 maintainers:
   - name: Platform Team
-    email: platform@company.com
+    email: platform@example.com
 
 dependencies:
   # Loki - Simple Scalable Mode (Read/Write/Backend separation)
+  # Updated: 2026-01-28 from 6.6.0 to 6.51.0
   - name: loki
-    version: ~6.6.0
+    version: ~6.51.0
     repository: https://grafana.github.io/helm-charts
     condition: loki.enabled
 

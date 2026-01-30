@@ -1,0 +1,62 @@
+---
+# ConstraintTemplate: Require pods to have security context
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiresecuritycontext
+  annotations:
+    description: Requires pods to define a security context with runAsNonRoot
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireSecurityContext
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedCapabilities:
+              type: array
+              items:
+                type: string
+              description: "List of allowed Linux capabilities"
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiresecuritycontext
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.securityContext.runAsNonRoot
+          msg := sprintf("Container %v must set securityContext.runAsNonRoot to true", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          container.securityContext.allowPrivilegeEscalation == true
+          msg := sprintf("Container %v must not allow privilege escalation", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          container.securityContext.privileged == true
+          msg := sprintf("Container %v must not run as privileged", [container.name])
+        }
+---
+# Constraint: Apply to all namespaces except system ones
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequireSecurityContext
+metadata:
+  name: require-security-context
+spec:
+  enforcementAction: warn  # Start with warn, change to deny in production
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    excludedNamespaces:
+      - kube-system
+      - kube-public
+      - gatekeeper-system
+      - monitoring
+      - external-secrets

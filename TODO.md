@@ -25,10 +25,43 @@
 | Component | Status | Priority |
 |-----------|--------|----------|
 | ArgoCD ApplicationSet | ✅ WORKING | - |
-| External Secrets Operator | ✅ WORKING | - |
+| External Secrets Operator | ✅ **UPDATED** v0.14.1 | - |
 | Generic App Helm Chart | ✅ WORKING | - |
 | Network Policies | ✅ WORKING | - |
 | Example Services (Go) | ✅ WORKING | - |
+| OPA Gatekeeper | ✅ **NEW** v3.18.2 | - |
+
+### Security Components (NEW - 2026-01-28)
+
+| Component | Status | Priority |
+|-----------|--------|----------|
+| OPA Gatekeeper | ✅ **ADDED** v3.18.2 | CRITICAL |
+| Hardcoded Secrets Removed | ✅ **FIXED** | CRITICAL |
+| External Secrets Templates | ✅ **ADDED** | HIGH |
+| Security Constraints | ✅ **ADDED** (4 policies) | HIGH |
+
+### Observability Version Updates (2026-01-28)
+
+| Component | Previous | Updated | Gap Fixed |
+|-----------|----------|---------|-----------|
+| kube-prometheus-stack | 65.3.0 | **81.2.0** | 16 major |
+| loki | 6.6.0 | **6.51.0** | 45 versions |
+| tempo-distributed | 1.9.0 | **1.24.0** | 15 versions |
+| opentelemetry-collector | 0.96.0 | **0.143.0** | 47 versions |
+| pyroscope | 1.7.0 | **1.18.0** | 11 versions |
+| Karpenter (Helm) | 1.1.1 | **1.8.1** | 7 versions |
+| External Secrets | ^0 (0.18) | **0.14.1** | 85+ versions |
+| GitHub Actions (checkout) | v3 | **v4** | 1 major |
+| GitHub Actions (trivy) | 0.12.0 | **0.28.0** | 16 versions |
+
+### Architecture Improvements (2026-01-28)
+
+| Component | Status | Description |
+|-----------|--------|-------------|
+| HA NAT Gateway | ✅ **ADDED** | `enable_ha_nat` variable in VPC module |
+| AWS LB Controller | ✅ **ADDED** | ALB/NLB management v1.10.0 |
+| Velero Backups | ✅ **ADDED** | Daily/weekly backup schedules v8.2.0 |
+| cert-manager | ✅ **ADDED** | TLS automation v1.17.0 |
 
 ### Documentation
 

@@ -1,10 +1,14 @@
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.0"
+  version = "~> 21.15"  # Updated 2026-01-28 from ~> 20.0
 
   cluster_name    = var.cluster_name
   cluster_version = var.cluster_version
 
+  # Authentication mode for EKS v21+
+  authentication_mode = "API_AND_CONFIG_MAP"
+
+  # WARNING: Disable public access for production clusters. Use VPN/bastion instead.
   cluster_endpoint_public_access = true
 
   vpc_id     = var.vpc_id
