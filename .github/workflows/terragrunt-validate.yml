@@ -1,0 +1,62 @@
+name: Terragrunt Validate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "terragrunt/**"
+      - "catalog/**"
+  pull_request:
+    paths:
+      - "terragrunt/**"
+      - "catalog/**"
+
+jobs:
+  hclfmt:
+    name: HCL Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Terragrunt
+        run: |
+          TERRAGRUNT_VERSION="0.68.12"
+          curl -Lo terragrunt "https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_amd64"
+          chmod +x terragrunt
+          sudo mv terragrunt /usr/local/bin/
+      - name: Check HCL formatting
+        run: |
+          UNFORMATTED=$(terragrunt hclfmt --check --diff 2>&1) || true
+          if [ -n "$UNFORMATTED" ]; then
+            echo "::error::The following HCL files are not formatted:"
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+  validate-catalog:
+    name: Validate Catalog Units
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate HCL syntax
+        run: |
+          ERRORS=0
+          for f in $(find catalog/ terragrunt/ -name '*.hcl' -not -path '*/.terragrunt-cache/*'); do
+            if ! python3 -c "
+import sys, re
+with open('$f') as fh:
+    content = fh.read()
+# Basic HCL syntax: balanced braces
+opens = content.count('{')
+closes = content.count('}')
+if opens != closes:
+    print(f'Unbalanced braces in $f: {opens} open, {closes} close')
+    sys.exit(1)
+" 2>/dev/null; then
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+          if [ $ERRORS -gt 0 ]; then
+            echo "::error::Found $ERRORS HCL files with syntax issues"
+            exit 1
+          fi
+          echo "All HCL files passed basic syntax validation"

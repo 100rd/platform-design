@@ -1,0 +1,41 @@
+name: Go CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dns-monitor/**"
+      - "failover-controller/**"
+      - "services/hello-world/**"
+  pull_request:
+    paths:
+      - "dns-monitor/**"
+      - "failover-controller/**"
+      - "services/hello-world/**"
+
+jobs:
+  go-lint-test:
+    name: Lint & Test (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - dns-monitor
+          - failover-controller
+          - services/hello-world
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.project }}/go.mod
+          cache-dependency-path: ${{ matrix.project }}/go.sum
+      - name: Go vet
+        working-directory: ${{ matrix.project }}
+        run: go vet ./...
+      - name: Go build
+        working-directory: ${{ matrix.project }}
+        run: go build ./...
+      - name: Go test
+        working-directory: ${{ matrix.project }}
+        run: go test -race -count=1 ./...

@@ -1,0 +1,76 @@
+name: Kubernetes Manifest Validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "k8s/**"
+      - "kubernetes/**"
+      - "network-policies/**"
+      - "argocd/**"
+  pull_request:
+    paths:
+      - "k8s/**"
+      - "kubernetes/**"
+      - "network-policies/**"
+      - "argocd/**"
+
+jobs:
+  kubeconform:
+    name: Validate K8s Manifests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dir: k8s
+            label: Core manifests
+          - dir: kubernetes
+            label: Kubernetes configs
+          - dir: network-policies
+            label: Network policies
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kubeconform
+        run: |
+          KUBECONFORM_VERSION="v0.6.7"
+          curl -Lo kubeconform.tar.gz "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          tar -xzf kubeconform.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+      - name: Validate ${{ matrix.label }}
+        run: |
+          if [ -d "${{ matrix.dir }}" ]; then
+            find "${{ matrix.dir }}" -name '*.yaml' -o -name '*.yml' | \
+              xargs kubeconform \
+                -strict \
+                -summary \
+                -kubernetes-version 1.32.0 \
+                -schema-location default \
+                -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+                -ignore-missing-schemas
+          else
+            echo "Directory ${{ matrix.dir }} not found, skipping"
+          fi
+
+  argocd-validate:
+    name: Validate ArgoCD configs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kubeconform
+        run: |
+          KUBECONFORM_VERSION="v0.6.7"
+          curl -Lo kubeconform.tar.gz "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          tar -xzf kubeconform.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+      - name: Validate ArgoCD manifests
+        run: |
+          if [ -d "argocd" ]; then
+            find argocd -name '*.yaml' -o -name '*.yml' | \
+              xargs kubeconform \
+                -summary \
+                -kubernetes-version 1.32.0 \
+                -schema-location default \
+                -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+                -ignore-missing-schemas
+          fi

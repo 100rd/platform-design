@@ -1,5 +1,10 @@
-external_checks_dir:
-  - checkov-policies
 framework:
   - terraform
+directory:
+  - terraform/modules
+external-checks-dir:
+  - checkov-policies
 download-external-modules: true
+soft-fail-on:
+  - CKV_TF_1  # Module source not pinned (we use local modules)
+  - CKV_TF_2  # Module source not pinned to hash

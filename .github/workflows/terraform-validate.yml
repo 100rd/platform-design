@@ -1,0 +1,59 @@
+name: Terraform Validate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+  pull_request:
+    paths:
+      - "terraform/**"
+
+jobs:
+  fmt-check:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.11.0"
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive -diff terraform/
+
+  validate:
+    name: Validate Modules
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - eks
+          - hpa-defaults
+          - karpenter
+          - karpenter-nodepools
+          - keda
+          - monitoring
+          - organization
+          - ram-share
+          - rds
+          - route53-resolver
+          - scps
+          - secrets
+          - sso
+          - transit-gateway
+          - tgw-attachment
+          - vpc
+          - vpn-connection
+          - wpa
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.11.0"
+      - name: Terraform init
+        working-directory: terraform/modules/${{ matrix.module }}
+        run: terraform init -backend=false
+      - name: Terraform validate
+        working-directory: terraform/modules/${{ matrix.module }}
+        run: terraform validate
