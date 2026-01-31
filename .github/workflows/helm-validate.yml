@@ -20,13 +20,20 @@ jobs:
           sudo mv kubeconform /usr/local/bin/
       - name: Validate Helm charts
         run: |
+          FAILED=0
           for chart in $(find . -name Chart.yaml -not -path './.git/*' -exec dirname {} ';'); do
             echo "Validating chart: $chart"
-            helm template "$chart" 2>/dev/null | kubeconform \
+            if ! helm template "$chart" 2>/dev/null | kubeconform \
               -strict \
               -summary \
               -kubernetes-version 1.32.0 \
               -schema-location default \
-              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
-              || true
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'; then
+              echo "FAILED: $chart"
+              FAILED=1
+            fi
           done
+          if [ "$FAILED" -eq 1 ]; then
+            echo "::error::One or more Helm chart validations failed"
+            exit 1
+          fi

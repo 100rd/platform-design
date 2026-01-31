@@ -32,6 +32,9 @@ jobs:
         with:
           go-version-file: ${{ matrix.project }}/go.mod
           cache-dependency-path: ${{ matrix.project }}/go.sum
+      - name: Go mod download
+        working-directory: ${{ matrix.project }}
+        run: go mod tidy && go mod download
       - name: Go vet
         working-directory: ${{ matrix.project }}
         run: go vet ./...

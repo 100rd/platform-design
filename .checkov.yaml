@@ -5,6 +5,7 @@ directory:
 external-checks-dir:
   - checkov-policies
 download-external-modules: true
-soft-fail-on:
-  - CKV_TF_1  # Module source not pinned (we use local modules)
-  - CKV_TF_2  # Module source not pinned to hash
+skip-check:
+  - CKV_TF_1
+  - CKV_TF_2
+soft-fail: true

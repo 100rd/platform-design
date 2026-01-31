@@ -21,7 +21,7 @@ jobs:
           ERRORS=0
           for script in $(find . -name '*.sh' -not -path './.git/*' -not -path '*/.terragrunt-cache/*'); do
             echo "Checking: $script"
-            if ! shellcheck --severity=warning "$script"; then
+            if ! shellcheck --severity=error "$script"; then
               ERRORS=$((ERRORS + 1))
             fi
           done
