@@ -16,9 +16,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  go-lint-test:
-    name: Lint & Test (${{ matrix.project }})
+  go-build-test:
+    name: Build & Test (${{ matrix.project }})
     runs-on: ubuntu-latest
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -37,8 +38,6 @@ jobs:
       - name: Go build
         working-directory: ${{ matrix.project }}
         run: go build ./...
-        continue-on-error: true
       - name: Go test
         working-directory: ${{ matrix.project }}
         run: go test -race -count=1 -timeout 60s ./...
-        continue-on-error: true
