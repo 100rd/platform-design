@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: listeners-integration
+  namespace: argocd
+  annotations:
+    kargo.akuity.io/authorized-stage: listeners:integration
+  labels:
+    app.kubernetes.io/part-of: platform-workloads
+    app.kubernetes.io/component: listeners
+    env: integration
+spec:
+  project: platform-workloads
+  sources:
+    - repoURL: git@github.com:IgorGerasimow/platform-design.git
+      targetRevision: HEAD
+      path: apps/listeners
+      helm:
+        ignoreMissingValueFiles: true
+        valueFiles:
+          - $values/envs/integration/values/listeners/values.yaml
+        values: |
+          environment: "integration"
+    - repoURL: git@github.com:IgorGerasimow/platform-design.git
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: integration-listeners
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

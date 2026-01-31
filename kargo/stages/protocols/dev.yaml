@@ -1,0 +1,42 @@
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: dev
+  namespace: protocols
+spec:
+  requestedFreight:
+    - origin:
+        kind: Warehouse
+        name: protocols
+      sources:
+        direct: true
+  promotionTemplate:
+    spec:
+      steps:
+        - uses: git-clone
+          config:
+            repoURL: git@github.com:IgorGerasimow/platform-design.git
+            checkout:
+              - branch: main
+                path: ./src
+        - uses: yaml-update
+          config:
+            path: ./src/envs/dev/values/protocols/values.yaml
+            updates:
+              - key: image.tag
+                value: ${{ imageFrom("protocols").Tag }}
+        - uses: git-commit
+          config:
+            path: ./src
+            messageFromSteps:
+              - yaml-update
+        - uses: git-push
+          config:
+            path: ./src
+        - uses: argocd-update
+          config:
+            apps:
+              - name: protocols-dev
+  verification:
+    analysisTemplates:
+      - name: health-check

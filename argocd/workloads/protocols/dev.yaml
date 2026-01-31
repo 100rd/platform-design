@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: protocols-dev
+  namespace: argocd
+  annotations:
+    kargo.akuity.io/authorized-stage: protocols:dev
+  labels:
+    app.kubernetes.io/part-of: platform-workloads
+    app.kubernetes.io/component: protocols
+    env: dev
+spec:
+  project: platform-workloads
+  sources:
+    - repoURL: git@github.com:IgorGerasimow/platform-design.git
+      targetRevision: HEAD
+      path: apps/protocols
+      helm:
+        ignoreMissingValueFiles: true
+        valueFiles:
+          - $values/envs/dev/values/protocols/values.yaml
+        values: |
+          environment: "dev"
+    - repoURL: git@github.com:IgorGerasimow/platform-design.git
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev-protocols
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

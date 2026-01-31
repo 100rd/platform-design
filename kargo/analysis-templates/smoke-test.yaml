@@ -1,0 +1,31 @@
+apiVersion: kargo.akuity.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: smoke-test
+spec:
+  metrics:
+    - name: http-probe
+      provider:
+        job:
+          spec:
+            backoffLimit: 1
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: probe
+                    image: curlimages/curl:latest
+                    command:
+                      - sh
+                      - -c
+                      - |
+                        # Smoke test: HTTP probe against service endpoint
+                        SERVICE_URL="${SERVICE_URL:-http://localhost:8080/health}"
+                        echo "Probing $SERVICE_URL"
+                        HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$SERVICE_URL")
+                        echo "HTTP status: $HTTP_CODE"
+                        [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 400 ]
+      successCondition: result.exitCode == 0
+      failureLimit: 3
+      interval: 30s
+      count: 3

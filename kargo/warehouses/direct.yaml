@@ -1,0 +1,15 @@
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Warehouse
+metadata:
+  name: direct
+  namespace: direct
+spec:
+  subscriptions:
+    - image:
+        repoURL: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/direct
+        semverConstraint: ">=0.1.0"
+        discoveryLimit: 5
+    - git:
+        repoURL: git@github.com:IgorGerasimow/platform-design.git
+        includePaths:
+          - apps/direct/**

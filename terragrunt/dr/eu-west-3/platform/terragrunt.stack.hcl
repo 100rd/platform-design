@@ -14,6 +14,11 @@ unit "vpc" {
   path   = "vpc"
 }
 
+unit "tgw-attachment" {
+  source = "${get_repo_root()}/catalog/units/tgw-attachment"
+  path   = "tgw-attachment"
+}
+
 unit "secrets" {
   source = "${get_repo_root()}/catalog/units/secrets"
   path   = "secrets"
