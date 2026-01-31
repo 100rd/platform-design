@@ -19,9 +19,9 @@ variable "route_tables" {
   description = "Map of route table names to create (e.g., prod, nonprod, shared, inspection)"
   type        = map(object({}))
   default = {
-    prod       = {}
-    nonprod    = {}
-    shared     = {}
+    prod    = {}
+    nonprod = {}
+    shared  = {}
   }
 }
 

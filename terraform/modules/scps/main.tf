@@ -12,10 +12,10 @@ resource "aws_organizations_policy" "deny_leave_org" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid       = "DenyLeaveOrg"
-        Effect    = "Deny"
-        Action    = "organizations:LeaveOrganization"
-        Resource  = "*"
+        Sid      = "DenyLeaveOrg"
+        Effect   = "Deny"
+        Action   = "organizations:LeaveOrganization"
+        Resource = "*"
       }
     ]
   })
@@ -58,10 +58,10 @@ resource "aws_organizations_policy" "deny_root_account" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid       = "DenyRootUser"
-        Effect    = "Deny"
-        Action    = "*"
-        Resource  = "*"
+        Sid      = "DenyRootUser"
+        Effect   = "Deny"
+        Action   = "*"
+        Resource = "*"
         Condition = {
           StringLike = {
             "aws:PrincipalArn" = "arn:aws:iam::*:root"
@@ -84,10 +84,10 @@ resource "aws_organizations_policy" "restrict_regions" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid       = "DenyNonEURegions"
-        Effect    = "Deny"
-        Action    = "*"
-        Resource  = "*"
+        Sid      = "DenyNonEURegions"
+        Effect   = "Deny"
+        Action   = "*"
+        Resource = "*"
         Condition = {
           StringNotEquals = {
             "aws:RequestedRegion" = [
@@ -132,11 +132,11 @@ resource "aws_organizations_policy" "deny_public_s3_prod" {
           "s3:PutBucketPublicAccessBlock",
           "s3:PutAccountPublicAccessBlock",
         ]
-        Resource  = "*"
+        Resource = "*"
         Condition = {
           StringNotEquals = {
-            "s3:PublicAccessBlockConfiguration/BlockPublicAcls"    = "true"
-            "s3:PublicAccessBlockConfiguration/BlockPublicPolicy"  = "true"
+            "s3:PublicAccessBlockConfiguration/BlockPublicAcls"   = "true"
+            "s3:PublicAccessBlockConfiguration/BlockPublicPolicy" = "true"
           }
         }
       }

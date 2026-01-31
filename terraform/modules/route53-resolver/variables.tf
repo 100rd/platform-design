@@ -34,7 +34,7 @@ variable "allowed_cidrs" {
 variable "forwarding_rules" {
   description = "Map of DNS forwarding rules for outbound resolution"
   type = map(object({
-    domain     = string
+    domain = string
     target_ips = list(object({
       ip   = string
       port = optional(number, 53)
