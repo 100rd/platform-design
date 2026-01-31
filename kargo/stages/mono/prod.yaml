@@ -1,0 +1,43 @@
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: prod
+  namespace: mono
+spec:
+  requestedFreight:
+    - origin:
+        kind: Warehouse
+        name: mono
+      sources:
+        stages:
+          - staging
+  promotionTemplate:
+    spec:
+      steps:
+        - uses: git-clone
+          config:
+            repoURL: git@github.com:IgorGerasimow/platform-design.git
+            checkout:
+              - branch: main
+                path: ./src
+        - uses: yaml-update
+          config:
+            path: ./src/envs/prod/values/mono/values.yaml
+            updates:
+              - key: image.tag
+                value: ${{ imageFrom("mono").Tag }}
+        - uses: git-commit
+          config:
+            path: ./src
+            messageFromSteps:
+              - yaml-update
+        - uses: git-push
+          config:
+            path: ./src
+        - uses: argocd-update
+          config:
+            apps:
+              - name: mono-prod
+  verification:
+    analysisTemplates:
+      - name: health-check

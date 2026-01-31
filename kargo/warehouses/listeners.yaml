@@ -1,0 +1,15 @@
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Warehouse
+metadata:
+  name: listeners
+  namespace: listeners
+spec:
+  subscriptions:
+    - image:
+        repoURL: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/listeners
+        semverConstraint: ">=0.1.0"
+        discoveryLimit: 5
+    - git:
+        repoURL: git@github.com:IgorGerasimow/platform-design.git
+        includePaths:
+          - apps/listeners/**

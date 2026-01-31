@@ -1,0 +1,15 @@
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Warehouse
+metadata:
+  name: mono
+  namespace: mono
+spec:
+  subscriptions:
+    - image:
+        repoURL: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/mono
+        semverConstraint: ">=0.1.0"
+        discoveryLimit: 5
+    - git:
+        repoURL: git@github.com:IgorGerasimow/platform-design.git
+        includePaths:
+          - apps/mono/**

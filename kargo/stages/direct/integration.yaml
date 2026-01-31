@@ -1,0 +1,43 @@
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: integration
+  namespace: direct
+spec:
+  requestedFreight:
+    - origin:
+        kind: Warehouse
+        name: direct
+      sources:
+        stages:
+          - dev
+  promotionTemplate:
+    spec:
+      steps:
+        - uses: git-clone
+          config:
+            repoURL: git@github.com:IgorGerasimow/platform-design.git
+            checkout:
+              - branch: main
+                path: ./src
+        - uses: yaml-update
+          config:
+            path: ./src/envs/integration/values/direct/values.yaml
+            updates:
+              - key: image.tag
+                value: ${{ imageFrom("direct").Tag }}
+        - uses: git-commit
+          config:
+            path: ./src
+            messageFromSteps:
+              - yaml-update
+        - uses: git-push
+          config:
+            path: ./src
+        - uses: argocd-update
+          config:
+            apps:
+              - name: direct-integration
+  verification:
+    analysisTemplates:
+      - name: smoke-test

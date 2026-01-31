@@ -3,6 +3,18 @@ locals {
   account_id            = "444444444444" # TODO: Replace with actual AWS account ID
   aws_account_id        = "444444444444" # Alias for reference compatibility
   environment           = "dr"
+
+  # Organization context
+  org_account_type     = "workload"
+  org_ou               = "Prod"
+  management_account   = "000000000000"
+  network_account      = "555555555555"
+
+  # Transit Gateway connectivity (shared via RAM from network account)
+  enable_tgw_attachment = false          # Enable once TGW is deployed in network account
+  transit_gateway_id    = ""             # Populate after network account deployment
+  tgw_route_table_id    = ""             # prod route table ID from network account
+
   single_nat_gateway    = true
   eks_public_access     = false
   eks_instance_types    = ["m6i.xlarge"]

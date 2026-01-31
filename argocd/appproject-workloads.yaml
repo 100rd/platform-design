@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-workloads
+  namespace: argocd
+spec:
+  description: Workload applications managed by Kargo promotion pipeline
+  sourceRepos:
+    - git@github.com:IgorGerasimow/platform-design.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: dev-*
+    - server: https://kubernetes.default.svc
+      namespace: integration-*
+    - server: https://kubernetes.default.svc
+      namespace: staging-*
+    - server: https://kubernetes.default.svc
+      namespace: prod-*
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

@@ -1,0 +1,9 @@
+kargo:
+  api:
+    enabled: true
+  controller:
+    argocd:
+      integrationEnabled: true
+      namespace: argocd
+    gitClient:
+      signingKeyType: ""

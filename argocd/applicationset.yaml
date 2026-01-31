@@ -1,9 +1,11 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: bootstrap-applicationset
+  name: platform-infra
   namespace: argocd
 spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
   generators:
     - matrix:
         generators:
@@ -11,40 +13,45 @@ spec:
               repoURL: git@github.com:IgorGerasimow/platform-design.git
               revision: HEAD
               directories:
-                - path: apps/*
-                  exclude: true
-                - path: apps/*/*
-                - path: apps/*/*-kustomize
-                  exclude: true
+                - path: apps/infra/*
+                - path: apps/infra/observability/*
           - clusters:
               selector: {}
               values:
-                env: '{{metadata.labels.env}}'
-                cluster: '{{metadata.labels.cluster}}'
+                env: '{{ index .metadata.labels "env" }}'
+                cluster: '{{ index .metadata.labels "cluster" }}'
   template:
     metadata:
-      name: '{{path.basename}}'
+      name: '{{ .path.basename }}'
+      namespace: argocd
+      labels:
+        app.kubernetes.io/part-of: platform-infra
     spec:
       project: default
       source:
         repoURL: git@github.com:IgorGerasimow/platform-design.git
         targetRevision: HEAD
-        path: '{{path}}'
+        path: '{{ .path.path }}'
         helm:
           ignoreMissingValueFiles: true
           valueFiles:
-            - '../../../apps/{{path[1]}}/{{path.basename}}/values.yaml'
-            - '../../../envs/{{values.env}}/values/{{path[1]}}/{{path.basename}}.yaml'
-            - '../../../envs/{{values.env}}/{{values.cluster}}/{{path[1]}}/{{path.basename}}.yaml'
+            - '../../../envs/{{ .values.env }}/values/infra/{{ .path.basename }}.yaml'
           values: |
-            environment: "{{values.env}}"
-            cluster: "{{values.cluster}}"
+            environment: "{{ .values.env }}"
+            cluster: "{{ .values.cluster }}"
       destination:
         server: https://kubernetes.default.svc
-        namespace: '{{values.env}}-{{path[1]}}'
+        namespace: '{{ .path.basename }}'
       syncPolicy:
         automated:
           prune: true
           selfHeal: true
         syncOptions:
           - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m

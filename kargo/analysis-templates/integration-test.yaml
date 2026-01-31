@@ -1,0 +1,36 @@
+apiVersion: kargo.akuity.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: integration-test
+spec:
+  metrics:
+    - name: test-suite
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: test
+                    image: curlimages/curl:latest
+                    command:
+                      - sh
+                      - -c
+                      - |
+                        # Integration test: verify service responds correctly
+                        SERVICE_URL="${SERVICE_URL:-http://localhost:8080}"
+                        echo "Running integration tests against $SERVICE_URL"
+                        # Health endpoint check
+                        HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$SERVICE_URL/health")
+                        echo "Health check: $HTTP_CODE"
+                        [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 400 ] || exit 1
+                        # Ready endpoint check
+                        HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$SERVICE_URL/ready")
+                        echo "Ready check: $HTTP_CODE"
+                        [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 400 ]
+      successCondition: result.exitCode == 0
+      failureLimit: 1
+      interval: 60s
+      count: 1
