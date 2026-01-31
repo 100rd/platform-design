@@ -10,7 +10,7 @@
 # ---------------------------------------------------------------------------------------------------------------------
 
 terraform {
-  source = "tfr:///terraform-aws-modules/rds/aws?version=6.10.0"
+  source = "tfr:///terraform-aws-modules/rds/aws?version=7.1.0"
 }
 
 locals {
@@ -78,7 +78,7 @@ inputs = {
 
   # Engine
   engine         = "postgres"
-  engine_version = "16.4"
+  engine_version = "17.7"
 
   # Instance sizing (defined per environment in account.hcl)
   instance_class    = local.account_vars.locals.rds_instance_class

@@ -1,14 +1,12 @@
 # ---------------------------------------------------------------------------------------------------------------------
-# Karpenter Configuration — Catalog Unit
+# KEDA — Catalog Unit
 # ---------------------------------------------------------------------------------------------------------------------
-# Reusable unit that provisions Karpenter IAM roles and supporting resources for just-in-time
-# node provisioning using the karpenter sub-module of terraform-aws-modules/eks/aws.
-#
-# Karpenter replaces the Cluster Autoscaler for dynamic, cost-efficient node scaling.
+# Deploys KEDA (Kubernetes Event-Driven Autoscaling) via Helm.
+# Depends on EKS cluster.
 # ---------------------------------------------------------------------------------------------------------------------
 
 terraform {
-  source = "tfr:///terraform-aws-modules/eks/aws//modules/karpenter?version=20.31.0"
+  source = "${get_repo_root()}/project/platform-design/terraform/modules/keda"
 }
 
 locals {
@@ -31,7 +29,6 @@ dependency "eks" {
     cluster_name                       = "mock-cluster"
     cluster_endpoint                   = "https://mock-endpoint.eks.amazonaws.com"
     cluster_certificate_authority_data = "bW9jay1jZXJ0LWRhdGE="
-    oidc_provider_arn                  = "arn:aws:iam::123456789012:oidc-provider/oidc.eks.eu-west-1.amazonaws.com/id/MOCK"
   }
 
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
@@ -39,7 +36,7 @@ dependency "eks" {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# Kubernetes / Helm providers for Karpenter CRDs
+# Kubernetes / Helm providers
 # ---------------------------------------------------------------------------------------------------------------------
 
 generate "k8s_providers" {
@@ -75,11 +72,9 @@ generate "k8s_providers" {
 # ---------------------------------------------------------------------------------------------------------------------
 
 inputs = {
-  cluster_name = dependency.eks.outputs.cluster_name
-
-  # IRSA configuration for Karpenter controller
-  irsa_oidc_provider_arn = dependency.eks.outputs.oidc_provider_arn
-  enable_irsa            = true
+  cluster_name           = dependency.eks.outputs.cluster_name
+  operator_replicas      = try(local.account_vars.locals.keda_operator_replicas, 1)
+  metrics_server_replicas = try(local.account_vars.locals.keda_metrics_server_replicas, 1)
 
   tags = {
     Environment = local.environment

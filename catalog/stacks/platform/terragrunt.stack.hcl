@@ -28,9 +28,34 @@ unit "eks" {
   path   = "eks"
 }
 
-unit "karpenter" {
-  source = "${get_repo_root()}/catalog/units/karpenter"
-  path   = "karpenter"
+unit "karpenter-iam" {
+  source = "${get_repo_root()}/catalog/units/karpenter-iam"
+  path   = "karpenter-iam"
+}
+
+unit "karpenter-controller" {
+  source = "${get_repo_root()}/catalog/units/karpenter-controller"
+  path   = "karpenter-controller"
+}
+
+unit "karpenter-nodepools" {
+  source = "${get_repo_root()}/catalog/units/karpenter-nodepools"
+  path   = "karpenter-nodepools"
+}
+
+unit "keda" {
+  source = "${get_repo_root()}/catalog/units/keda"
+  path   = "keda"
+}
+
+unit "hpa-defaults" {
+  source = "${get_repo_root()}/catalog/units/hpa-defaults"
+  path   = "hpa-defaults"
+}
+
+unit "wpa" {
+  source = "${get_repo_root()}/catalog/units/wpa"
+  path   = "wpa"
 }
 
 unit "rds" {

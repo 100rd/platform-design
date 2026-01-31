@@ -12,7 +12,7 @@
 # ---------------------------------------------------------------------------------------------------------------------
 
 terraform {
-  source = "tfr:///terraform-aws-modules/vpc/aws?version=5.16.0"
+  source = "tfr:///terraform-aws-modules/vpc/aws?version=6.6.0"
 }
 
 locals {
