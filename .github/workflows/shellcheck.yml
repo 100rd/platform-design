@@ -5,9 +5,11 @@ on:
     branches: [main, feature/terragrunt]
     paths:
       - "**.sh"
+      - ".github/workflows/shellcheck.yml"
   pull_request:
     paths:
       - "**.sh"
+  workflow_dispatch:
 
 jobs:
   shellcheck:

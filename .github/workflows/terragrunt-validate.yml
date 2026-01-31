@@ -6,10 +6,12 @@ on:
     paths:
       - "terragrunt/**"
       - "catalog/**"
+      - ".github/workflows/terragrunt-validate.yml"
   pull_request:
     paths:
       - "terragrunt/**"
       - "catalog/**"
+  workflow_dispatch:
 
 jobs:
   hclfmt:

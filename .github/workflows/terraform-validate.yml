@@ -5,9 +5,11 @@ on:
     branches: [main, feature/terragrunt]
     paths:
       - "terraform/**"
+      - ".github/workflows/terraform-validate.yml"
   pull_request:
     paths:
       - "terraform/**"
+  workflow_dispatch:
 
 jobs:
   fmt-check:

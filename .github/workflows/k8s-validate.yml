@@ -8,12 +8,14 @@ on:
       - "kubernetes/**"
       - "network-policies/**"
       - "argocd/**"
+      - ".github/workflows/k8s-validate.yml"
   pull_request:
     paths:
       - "k8s/**"
       - "kubernetes/**"
       - "network-policies/**"
       - "argocd/**"
+  workflow_dispatch:
 
 jobs:
   kubeconform:

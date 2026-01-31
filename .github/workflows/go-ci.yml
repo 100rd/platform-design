@@ -7,11 +7,13 @@ on:
       - "dns-monitor/**"
       - "failover-controller/**"
       - "services/hello-world/**"
+      - ".github/workflows/go-ci.yml"
   pull_request:
     paths:
       - "dns-monitor/**"
       - "failover-controller/**"
       - "services/hello-world/**"
+  workflow_dispatch:
 
 jobs:
   go-lint-test:

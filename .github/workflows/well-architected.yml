@@ -7,11 +7,13 @@ on:
       - "terraform/**"
       - "checkov-policies/**"
       - ".checkov.yaml"
+      - ".github/workflows/well-architected.yml"
   pull_request:
     paths:
       - "terraform/**"
       - "checkov-policies/**"
       - ".checkov.yaml"
+  workflow_dispatch:
 
 jobs:
   checkov:
