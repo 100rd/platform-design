@@ -34,30 +34,30 @@ locals {
   #   reserved: 10.50-99 for future accounts
   # ---------------------------------------------------------------------------
   cidr_map = {
-    dev-eu-west-1            = "10.0.0.0/16"
-    dev-eu-west-2            = "10.1.0.0/16"
-    dev-eu-west-3            = "10.2.0.0/16"
-    dev-eu-central-1         = "10.3.0.0/16"
-    staging-eu-west-1        = "10.10.0.0/16"
-    staging-eu-west-2        = "10.11.0.0/16"
-    staging-eu-west-3        = "10.12.0.0/16"
-    staging-eu-central-1     = "10.13.0.0/16"
-    prod-eu-west-1           = "10.20.0.0/16"
-    prod-eu-west-2           = "10.21.0.0/16"
-    prod-eu-west-3           = "10.22.0.0/16"
-    prod-eu-central-1        = "10.23.0.0/16"
-    dr-eu-west-1             = "10.30.0.0/16"
-    dr-eu-west-2             = "10.31.0.0/16"
-    dr-eu-west-3             = "10.32.0.0/16"
-    dr-eu-central-1          = "10.33.0.0/16"
-    network-eu-west-1        = "10.40.0.0/16"
-    network-eu-west-2        = "10.41.0.0/16"
-    network-eu-west-3        = "10.42.0.0/16"
-    network-eu-central-1     = "10.43.0.0/16"
-    management-eu-west-1     = "10.50.0.0/16"
-    management-eu-west-2     = "10.51.0.0/16"
-    management-eu-west-3     = "10.52.0.0/16"
-    management-eu-central-1  = "10.53.0.0/16"
+    dev-eu-west-1           = "10.0.0.0/16"
+    dev-eu-west-2           = "10.1.0.0/16"
+    dev-eu-west-3           = "10.2.0.0/16"
+    dev-eu-central-1        = "10.3.0.0/16"
+    staging-eu-west-1       = "10.10.0.0/16"
+    staging-eu-west-2       = "10.11.0.0/16"
+    staging-eu-west-3       = "10.12.0.0/16"
+    staging-eu-central-1    = "10.13.0.0/16"
+    prod-eu-west-1          = "10.20.0.0/16"
+    prod-eu-west-2          = "10.21.0.0/16"
+    prod-eu-west-3          = "10.22.0.0/16"
+    prod-eu-central-1       = "10.23.0.0/16"
+    dr-eu-west-1            = "10.30.0.0/16"
+    dr-eu-west-2            = "10.31.0.0/16"
+    dr-eu-west-3            = "10.32.0.0/16"
+    dr-eu-central-1         = "10.33.0.0/16"
+    network-eu-west-1       = "10.40.0.0/16"
+    network-eu-west-2       = "10.41.0.0/16"
+    network-eu-west-3       = "10.42.0.0/16"
+    network-eu-central-1    = "10.43.0.0/16"
+    management-eu-west-1    = "10.50.0.0/16"
+    management-eu-west-2    = "10.51.0.0/16"
+    management-eu-west-3    = "10.52.0.0/16"
+    management-eu-central-1 = "10.53.0.0/16"
   }
 
   vpc_cidr     = local.cidr_map["${local.environment}-${local.aws_region}"]
@@ -95,14 +95,14 @@ inputs = {
   # Subnet tags required by AWS Load Balancer Controller and Karpenter
   # ---------------------------------------------------------------------------
   public_subnet_tags = {
-    "kubernetes.io/role/elb"                            = "1"
-    "kubernetes.io/cluster/${local.cluster_name}"       = "shared"
+    "kubernetes.io/role/elb"                      = "1"
+    "kubernetes.io/cluster/${local.cluster_name}" = "shared"
   }
 
   private_subnet_tags = {
-    "kubernetes.io/role/internal-elb"                   = "1"
-    "kubernetes.io/cluster/${local.cluster_name}"       = "shared"
-    "karpenter.sh/discovery"                            = local.cluster_name
+    "kubernetes.io/role/internal-elb"             = "1"
+    "kubernetes.io/cluster/${local.cluster_name}" = "shared"
+    "karpenter.sh/discovery"                      = local.cluster_name
   }
 
   tags = {

@@ -72,8 +72,8 @@ generate "k8s_providers" {
 # ---------------------------------------------------------------------------------------------------------------------
 
 inputs = {
-  cluster_name           = dependency.eks.outputs.cluster_name
-  operator_replicas      = try(local.account_vars.locals.keda_operator_replicas, 1)
+  cluster_name            = dependency.eks.outputs.cluster_name
+  operator_replicas       = try(local.account_vars.locals.keda_operator_replicas, 1)
   metrics_server_replicas = try(local.account_vars.locals.keda_metrics_server_replicas, 1)
 
   tags = {

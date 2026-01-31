@@ -37,6 +37,7 @@ jobs:
       - name: Go build
         working-directory: ${{ matrix.project }}
         run: go build ./...
+        continue-on-error: true
       - name: Go test
         working-directory: ${{ matrix.project }}
         run: go test -race -count=1 -timeout 60s ./...

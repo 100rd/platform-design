@@ -1,8 +1,8 @@
 locals {
-  account_name = "management"
-  account_id   = "000000000000" # TODO: Replace with actual AWS management account ID
+  account_name   = "management"
+  account_id     = "000000000000" # TODO: Replace with actual AWS management account ID
   aws_account_id = "000000000000"
-  environment  = "management"
+  environment    = "management"
 
   # Organization context
   org_account_type = "management"

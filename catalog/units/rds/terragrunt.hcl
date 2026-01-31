@@ -30,8 +30,8 @@ dependency "vpc" {
   config_path = "../vpc"
 
   mock_outputs = {
-    vpc_id                    = "vpc-00000000000000000"
-    database_subnets          = ["subnet-00000000000000000", "subnet-11111111111111111", "subnet-22222222222222222"]
+    vpc_id                     = "vpc-00000000000000000"
+    database_subnets           = ["subnet-00000000000000000", "subnet-11111111111111111", "subnet-22222222222222222"]
     database_subnet_group_name = "mock-db-subnet-group"
   }
 
