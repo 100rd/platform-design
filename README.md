@@ -1,220 +1,67 @@
 # Platform Design
 
-**A production-ready, cloud-native casino gaming platform with blockchain integration**
-
----
-
-## 📋 Table of Contents
-
-- [Overview](#overview)
-- [What This Platform Does](#what-this-platform-does)
-- [Architecture Highlights](#architecture-highlights)
-- [Component Status & Versions](#component-status--versions)
-- [Technical Stack](#technical-stack)
-- [Repository Structure](#repository-structure)
-- [Getting Started](#getting-started)
-- [Adaptation Roadmap](#adaptation-roadmap)
-- [Documentation](#documentation)
+Production-grade, multi-account AWS platform with EKS, Karpenter autoscaling, GitOps delivery, and full observability.
 
 ---
 
 ## Overview
 
-This repository contains a **reference architecture and implementation** for a cloud-native casino platform that combines traditional gaming services with a private blockchain for internal transactions. It's designed as a production-ready, scalable, and compliant gaming infrastructure that follows the AWS Well-Architected Framework.
+This repository contains the complete infrastructure, configuration, and tooling for a cloud-native platform running on AWS EKS. It follows the Gruntwork Reference Architecture pattern with Terragrunt for multi-account, multi-region infrastructure management, ArgoCD for GitOps application delivery, and Kargo for progressive promotion.
 
-### Purpose
+### Key Capabilities
 
-The platform solves several critical gaming industry challenges:
-
-1. **High-Performance Gaming Operations**
-   - Handle thousands of concurrent players
-   - Sub-100ms latency for real-time gaming
-   - Scalable to 1,000-5,000 Kubernetes nodes
-   - 100 Gbps+ data ingest capacity
-
-2. **Blockchain-Backed Fairness**
-   - Private blockchain for in-platform transactions
-   - Provably fair gaming verification
-   - Immutable transaction records
-   - Transparent game outcome validation
-
-3. **Enterprise-Grade Security & Compliance**
-   - Gaming regulatory compliance
-   - Player data protection
-   - Automated security scanning (Checkov, Trivy)
-   - AWS Well-Architected Framework alignment
-
-4. **Cost Optimization**
-   - Multi-architecture support (x86 + ARM64/Graviton)
-   - Spot instance integration
-   - Intelligent autoscaling (designed for Karpenter)
-   - 30%+ compute cost savings potential
+- **Multi-Account AWS Organization** — Management, network, non-prod, prod, and DR accounts with SCPs, SSO, and GuardDuty
+- **Multi-Region Deployment** — 4 EU regions (eu-central-1, eu-west-1, eu-west-2, eu-west-3) per environment
+- **EKS with Karpenter** — Autoscaling with per-environment node pool profiles (x86, ARM64/Graviton, spot/on-demand)
+- **Event-Driven Scaling** — KEDA, HPA defaults, and Watermark Pod Autoscaler support
+- **Transit Gateway Networking** — Centralized connectivity with route table isolation (prod/nonprod/shared)
+- **GitOps Pipeline** — ArgoCD ApplicationSets with Kargo progressive delivery
+- **Observability** — Prometheus, Grafana, Loki, Tempo, OpenTelemetry, Pyroscope
+- **Security** — OPA/Gatekeeper, network policies, External Secrets Operator, Checkov scanning
+- **DNS Failover** — Custom Go controllers for DNS monitoring and automated failover
 
 ---
 
-## What This Platform Does
+## Architecture
 
-### Hybrid Cloud Strategy
+### AWS Multi-Account Organization
 
-The platform uses a **dual-infrastructure approach**:
+```
+Management Account (_org)
+├── Security OU
+├── Infrastructure OU
+│   └── Network Account — Transit Gateway, VPN, Route53 Resolver
+├── Workloads OU
+│   └── NonProd OU
+│       ├── Dev Account
+│       └── Staging Account
+└── Prod OU
+    ├── Prod Account
+    └── DR Account
+```
 
-#### AWS Cloud (Amazon EKS)
-- Majority of application workloads
-- Microservices running in Kubernetes
-- Managed databases (RDS PostgreSQL)
-- Object storage (S3)
-- Monitoring and logging (CloudWatch)
-- Scalable compute with EKS managed node groups
+### Platform Stack (per region)
 
-#### Bare Metal Servers
-- Critical blockchain nodes
-- High-performance, latency-sensitive workloads
-- Direct hardware access for crypto operations
-- Performance optimization for gaming logic
-- Integration via Hetzner Cloud
+Each environment/region deploys the following units via Terragrunt stacks:
 
-### Core Capabilities
+```
+vpc → tgw-attachment → eks → karpenter-iam → karpenter-controller → karpenter-nodepools
+                        ├── keda
+                        ├── hpa-defaults
+                        ├── wpa
+                        └── monitoring
+secrets → rds
+```
 
-1. **Multi-Team Application Deployment**
-   - Organized by team: Direct, Mono, Protocols, Chains, Listeners
-   - GitOps-driven via ArgoCD ApplicationSets
-   - Automated deployment pipelines
+### Network Architecture
 
-2. **Data Processing Pipeline**
-   - Real-time event streaming (Kafka)
-   - Time-series telemetry (InfluxDB)
-   - Session management (Redis)
-   - Transaction storage (PostgreSQL, MongoDB)
+The network account runs a connectivity stack per region:
 
-3. **Observability & Monitoring**
-   - Metrics: Prometheus + Thanos + Grafana
-   - Logs: Fluent Bit → Loki/Elasticsearch
-   - Traces: Tempo with OpenTelemetry
-   - Cost monitoring via AWS Cost Explorer
+```
+vpc → transit-gateway → ram-share → tgw-route-tables → vpn-connection → route53-resolver
+```
 
-4. **Security & Secrets Management**
-   - HashiCorp Vault integration
-   - External Secrets Operator
-   - Network policies (Cilium CNI)
-   - mTLS via SPIRE
-   - Cloudflare WAF protection
-
----
-
-## Architecture Highlights
-
-### Multi-Environment Setup
-- AWS hosts majority of workloads using EKS
-- Bare metal servers run critical blockchain components
-- Kubernetes as uniform runtime across environments
-
-### Containerized Services
-- All applications built as Docker images
-- Helm charts define service deployments
-- Kustomize provides environment-specific overlays
-
-### GitOps Pipeline
-- Infrastructure defined in Terraform and stored in Git
-- ArgoCD watches repository and applies manifests automatically
-- GitHub Actions manage CI pipeline (tests, builds, security scans)
-
-### Observability and Security
-- Metrics gathered via Prometheus with Grafana dashboards
-- Logs centralized through Loki or Elasticsearch
-- Vault handles secrets management
-- Cloudflare protects external endpoints
-
-### Blockchain Integration
-- Internal crypto nodes run on dedicated hardware
-- Services interact via gRPC APIs written in Go
-- Provably fair gaming implementation
-
----
-
-## Component Status & Versions
-
-### Infrastructure Components
-
-| Component | Current Version | Latest Version | Status | Action Required |
-|-----------|----------------|----------------|--------|-----------------|
-| **Terraform AWS VPC Module** | 6.5.0 | 6.5.0 | ✅ **UP TO DATE** | None |
-| **Terraform AWS EKS Module** | 21.8.0 | 21.8.0 | ✅ **UP TO DATE** | None |
-| **EKS Cluster Version** | 1.34 | 1.34 | ✅ **CURRENT** | None |
-| **Karpenter Module** | Not implemented | v1.1.1 | ❌ **MISSING** | Create module |
-| **Karpenter NodePools** | Not implemented | v1 | ❌ **MISSING** | Create configs |
-| **VPC Module** | ✅ Implemented | - | ✅ **WORKING** | Needs version bump |
-| **Hetzner Nodes Module** | ✅ Implemented | - | ✅ **WORKING** | Review only |
-
-### Application Components
-
-| Component | Current Version | Status | Notes |
-|-----------|----------------|--------|-------|
-| **ArgoCD ApplicationSet** | v1 | ✅ **WORKING** | GitOps ready |
-| **External Secrets Operator** | Helm chart | ✅ **WORKING** | Deployed via ArgoCD |
-| **Generic App Helm Chart** | v1 | ✅ **WORKING** | Ingress + secrets |
-| **Network Policies** | K8s v1 | ✅ **WORKING** | Baseline policies |
-| **Example Services (Go)** | - | ✅ **WORKING** | example-api, hello-world |
-
-### CI/CD & Security
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| **Checkov Security Scanning** | ✅ **ACTIVE** | AWS Well-Architected checks |
-| **Trivy Image Scanning** | ✅ **ACTIVE** | Container vulnerability scanning |
-| **GitHub Actions Workflows** | ✅ **ACTIVE** | helm-validate, yaml-lint, secret-scan |
-| **Pre-commit Hooks** | 📋 **PLANNED** | Terraform fmt, validate |
-
-### Documentation
-
-| Component | Status | Quality |
-|-----------|--------|---------|
-| **Platform Overview** | ✅ Complete | Excellent |
-| **Tech Stack** | ✅ Complete | Good |
-| **Scale Patterns** | ✅ Complete | Excellent (1k-5k nodes) |
-| **Terragrunt Strategy** | ✅ Complete | Excellent |
-| **Usage README** | ⚠️ **BASIC** | Needs expansion |
-| **Multi-arch Examples** | ❌ **MISSING** | Must create |
-
----
-
-## Technical Stack
-
-### Infrastructure & DevOps
-- **AWS** – EKS, EC2, RDS, S3, CloudWatch
-- **Bare Metal** – Hetzner Cloud for blockchain nodes
-- **Kubernetes** – Cluster orchestration (Helm, Kustomize)
-- **Terraform** – Infrastructure as Code
-- **Terragrunt** – DRY Terraform configuration
-- **ArgoCD** – GitOps deployment management
-- **Cloudflare** – DNS, CDN, WAF
-- **GitHub Actions** – CI/CD pipelines
-- **Docker** – Container packaging
-
-### Data Stores
-- **PostgreSQL** – Primary relational store
-- **MongoDB** – Document database for flexible schemas
-- **Kafka** – Message streaming and event distribution
-- **Redis** – In-memory caching and ephemeral data
-- **InfluxDB** – Time-series telemetry (scale-patterns design)
-
-### Languages & Frameworks
-- **Golang** – Primary language for backend services and blockchain modules
-- **Node.js** – Supporting tooling and lightweight frontends
-- **Swagger/OpenAPI** – API documentation and client generation
-
-### Observability
-- **Prometheus & Thanos** – Metrics collection and long-term storage
-- **Grafana** – Metrics visualization
-- **Loki / Elasticsearch** – Log aggregation
-- **Tempo** – Distributed tracing
-- **OpenTelemetry** – Observability instrumentation
-
-### Security
-- **HashiCorp Vault** – Secrets management
-- **External Secrets Operator** – K8s secrets from Vault
-- **Cilium CNI** – eBPF-based networking and security
-- **SPIRE** – mTLS service identity
-- **OPA/Gatekeeper** – Policy enforcement (planned)
+Workload accounts attach to the Transit Gateway via `tgw-attachment` in their platform stack.
 
 ---
 
@@ -222,64 +69,157 @@ The platform uses a **dual-infrastructure approach**:
 
 ```
 platform-design/
-├── docs/                           # Platform documentation
-│   ├── platform-overview.md        # Architecture overview
-│   ├── 01-tech-stack.md           # Technology decisions
-│   ├── 02-terragrunt-strategy.md  # Terragrunt usage guide
-│   └── scale-patterns.md          # 1k-5k node scaling design
+├── terraform/modules/              # Terraform modules (22 modules)
+│   ├── vpc/                        # VPC with deterministic CIDR allocation
+│   ├── eks/                        # EKS cluster (terraform-aws-modules ~> 21.15)
+│   ├── karpenter/                  # Karpenter controller (Helm)
+│   ├── karpenter-nodepools/        # NodePool + EC2NodeClass CRDs
+│   ├── keda/                       # KEDA event-driven autoscaler (Helm)
+│   ├── hpa-defaults/               # Platform HPA (CoreDNS)
+│   ├── wpa/                        # Datadog Watermark Pod Autoscaler
+│   ├── rds/                        # RDS PostgreSQL
+│   ├── secrets/                    # AWS Secrets Manager
+│   ├── monitoring/                 # Monitoring infrastructure
+│   ├── organization/               # AWS Organization + OUs
+│   ├── scps/                       # Service Control Policies
+│   ├── sso/                        # IAM Identity Center
+│   ├── transit-gateway/            # Transit Gateway core
+│   ├── tgw-attachment/             # TGW VPC attachments
+│   ├── tgw-route-tables/           # TGW route tables
+│   ├── ram-share/                  # AWS RAM resource sharing
+│   ├── vpn-connection/             # Site-to-site VPN
+│   ├── route53-resolver/           # DNS forwarding
+│   └── ...
 │
-├── terraform/                      # Infrastructure as Code
-│   ├── modules/
-│   │   ├── vpc/                   # VPC with public/private subnets
-│   │   ├── eks/                   # EKS cluster configuration
-│   │   └── hetzner-nodes/         # Bare metal node integration
-│   └── README.md
+├── catalog/                        # Terragrunt catalog (reusable units & stacks)
+│   ├── units/                      # 22 units (one per TF module)
+│   └── stacks/
+│       ├── platform/               # Full platform stack
+│       └── connectivity/           # Network connectivity stack
 │
-├── terragrunt/                     # Terragrunt configuration
-│   ├── terragrunt.hcl             # Root config (backend, provider)
-│   └── envs/
-│       ├── dev/                   # Dev environment
-│       └── prod/                  # Production environment
+├── terragrunt/                     # Live infrastructure configuration
+│   ├── root.hcl                    # Root config (S3 backend, providers)
+│   ├── _org/                       # Management account (organization, SCPs, SSO, GuardDuty)
+│   │   └── _global/
+│   ├── network/                    # Network account (Transit Gateway, VPN)
+│   │   └── {eu-west-1,...}/connectivity/
+│   ├── dev/                        # Dev account
+│   │   ├── account.hcl             # Env-specific vars + scaling profiles
+│   │   └── {eu-west-1,...}/platform/
+│   ├── staging/                    # Staging account
+│   ├── prod/                       # Production account
+│   └── dr/                         # Disaster recovery account
 │
-├── apps/                           # Application Helm charts
-│   ├── infra/                     # Infrastructure components
-│   │   └── external-secrets/      # External Secrets Operator
-│   ├── direct/                    # Direct team applications
-│   ├── mono/                      # Monolithic applications
-│   ├── protocols/                 # Protocol services
-│   ├── chains/                    # Blockchain nodes
-│   └── listeners/                 # Event listeners and workers
+├── apps/                           # Application definitions (Helm values)
+│   ├── chains/                     # Blockchain/chain services
+│   ├── direct/                     # Direct routing services
+│   ├── listeners/                  # Event listener services
+│   ├── mono/                       # Monolithic services
+│   ├── protocols/                  # Protocol services
+│   └── infra/                      # Platform infrastructure apps
+│       ├── aws-lb-controller/
+│       ├── cert-manager/
+│       ├── external-secrets/
+│       ├── gatekeeper/
+│       ├── kargo/
+│       ├── velero/
+│       └── observability/          # Grafana, Loki, Prometheus, Tempo, OTEL, Pyroscope
 │
-├── helm/                           # Helm chart templates
-│   └── app/                       # Generic application chart
-│       ├── templates/
-│       │   ├── deployment.yaml
-│       │   ├── service.yaml
-│       │   ├── ingress.yaml
-│       │   └── externalsecret.yaml
-│       └── values.yaml
+├── argocd/                         # ArgoCD GitOps configuration
+│   ├── applicationset.yaml         # Workload ApplicationSet
+│   ├── appproject-workloads.yaml   # AppProject definition
+│   ├── kargo-bootstrap.yaml        # Kargo bootstrap
+│   └── workloads/                  # Per-team workload configs
 │
-├── argocd/                         # ArgoCD configurations
-│   └── applicationset.yaml        # ApplicationSet for auto-discovery
+├── kargo/                          # Kargo progressive delivery
+│   ├── analysis-templates/
+│   ├── projects/
+│   ├── stages/                     # Per-team stage definitions
+│   └── warehouses/
 │
-├── network-policies/               # Kubernetes NetworkPolicy
-│   ├── default-deny-all.yaml
-│   ├── allow-dns-egress.yaml
-│   └── allow-from-same-namespace.yaml
+├── helm/app/                       # Generic application Helm chart
 │
-├── services/                       # Example microservices
-│   ├── example-api/               # Go REST API with health checks
-│   └── hello-world/               # Prometheus metrics example
+├── dns-monitor/                    # Go — DNS health monitoring daemon
+├── failover-controller/            # Go — Failover orchestration with state machine
+├── dns-sync/                       # DNS zone synchronization
+├── services/                       # Reference services
+│   ├── example-api/
+│   └── hello-world/
 │
-├── .github/workflows/              # CI/CD pipelines
-│   ├── well-architected.yml       # Checkov + Trivy scanning
-│   ├── helm-validate.yml          # Helm chart validation
-│   ├── yaml-lint.yml              # YAML linting
-│   └── secret-scan.yml            # Secret detection
+├── k8s/                            # Kubernetes deployment manifests
+│   ├── dns-monitor/
+│   ├── dns-sync/
+│   ├── failover-controller/
+│   └── monitoring/                 # ServiceMonitor + PrometheusRules
 │
-└── checkov-policies/               # Custom Checkov policies
-    └── (AWS Well-Architected alignment)
+├── kubernetes/                     # Kubernetes configurations
+│   ├── deployments/                # x86/Graviton examples
+│   ├── karpenter/                  # NodePool/provisioner configs
+│   └── security/                   # RBAC and security policies
+│
+├── network-policies/               # K8s NetworkPolicy manifests
+├── monitoring/dashboards/          # Grafana dashboard JSON
+├── checkov-policies/               # Custom AWS Well-Architected checks
+├── database/migrations/            # SQL schema migrations
+├── envs/                           # Per-env Helm/Kustomize value overrides
+├── scripts/                        # Deploy, validate, preflight, cleanup
+├── tests/                          # Python E2E + integration tests
+├── tools/dns-admin/                # DNS administration utility
+│
+├── .github/workflows/              # CI pipelines (9 workflows)
+├── docs/                           # Architecture documentation
+└── CHANGELOG.md
 ```
+
+---
+
+## Technical Stack
+
+| Category | Components |
+|----------|-----------|
+| **Cloud** | AWS (EKS, EC2, RDS, S3, Transit Gateway, RAM, SSO, GuardDuty, Organizations) |
+| **IaC** | Terraform >= 1.11, Terragrunt >= 0.68, AWS Provider ~> 6.0 |
+| **Kubernetes** | EKS 1.34, Karpenter, KEDA, Cilium CNI |
+| **GitOps** | ArgoCD (ApplicationSets), Kargo (progressive delivery) |
+| **Observability** | Prometheus, Grafana, Loki, Tempo, OpenTelemetry, Pyroscope |
+| **Security** | OPA/Gatekeeper, External Secrets Operator, Cert-Manager, Velero, Network Policies |
+| **Languages** | Go (controllers), Python (tests), HCL (infrastructure), Bash (scripts) |
+| **Data** | PostgreSQL (RDS), Kafka, Redis, InfluxDB |
+| **CI/CD** | GitHub Actions (9 workflows), Checkov, Gitleaks, ShellCheck, kubeconform |
+| **DNS** | Cloudflare, Route53, custom failover controllers |
+
+---
+
+## CI/CD Pipelines
+
+All pipelines run on push to `main` and on pull requests. Each also triggers when its own workflow file changes.
+
+| Workflow | What it validates |
+|---------|------------------|
+| **Terraform Validate** | `terraform fmt -check` + `terraform validate` for all 22 modules (matrix) |
+| **Terragrunt Validate** | `terragrunt hclfmt --check` + HCL brace-balance syntax check |
+| **Helm Chart Validation** | `helm template` + kubeconform against K8s 1.32 schemas |
+| **K8s Manifest Validation** | kubeconform for k8s/, kubernetes/, network-policies/, argocd/ |
+| **YAML Lint** | yamllint across all YAML (Helm templates excluded) |
+| **Well-Architected Compliance** | Checkov security scan on Terraform modules |
+| **Secret Scan** | Gitleaks secret detection with full history |
+| **ShellCheck** | Shell script linting (severity: error) |
+| **Go CI** | `go build` + `go test` for dns-monitor, failover-controller, hello-world |
+
+---
+
+## Environments
+
+| Environment | AWS Account | Purpose | Karpenter Profile |
+|-------------|------------|---------|-------------------|
+| **_org** | Management | AWS Organization, SCPs, SSO, GuardDuty | N/A |
+| **network** | Network | Transit Gateway, VPN, Route53 Resolver | N/A |
+| **dev** | Non-Prod | Development workloads | Small pools, 80-90% spot, 30s consolidation |
+| **staging** | Non-Prod | Pre-production validation | Medium pools, 70-85% spot, 60s consolidation |
+| **prod** | Production | Production workloads | Large pools, 60-70% spot, 300s consolidation |
+| **dr** | DR | Disaster recovery standby | Medium pools, 50% spot, 600s consolidation |
+
+Each workload environment deploys to 4 EU regions: `eu-central-1`, `eu-west-1`, `eu-west-2`, `eu-west-3`.
 
 ---
 
@@ -287,193 +227,79 @@ platform-design/
 
 ### Prerequisites
 
-- AWS Account with appropriate permissions
-- Terraform >= 1.0
+- AWS CLI configured with appropriate permissions
+- Terraform >= 1.11.0
+- Terragrunt >= 0.68.0
 - kubectl
-- AWS CLI configured
-- (Optional) Terragrunt for simplified multi-environment management
+- Helm
 
-### Quick Start: Deploy Example Service
+### Deploy a Platform Stack
 
 ```bash
-# Build and run example API locally
-cd services/example-api
-docker build -t example-api .
-docker run -p 8080:8080 example-api
-
-# Test health endpoint
-curl http://localhost:8080/health
+# Deploy dev environment in eu-west-1
+cd terragrunt/dev/eu-west-1/platform
+terragrunt stack plan
+terragrunt stack apply
 ```
 
-### Deploy Infrastructure with Terraform
+### Deploy Network Connectivity
 
 ```bash
-cd terraform/modules
-terraform init
-terraform plan -out plan.tfplan
-terraform apply plan.tfplan
+# Deploy network account connectivity in eu-west-1
+cd terragrunt/network/eu-west-1/connectivity
+terragrunt stack plan
+terragrunt stack apply
 ```
 
-Variables such as AWS region and cluster name can be overridden via `terraform.tfvars` or environment variables.
-
-### Deploy Infrastructure with Terragrunt (Recommended)
+### Deploy Organization Resources
 
 ```bash
-# Deploy entire dev environment
-cd terragrunt/envs/dev
-terragrunt run-all apply
+# Deploy AWS Organization, SCPs, SSO (global, run once)
+cd terragrunt/_org/_global/organization
+terragrunt apply
 
-# Deploy specific component
-cd terragrunt/envs/dev/vpc
+cd ../scps
 terragrunt apply
 ```
-
-Terragrunt handles dependency ordering automatically (VPC → EKS → Apps).
 
 ### Connect to Cluster
 
 ```bash
-# Update kubeconfig
 aws eks update-kubeconfig --name <cluster-name> --region <region>
-
-# Verify connection
 kubectl get nodes
 ```
 
 ---
 
-## Adaptation Roadmap
-
-This platform is being adapted to focus on **EKS + Karpenter with multi-architecture support**. The following work is in progress:
-
-### Phase 1: Foundation Updates ✅ COMPLETED
-
-- [x] **Update Terraform modules to latest versions**
-  - VPC: 5.1.1 → 6.5.0 ✅
-  - EKS: 19.15.3 → 21.8.0 ✅
-  - Fix EKS version: 1.33 (invalid) → 1.34 ✅
-
-- [ ] **Audit AWS provider compatibility**
-  - Ensure modules work with latest AWS provider
-  - Test IAM role configurations
-
-### Phase 2: Karpenter Implementation ❌ MISSING
-
-- [ ] **Create Karpenter Terraform module**
-  - Karpenter controller installation
-  - IAM roles and IRSA configuration
-  - Service account setup
-  - CRD installation
-
-- [ ] **Create Karpenter NodePool configurations**
-  - x86 NodePool (m6i, c6i, r6i families)
-  - ARM64/Graviton NodePool (m7g, c7g, r7g families)
-  - Spot + On-Demand mix
-  - Consolidation policies
-
-### Phase 3: Multi-Architecture Examples ❌ MISSING
-
-- [ ] **Create Kubernetes example deployments**
-  - `kubernetes/deployments/x86-example.yaml`
-  - `kubernetes/deployments/graviton-example.yaml`
-  - Node selector documentation
-  - Architecture affinity examples
-
-- [ ] **Update Helm chart templates**
-  - Add nodeSelector support
-  - Add affinity/anti-affinity
-  - Document multi-arch patterns
-
-### Phase 4: Documentation & Testing 📝 PLANNED
-
-- [ ] **Comprehensive README**
-  - End-to-end deployment guide
-  - Developer workflow examples
-  - Troubleshooting section
-  - Cost optimization tips
-
-- [ ] **Testing & Validation**
-  - Terraform plan validation
-  - Security scanning (tfsec/checkov)
-  - Cost estimation (Infracost)
-  - End-to-end cluster deployment test
-
----
-
 ## Documentation
 
-### Architecture & Design
-- [Platform Overview](docs/platform-overview.md) – High-level architecture
-- [Tech Stack](docs/01-tech-stack.md) – Technology decisions and rationale
-- [Scale Patterns](docs/scale-patterns.md) – Scaling to 1,000-5,000 nodes (Datadog-like telemetry)
-
-### Deployment & Operations
-- [Terragrunt Strategy](docs/02-terragrunt-strategy.md) – Multi-environment Terraform management
-- [Terraform README](terraform/README.md) – Infrastructure deployment guide
-
-### Applications
-- [Apps README](apps/README.md) – Application Helm charts structure
-- [Generic Helm Chart](helm/app/README.md) – Reusable application template
-
----
-
-## Compliance Checks
-
-### Automated Security Scanning
-
-A GitHub Actions workflow (`.github/workflows/well-architected.yml`) runs:
-
-1. **Checkov** against Terraform code
-   - Custom policies in `checkov-policies/` directory
-   - Maps to AWS Well-Architected Framework best practices
-   - Fails on HIGH/CRITICAL issues
-
-2. **Trivy** container image scanning
-   - Scans `services/example-api` Docker image
-   - Fails on HIGH/CRITICAL vulnerabilities
-   - Integrated into PR checks
-
-### AWS Well-Architected Framework Alignment
-
-The platform is designed around five pillars:
-- **Operational Excellence** – GitOps, automated deployments, monitoring
-- **Security** – IAM roles, network policies, secrets management, scanning
-- **Reliability** – Multi-AZ, auto-scaling, health checks
-- **Performance Efficiency** – Multi-arch, spot instances, caching
-- **Cost Optimization** – Graviton, spot, autoscaling, consolidation
+| Document | Description |
+|----------|------------|
+| [Platform Overview](docs/platform-overview.md) | High-level architecture |
+| [Tech Stack](docs/01-tech-stack.md) | Technology decisions |
+| [Terragrunt Strategy](docs/02-terragrunt-strategy.md) | Multi-env IaC approach |
+| [Scale Patterns](docs/scale-patterns.md) | 1k-5k node scaling design |
+| [Observability Architecture](docs/observability-architecture.md) | Monitoring/logging/tracing design |
+| [SRE Runbook](docs/sre-runbook.md) | Operational procedures |
+| [Runbooks](docs/runbooks/) | DNS failover, DR, sync failure procedures |
+| [Terraform README](terraform/README.md) | Module documentation |
+| [Terragrunt README](terragrunt/README.md) | Live config documentation |
+| [CHANGELOG](CHANGELOG.md) | Version history |
 
 ---
 
 ## Scale Targets
 
-Designed to support (from `docs/scale-patterns.md`):
-
 | Metric | Target |
 |--------|--------|
-| **Kubernetes Nodes** | 1,000 - 5,000 |
-| **Pods** | 100,000+ |
-| **Data Ingest** | 100 Gbps+ |
-| **API Latency** | <100ms P99 |
-| **DNS Latency** | <30ms P99 |
-| **Node Provisioning** | <60 seconds |
-| **Scale Rate** | 2,000 nodes/min |
+| Kubernetes Nodes | 1,000 - 5,000 |
+| Pods | 100,000+ |
+| Data Ingest | 100 Gbps+ |
+| API Latency | <100ms P99 |
+| Node Provisioning | <60 seconds |
 
 ---
 
 ## License
 
-See [LICENSE](LICENSE) file for details.
-
----
-
-## Contributing
-
-This is a reference architecture. Contributions welcome for:
-- Karpenter implementation
-- Multi-architecture examples
-- Security improvements
-- Documentation enhancements
-
----
-
-**Built for production gaming workloads. Designed for scale. Optimized for cost.**
+See [LICENSE](LICENSE) for details.
