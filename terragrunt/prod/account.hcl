@@ -13,4 +13,60 @@ locals {
   rds_allocated_storage = 100
   rds_multi_az          = true
   monitoring_replicas   = 3
+
+  # --- Scaling stack ---
+  karpenter_controller_replicas = 3
+  karpenter_log_level           = "warn"
+  enable_keda                   = true
+  keda_operator_replicas        = 3
+  keda_metrics_server_replicas  = 3
+  enable_hpa_defaults           = true
+  enable_wpa                    = false
+
+  karpenter_nodepools = {
+    x86 = {
+      enabled              = true
+      cpu_limit            = 2000
+      memory_limit         = 4000
+      spot_percentage      = 70
+      instance_families    = ["m6i", "m6a", "m5", "m5a"]
+      architectures        = ["amd64"]
+      consolidation_policy = "WhenEmptyOrUnderutilized"
+      consolidate_after    = "300s"
+      weight               = 10
+    }
+    arm64 = {
+      enabled              = true
+      cpu_limit            = 1000
+      memory_limit         = 2000
+      spot_percentage      = 70
+      instance_families    = ["m6g", "m7g", "c6g", "c7g"]
+      architectures        = ["arm64"]
+      consolidation_policy = "WhenEmptyOrUnderutilized"
+      consolidate_after    = "300s"
+      weight               = 20
+    }
+    c-series = {
+      enabled              = true
+      cpu_limit            = 500
+      memory_limit         = 1000
+      spot_percentage      = 60
+      instance_families    = ["c6i", "c6a", "c5", "c5a"]
+      architectures        = ["amd64"]
+      consolidation_policy = "WhenEmptyOrUnderutilized"
+      consolidate_after    = "300s"
+      weight               = 30
+    }
+    spot-flexible = {
+      enabled              = false
+      cpu_limit            = 0
+      memory_limit         = 0
+      spot_percentage      = 100
+      instance_families    = []
+      architectures        = ["amd64"]
+      consolidation_policy = "WhenEmptyOrUnderutilized"
+      consolidate_after    = "300s"
+      weight               = 40
+    }
+  }
 }

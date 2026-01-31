@@ -8,7 +8,7 @@
 # ---------------------------------------------------------------------------------------------------------------------
 
 terraform {
-  source = "tfr:///terraform-aws-modules/eks/aws?version=20.31.0"
+  source = "tfr:///terraform-aws-modules/eks/aws?version=21.15.1"
 }
 
 locals {
@@ -45,7 +45,7 @@ dependency "vpc" {
 
 inputs = {
   cluster_name    = local.cluster_name
-  cluster_version = "1.32"
+  cluster_version = "1.35"
 
   # Networking
   vpc_id                   = dependency.vpc.outputs.vpc_id

@@ -140,7 +140,7 @@ All sizing parameters are defined in each environment's `account.hcl`:
 
 ## Prerequisites
 
-- Terraform >= 1.5.0
+- Terraform >= 1.11.0
 - Terragrunt >= 0.68.0
 - AWS CLI configured with access to target accounts
 - IAM role `TerragruntDeployRole` in each account
