@@ -2,7 +2,7 @@ name: Go CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/terragrunt]
     paths:
       - "dns-monitor/**"
       - "failover-controller/**"

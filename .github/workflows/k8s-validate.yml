@@ -2,7 +2,7 @@ name: Kubernetes Manifest Validation
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/terragrunt]
     paths:
       - "k8s/**"
       - "kubernetes/**"

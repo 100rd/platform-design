@@ -2,7 +2,7 @@ name: Well-Architected Compliance
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/terragrunt]
     paths:
       - "terraform/**"
       - "checkov-policies/**"

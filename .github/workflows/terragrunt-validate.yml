@@ -2,7 +2,7 @@ name: Terragrunt Validate
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/terragrunt]
     paths:
       - "terragrunt/**"
       - "catalog/**"
@@ -37,25 +37,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate HCL syntax
+      - name: Validate HCL syntax (balanced braces)
+        shell: bash
         run: |
           ERRORS=0
-          for f in $(find catalog/ terragrunt/ -name '*.hcl' -not -path '*/.terragrunt-cache/*'); do
-            if ! python3 -c "
-import sys, re
-with open('$f') as fh:
-    content = fh.read()
-# Basic HCL syntax: balanced braces
-opens = content.count('{')
-closes = content.count('}')
-if opens != closes:
-    print(f'Unbalanced braces in $f: {opens} open, {closes} close')
-    sys.exit(1)
-" 2>/dev/null; then
+          while IFS= read -r f; do
+            OPENS=$(grep -o '{' "$f" | wc -l)
+            CLOSES=$(grep -o '}' "$f" | wc -l)
+            if [ "$OPENS" -ne "$CLOSES" ]; then
+              echo "::error file=${f}::Unbalanced braces: ${OPENS} open, ${CLOSES} close"
               ERRORS=$((ERRORS + 1))
             fi
-          done
-          if [ $ERRORS -gt 0 ]; then
+          done < <(find catalog/ terragrunt/ -name '*.hcl' -not -path '*/.terragrunt-cache/*')
+          if [ "$ERRORS" -gt 0 ]; then
             echo "::error::Found $ERRORS HCL files with syntax issues"
             exit 1
           fi

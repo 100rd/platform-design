@@ -2,7 +2,7 @@ name: ShellCheck
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/terragrunt]
     paths:
       - "**.sh"
   pull_request:

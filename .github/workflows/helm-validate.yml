@@ -2,7 +2,7 @@ name: Helm Chart Validation
 
 on:
   push:
-    branches: [ main ]
+    branches: [main, feature/terragrunt]
   pull_request:
 
 jobs:
