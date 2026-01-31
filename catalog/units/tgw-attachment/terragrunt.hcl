@@ -23,8 +23,8 @@ dependency "vpc" {
   config_path = "../vpc"
 
   mock_outputs = {
-    vpc_id                 = "vpc-mock"
-    private_subnets        = ["subnet-mock-1", "subnet-mock-2", "subnet-mock-3"]
+    vpc_id                  = "vpc-mock"
+    private_subnets         = ["subnet-mock-1", "subnet-mock-2", "subnet-mock-3"]
     private_route_table_ids = ["rtb-mock-1"]
   }
 

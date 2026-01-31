@@ -16,5 +16,5 @@ output "tunnel_details" {
     tunnel2_address    = v.tunnel2_address
     tunnel1_cgw_inside = v.tunnel1_cgw_inside_address
     tunnel2_cgw_inside = v.tunnel2_cgw_inside_address
-  }}
+  } }
 }

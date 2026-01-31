@@ -2,6 +2,12 @@ provider "aws" {
   region = "us-east-1"
 }
 
+variable "db_password" {
+  description = "RDS master password. Pass via TF_VAR_db_password env var or -var flag. Never hardcode."
+  type        = string
+  sensitive   = true
+}
+
 locals {
   cluster_name = "dns-failover-prod"
   tags = {
@@ -14,7 +20,7 @@ locals {
 # 1. VPC
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 5.0"
+  version = "~> 6.0"
 
   name = "${local.cluster_name}-vpc"
   cidr = "10.0.0.0/16"
@@ -47,7 +53,7 @@ module "eks_cluster" {
   source = "../../modules/eks-cluster"
 
   cluster_name    = local.cluster_name
-  cluster_version = "1.29"
+  cluster_version = "1.32"
 
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
@@ -73,7 +79,7 @@ module "rds" {
 
   db_name  = "dns_failover"
   username = "postgres"
-  password = "ChangeMeInProd123!" # In real prod, pass via var or secrets manager
+  password = var.db_password
 
   instance_class    = "db.t3.small"
   allocated_storage = 20

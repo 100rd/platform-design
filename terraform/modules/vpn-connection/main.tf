@@ -36,7 +36,7 @@ resource "aws_vpn_connection" "this" {
   tunnel2_preshared_key = try(each.value.tunnel2_psk, null)
 
   tags = merge(var.tags, {
-    Name   = "${var.name}-vpn-${each.key}"
+    Name    = "${var.name}-vpn-${each.key}"
     Partner = each.key
   })
 }
@@ -46,9 +46,9 @@ resource "aws_vpn_connection_route" "this" {
   for_each = { for item in flatten([
     for vpn_name, vpn in var.vpn_connections : [
       for cidr in try(vpn.static_routes, []) : {
-        key     = "${vpn_name}-${cidr}"
-        vpn_id  = vpn_name
-        cidr    = cidr
+        key    = "${vpn_name}-${cidr}"
+        vpn_id = vpn_name
+        cidr   = cidr
       }
     ] if vpn.static_routes_only
   ]) : item.key => item }

@@ -45,7 +45,7 @@ dependency "vpc" {
 
 inputs = {
   cluster_name    = local.cluster_name
-  cluster_version = "1.35"
+  cluster_version = "1.32"
 
   # Networking
   vpc_id                   = dependency.vpc.outputs.vpc_id

@@ -1,0 +1,43 @@
+name: Go CI
+
+on:
+  push:
+    branches: [main, feature/terragrunt]
+    paths:
+      - "dns-monitor/**"
+      - "failover-controller/**"
+      - "services/hello-world/**"
+      - ".github/workflows/go-ci.yml"
+  pull_request:
+    paths:
+      - "dns-monitor/**"
+      - "failover-controller/**"
+      - "services/hello-world/**"
+  workflow_dispatch:
+
+jobs:
+  go-build-test:
+    name: Build & Test (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - dns-monitor
+          - failover-controller
+          - services/hello-world
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.project }}/go.mod
+      - name: Go mod download
+        working-directory: ${{ matrix.project }}
+        run: go mod tidy && go mod download
+      - name: Go build
+        working-directory: ${{ matrix.project }}
+        run: go build ./...
+      - name: Go test
+        working-directory: ${{ matrix.project }}
+        run: go test -race -count=1 -timeout 60s ./...

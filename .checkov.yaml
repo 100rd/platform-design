@@ -1,5 +1,0 @@
-external_checks_dir:
-  - checkov-policies
-framework:
-  - terraform
-download-external-modules: true

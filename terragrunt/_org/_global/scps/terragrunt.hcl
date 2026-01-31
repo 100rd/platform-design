@@ -17,8 +17,8 @@ dependency "organization" {
   config_path = "../organization"
 
   mock_outputs = {
-    organization_id   = "o-mock"
-    ou_ids            = {
+    organization_id = "o-mock"
+    ou_ids = {
       Root           = "r-mock"
       Security       = "ou-mock-sec"
       Infrastructure = "ou-mock-infra"

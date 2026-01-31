@@ -1,6 +1,6 @@
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 21.15"  # Updated 2026-01-28 from 21.8.0
+  version = "~> 21.15" # Updated 2026-01-28 from 21.8.0
 
   cluster_name                   = var.cluster_name
   cluster_version                = var.cluster_version
@@ -79,7 +79,7 @@ module "eks" {
 # Karpenter submodule for IAM roles and infrastructure
 module "karpenter" {
   source  = "terraform-aws-modules/eks/aws//modules/karpenter"
-  version = "~> 21.15"  # Updated 2026-01-28 from 21.8.0
+  version = "~> 21.15" # Updated 2026-01-28 from 21.8.0
 
   cluster_name = module.eks.cluster_name
 

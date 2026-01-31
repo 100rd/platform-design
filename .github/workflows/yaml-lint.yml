@@ -2,16 +2,23 @@ name: YAML Lint
 
 on:
   push:
-    branches: [ main ]
+    branches: [main, feature/terragrunt]
+    paths:
+      - "**.yaml"
+      - "**.yml"
+      - ".yamllint.yml"
   pull_request:
+    paths:
+      - "**.yaml"
+      - "**.yml"
+      - ".yamllint.yml"
 
 jobs:
   yamllint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4  # Updated from v3
+      - uses: actions/checkout@v4
       - name: Install yamllint
         run: pip install yamllint
-      - name: Lint Helm charts
-        run: |
-          find . -name Chart.yaml -not -path './.git/*' -exec dirname {} ';' | xargs yamllint
+      - name: Lint YAML files
+        run: yamllint -c .yamllint.yml -f github .

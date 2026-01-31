@@ -1,0 +1,31 @@
+name: ShellCheck
+
+on:
+  push:
+    branches: [main, feature/terragrunt]
+    paths:
+      - "**.sh"
+      - ".github/workflows/shellcheck.yml"
+  pull_request:
+    paths:
+      - "**.sh"
+  workflow_dispatch:
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ShellCheck
+        run: |
+          ERRORS=0
+          for script in $(find . -name '*.sh' -not -path './.git/*' -not -path '*/.terragrunt-cache/*'); do
+            echo "Checking: $script"
+            if ! shellcheck --severity=error "$script"; then
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+          if [ $ERRORS -gt 0 ]; then
+            echo "::error::ShellCheck found issues in $ERRORS scripts"
+            exit 1
+          fi

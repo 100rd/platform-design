@@ -1,0 +1,14 @@
+title = "Gitleaks config for platform-design"
+
+[allowlist]
+  description = "Allowlist for known false positives"
+  paths = [
+    '''\.terraform\.lock\.hcl''',
+    '''go\.sum''',
+    '''go\.mod''',
+  ]
+  regexTarget = "match"
+  regexes = [
+    # Placeholder AWS account IDs used in Terragrunt configs
+    '''(?:0{12}|1{12}|2{12}|3{12}|4{12}|5{12})''',
+  ]

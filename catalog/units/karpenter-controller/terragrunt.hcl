@@ -39,9 +39,9 @@ dependency "karpenter_iam" {
   config_path = "../karpenter-iam"
 
   mock_outputs = {
-    iam_role_arn          = "arn:aws:iam::123456789012:role/mock-karpenter-role"
-    queue_name            = "mock-karpenter-queue"
-    node_iam_role_name    = "mock-karpenter-node-role"
+    iam_role_arn       = "arn:aws:iam::123456789012:role/mock-karpenter-role"
+    queue_name         = "mock-karpenter-queue"
+    node_iam_role_name = "mock-karpenter-node-role"
   }
 
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
@@ -93,9 +93,9 @@ inputs = {
   cluster_name     = dependency.eks.outputs.cluster_name
   cluster_endpoint = dependency.eks.outputs.cluster_endpoint
 
-  karpenter_controller_role_arn       = dependency.karpenter_iam.outputs.iam_role_arn
-  karpenter_interruption_queue_name   = dependency.karpenter_iam.outputs.queue_name
-  karpenter_node_iam_role_name        = dependency.karpenter_iam.outputs.node_iam_role_name
+  karpenter_controller_role_arn     = dependency.karpenter_iam.outputs.iam_role_arn
+  karpenter_interruption_queue_name = dependency.karpenter_iam.outputs.queue_name
+  karpenter_node_iam_role_name      = dependency.karpenter_iam.outputs.node_iam_role_name
 
   controller_replicas = try(local.account_vars.locals.karpenter_controller_replicas, 2)
   log_level           = try(local.account_vars.locals.karpenter_log_level, "info")

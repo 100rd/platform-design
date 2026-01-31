@@ -1,11 +1,11 @@
 resource "helm_release" "kube_prometheus_stack" {
   count = var.enable_prometheus ? 1 : 0
 
-  name       = "kube-prometheus-stack"
-  repository = "https://prometheus-community.github.io/helm-charts"
-  chart      = "kube-prometheus-stack"
-  version    = "81.2.2" # Updated 2026-01-28 from 56.0.0
-  namespace  = "monitoring"
+  name             = "kube-prometheus-stack"
+  repository       = "https://prometheus-community.github.io/helm-charts"
+  chart            = "kube-prometheus-stack"
+  version          = "81.2.2" # Updated 2026-01-28 from 56.0.0
+  namespace        = "monitoring"
   create_namespace = true
 
   values = [

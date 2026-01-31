@@ -24,7 +24,7 @@ dependency "tgw" {
 
   mock_outputs = {
     transit_gateway_id = "tgw-mock"
-    route_table_ids    = {
+    route_table_ids = {
       prod    = "tgw-rtb-mock-prod"
       nonprod = "tgw-rtb-mock-nonprod"
       shared  = "tgw-rtb-mock-shared"

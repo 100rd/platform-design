@@ -30,10 +30,10 @@ inputs = {
   # or to a dedicated security account if created later
   delegated_admin_account_id = local.account_vars.locals.account_id
 
-  enable_s3_protection        = true
-  enable_eks_protection       = true
-  enable_malware_protection   = true
-  auto_enable_new_accounts    = true
+  enable_s3_protection      = true
+  enable_eks_protection     = true
+  enable_malware_protection = true
+  auto_enable_new_accounts  = true
 
   tags = {
     Environment = "management"

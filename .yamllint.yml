@@ -1,0 +1,25 @@
+---
+extends: default
+
+rules:
+  line-length:
+    max: 200
+    level: warning
+  document-start: disable
+  truthy:
+    level: warning
+  comments:
+    min-spaces-from-content: 1
+  braces:
+    max-spaces-inside: 1
+  indentation:
+    spaces: 2
+    indent-sequences: whatever
+
+ignore:
+  # Helm templates contain Go template syntax that isn't valid YAML
+  - "helm/**/templates/"
+  - "apps/**/templates/"
+  # Generated / vendored
+  - ".git/"
+  - "node_modules/"

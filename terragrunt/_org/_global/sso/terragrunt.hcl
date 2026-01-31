@@ -18,7 +18,7 @@ dependency "organization" {
 
   mock_outputs = {
     organization_id = "o-mock"
-    account_ids     = {
+    account_ids = {
       network = "555555555555"
       dev     = "111111111111"
       staging = "222222222222"
@@ -32,8 +32,8 @@ dependency "organization" {
 }
 
 inputs = {
-  organization_id  = dependency.organization.outputs.organization_id
-  member_accounts  = local.account_vars.locals.member_accounts
+  organization_id = dependency.organization.outputs.organization_id
+  member_accounts = local.account_vars.locals.member_accounts
 
   permission_sets = {
     AdministratorAccess = {
