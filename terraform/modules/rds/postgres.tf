@@ -5,9 +5,9 @@ module "db" {
   identifier = var.identifier
 
   engine               = "postgres"
-  engine_version       = "15"
-  family               = "postgres15" # DB parameter group
-  major_engine_version = "15"         # DB option group
+  engine_version       = "17"
+  family               = "postgres17" # DB parameter group
+  major_engine_version = "17"         # DB option group
   instance_class       = var.instance_class
 
   allocated_storage     = var.allocated_storage
