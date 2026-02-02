@@ -23,7 +23,7 @@ variable "subnet_ids" {
 variable "instance_types" {
   description = "List of instance types for the node groups"
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["m5.large"]
 }
 
 variable "min_size" {
@@ -42,6 +42,12 @@ variable "desired_size" {
   description = "Desired number of nodes in the node group"
   type        = number
   default     = 3
+}
+
+variable "cluster_endpoint_public_access" {
+  description = "Whether the EKS API server endpoint is publicly accessible. Should be false for production."
+  type        = bool
+  default     = false
 }
 
 variable "tags" {

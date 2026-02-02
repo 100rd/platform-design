@@ -1,12 +1,14 @@
-FROM golang:1.22-alpine AS builder
+FROM golang:1.23-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/api .
+RUN CGO_ENABLED=0 go build -o api .
 
-FROM gcr.io/distroless/static:nonroot
-COPY --from=builder /app/api /api
-USER nonroot:nonroot
+FROM alpine:3.21
+RUN adduser -D -u 65534 nonroot
+WORKDIR /app
+COPY --from=builder /app/api .
+USER nonroot
 EXPOSE 8080
-ENTRYPOINT ["/api"]
+CMD ["./api"]

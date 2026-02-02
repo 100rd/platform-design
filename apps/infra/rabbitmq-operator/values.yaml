@@ -1,0 +1,104 @@
+# RabbitMQ Cluster Operator Configuration
+# https://www.rabbitmq.com/kubernetes/operator/operator-overview
+
+rabbitmq-cluster-operator:
+  enabled: true
+
+  # Install CRDs (RabbitmqCluster, etc.)
+  useCertManager: false
+  clusterOperator:
+    # HA Configuration - 2 replicas
+    replicaCount: 2
+
+    # Resource limits
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    # Security context
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      fsGroup: 1000
+      seccompProfile:
+        type: RuntimeDefault
+
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+
+    # Pod anti-affinity for HA
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                      - rabbitmq-cluster-operator
+              topologyKey: kubernetes.io/hostname
+
+    # Tolerations for system nodes
+    tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+
+    # Priority class
+    priorityClassName: system-cluster-critical
+
+    # Pod disruption budget
+    pdb:
+      create: true
+      minAvailable: 1
+
+    # Prometheus metrics
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+        namespace: monitoring
+        interval: 30s
+        labels:
+          prometheus: kube-prometheus
+
+  # Messaging Topology Operator
+  msgTopologyOperator:
+    enabled: true
+    replicaCount: 1
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      fsGroup: 1000
+      seccompProfile:
+        type: RuntimeDefault
+
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+          - ALL
+
+  # Default RabbitmqCluster settings applied to all instances
+  rabbitmqImage:
+    registry: docker.io
+    repository: bitnami/rabbitmq

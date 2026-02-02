@@ -305,10 +305,9 @@ fluent-bit:
   # DaemonSet mode - run on every node
   kind: DaemonSet
 
-  # Image configuration
+  # Image configuration - tag omitted to follow chart-default version
   image:
     repository: fluent/fluent-bit
-    tag: 3.1.9
     pullPolicy: IfNotPresent
 
   # Service account

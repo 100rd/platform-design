@@ -4,8 +4,8 @@
 cert-manager:
   enabled: true
 
-  # Install CRDs
-  installCRDs: true
+  # CRDs are managed by Terraform (platform-crds module) — do not install via Helm
+  installCRDs: false
 
   # Replica count for HA
   replicaCount: 2

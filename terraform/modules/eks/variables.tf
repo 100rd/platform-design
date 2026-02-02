@@ -22,7 +22,7 @@ variable "private_subnet_ids" {
 variable "karpenter_controller_instance_types" {
   description = "Instance types for Karpenter controller node group"
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["m5.large"]
 }
 
 variable "karpenter_controller_desired_size" {
@@ -47,6 +47,12 @@ variable "karpenter_node_iam_role_additional_policies" {
   description = "Additional IAM policies to attach to Karpenter node IAM role"
   type        = map(string)
   default     = {}
+}
+
+variable "cluster_endpoint_public_access" {
+  description = "Whether the EKS API server endpoint is publicly accessible. Should be false for production."
+  type        = bool
+  default     = false
 }
 
 variable "tags" {

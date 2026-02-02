@@ -8,8 +8,8 @@ module "eks" {
   # Authentication mode for EKS v21+
   authentication_mode = "API_AND_CONFIG_MAP"
 
-  # WARNING: Disable public access for production clusters. Use VPN/bastion instead.
-  cluster_endpoint_public_access = true
+  cluster_endpoint_public_access  = var.cluster_endpoint_public_access
+  cluster_endpoint_private_access = true
 
   vpc_id     = var.vpc_id
   subnet_ids = var.subnet_ids
