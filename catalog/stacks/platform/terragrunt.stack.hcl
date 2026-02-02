@@ -2,7 +2,8 @@
 # Platform Stack Template
 # ---------------------------------------------------------------------------------------------------------------------
 # Composable stack that deploys the full platform infrastructure:
-#   VPC → TGW Attachment → EKS → Karpenter + Monitoring + RDS
+#   VPC → TGW Attachment → EKS → Platform CRDs → ArgoCD
+#                                   ├── Karpenter + Monitoring + RDS
 #
 # Each unit reads its environment-specific configuration from account.hcl and region.hcl
 # in the live tree. Dependencies between units are resolved automatically by Terragrunt.
@@ -31,6 +32,16 @@ unit "secrets" {
 unit "eks" {
   source = "${get_repo_root()}/catalog/units/eks"
   path   = "eks"
+}
+
+unit "platform-crds" {
+  source = "${get_repo_root()}/catalog/units/platform-crds"
+  path   = "platform-crds"
+}
+
+unit "argocd" {
+  source = "${get_repo_root()}/catalog/units/argocd"
+  path   = "argocd"
 }
 
 unit "karpenter-iam" {

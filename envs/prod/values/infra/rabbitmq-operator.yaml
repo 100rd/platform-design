@@ -1,0 +1,23 @@
+# Production environment overrides for RabbitMQ Operator
+
+rabbitmq-cluster-operator:
+  clusterOperator:
+    replicaCount: 2
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+  msgTopologyOperator:
+    replicaCount: 2
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
