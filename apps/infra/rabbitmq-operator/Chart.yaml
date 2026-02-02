@@ -1,0 +1,27 @@
+apiVersion: v2
+name: rabbitmq-operator
+description: RabbitMQ Cluster Operator - Kubernetes-native RabbitMQ lifecycle management
+version: 1.0.0
+appVersion: "2.12.0"
+type: application
+
+dependencies:
+  - name: rabbitmq-cluster-operator
+    version: "4.3.26"
+    repository: https://charts.bitnami.com/bitnami
+    condition: rabbitmq-cluster-operator.enabled
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - rabbitmq
+  - messaging
+  - amqp
+  - operator
+  - queue
+
+annotations:
+  category: Messaging
+  platform: Kubernetes

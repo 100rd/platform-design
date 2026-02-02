@@ -15,7 +15,7 @@ resource "helm_release" "karpenter" {
   chart               = "karpenter"
   version             = var.karpenter_version
 
-  # Ensure CRDs are installed by Helm (this is the default, explicit for clarity)
+  # Karpenter CRDs are managed by this Helm chart (not in platform-crds module)
   skip_crds = false
 
   # Wait for resources to be ready
