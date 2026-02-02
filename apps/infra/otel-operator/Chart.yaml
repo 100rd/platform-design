@@ -1,0 +1,11 @@
+---
+apiVersion: v2
+name: otel-operator
+description: OpenTelemetry Operator with auto-instrumentation for Go applications
+version: 0.1.0
+type: application
+
+dependencies:
+  - name: opentelemetry-operator
+    version: "0.74.0"
+    repository: "https://open-telemetry.github.io/opentelemetry-helm-charts"

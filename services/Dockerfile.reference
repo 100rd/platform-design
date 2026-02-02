@@ -1,0 +1,27 @@
+# Reference Dockerfile for 12-factor cloud-native Go services.
+# Copy this to your service directory and adjust the build target.
+#
+# Best practices applied:
+# - Multi-stage build (builder -> distroless)
+# - Non-root user
+# - Minimal attack surface (no shell, no OS packages)
+# - Static binary (CGO_ENABLED=0)
+# - Stripped binary (-ldflags="-s -w")
+
+FROM golang:1.22-alpine AS builder
+WORKDIR /app
+
+# Cache dependency downloads
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Build static binary
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/server .
+
+# Runtime stage - distroless for minimal image
+FROM gcr.io/distroless/static:nonroot
+COPY --from=builder /app/server /server
+USER nonroot:nonroot
+EXPOSE 8080
+ENTRYPOINT ["/server"]

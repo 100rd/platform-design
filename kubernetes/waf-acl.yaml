@@ -1,0 +1,42 @@
+---
+# WAF WebACL configuration for ALB Ingress.
+# Reference this ACL ARN in Ingress annotations:
+#   alb.ingress.kubernetes.io/wafv2-acl-arn: <acl-arn>
+#
+# This file documents the WAF rules to be provisioned via Terraform.
+# AWS WAFv2 resources must be created in Terraform (not K8s manifests).
+# The ALB Controller integrates with WAF via the annotation above.
+#
+# Recommended WAF rules for cloud-native Go APIs:
+#
+# 1. AWS Managed Rules - Core Rule Set (CRS)
+#    - Protects against OWASP Top 10
+#
+# 2. AWS Managed Rules - Known Bad Inputs
+#    - Blocks requests with known exploit patterns
+#
+# 3. Rate Limiting Rule
+#    - Limit: 2000 requests per 5 minutes per IP
+#    - Action: Block
+#
+# 4. IP Reputation Rule
+#    - AWS Managed IP reputation list
+#
+# 5. Geographic Restriction (optional)
+#    - Allow only expected regions
+#
+# Example Ingress annotation to attach WAF:
+# metadata:
+#   annotations:
+#     alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:eu-west-1:ACCOUNT:regional/webacl/platform-waf/ID
+#     alb.ingress.kubernetes.io/shield-advanced-protection: "true"
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: waf-reference
+  namespace: kube-system
+data:
+  README: |
+    WAF WebACL is managed via Terraform module terraform/modules/waf/.
+    Attach to ALB Ingress via annotation:
+      alb.ingress.kubernetes.io/wafv2-acl-arn: <your-acl-arn>

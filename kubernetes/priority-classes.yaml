@@ -1,0 +1,36 @@
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: platform-critical
+description: "Platform infrastructure components (monitoring, ingress, cert-manager)"
+value: 1000000
+preemptionPolicy: PreemptLowerPriority
+globalDefault: false
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: high-priority
+description: "Production application workloads"
+value: 100000
+preemptionPolicy: PreemptLowerPriority
+globalDefault: false
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: default
+description: "Default priority for general workloads"
+value: 0
+preemptionPolicy: PreemptLowerPriority
+globalDefault: true
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: batch
+description: "Batch processing, admin jobs, and one-off tasks"
+value: -100
+preemptionPolicy: Never
+globalDefault: false

@@ -1,0 +1,44 @@
+# OpenTelemetry Operator Configuration
+# Deploys the operator + auto-instrumentation CRDs for Go services
+
+opentelemetry-operator:
+  enabled: true
+
+  replicaCount: 2
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                    - opentelemetry-operator
+            topologyKey: kubernetes.io/hostname
+
+  tolerations:
+    - key: CriticalAddonsOnly
+      operator: Exists
+
+  manager:
+    collectorImage:
+      repository: otel/opentelemetry-collector-contrib
+    autoInstrumentationImage:
+      go:
+        repository: ghcr.io/open-telemetry/opentelemetry-go-instrumentation/autoinstrumentation-go
+        tag: "v0.18.0-alpha"
+
+  admissionWebhooks:
+    certManager:
+      enabled: true
