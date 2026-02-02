@@ -1,4 +1,4 @@
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -7,15 +7,13 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o failover-controller .
 
-FROM alpine:latest
+FROM alpine:3.21
+RUN apk --no-cache add ca-certificates
+RUN adduser -D -u 65534 nonroot
+RUN mkdir -p /var/lib/failover-controller && chown nonroot:nonroot /var/lib/failover-controller
 WORKDIR /app
 COPY --from=builder /app/failover-controller .
 
-# Install ca-certificates for HTTPS (registrar API calls).
-RUN apk --no-cache add ca-certificates
-
-# Create the default state persistence directory.
-RUN mkdir -p /var/lib/failover-controller
-
+USER nonroot
 EXPOSE 8080
 CMD ["./failover-controller"]

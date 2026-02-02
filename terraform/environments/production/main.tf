@@ -61,7 +61,7 @@ module "eks_cluster" {
   min_size     = 3
   max_size     = 6
   desired_size = 3
-  instance_types = ["t3.medium"]
+  instance_types = ["m5.large"]
 
   tags = local.tags
 }
@@ -84,6 +84,7 @@ module "rds" {
   instance_class    = "db.t3.small"
   allocated_storage = 20
   multi_az          = true
+  environment       = "prod"
 
   tags = local.tags
 }
