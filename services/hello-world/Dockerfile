@@ -1,10 +1,9 @@
 FROM golang:1.23-alpine AS builder
 WORKDIR /app
-COPY go.mod .
-COPY go.sum .
+COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o hello-world main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/hello-world .
 
 FROM alpine:3.21
 RUN adduser -D -u 65534 nonroot
@@ -12,5 +11,4 @@ WORKDIR /app
 COPY --from=builder /app/hello-world .
 USER nonroot
 EXPOSE 8080
-ENTRYPOINT ["./hello-world"]
-
+ENTRYPOINT ["/hello-world"]
