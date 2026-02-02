@@ -1,517 +1,518 @@
 # Platform Design Review: Gaps, Outdated Software, and Weaknesses
 
-**Review Date**: 2026-01-28
+**Review Date**: 2026-02-02 (Updated)
+**Previous Review**: 2026-01-28
 **Reviewed By**: Architecture Review
-**Scope**: Complete platform design including Terraform, Kubernetes, Helm charts, services, and documentation
+**Scope**: Complete platform design including Terraform, Kubernetes, Helm charts, services, CI/CD, and documentation
 
 ---
 
 ## Executive Summary
 
-This document identifies critical gaps, outdated software versions, architectural weaknesses, and outdated tools/techniques in the platform design. Issues are categorized by severity:
+This is a **second-pass review** of the platform design. Some issues from the initial review have been addressed (EKS version updated to 1.34, Karpenter NodePools use v1 API, VPC module updated to v6.5.0, EKS module to v21.8.0). However, many issues remain unfixed, and this review identifies additional findings with accurate version comparisons against current stable releases.
 
-- **CRITICAL**: Must be addressed before production deployment
-- **HIGH**: Should be addressed within 30 days
-- **MEDIUM**: Should be addressed within 90 days
-- **LOW**: Technical debt to address in future sprints
+**Severity scale**:
+- **CRITICAL**: Must fix before production deployment
+- **HIGH**: Address within 30 days
+- **MEDIUM**: Address within 90 days
+- **LOW**: Technical debt for future sprints
 
 ---
 
 ## 1. Outdated Software Versions
 
-### 1.1 CRITICAL: Go Runtime and Dependencies
+### 1.1 CRITICAL: Go Runtime - 4 Major Versions Behind
 
-| Component | Current Version | Latest Stable | Gap | Risk |
-|-----------|----------------|---------------|-----|------|
-| **hello-world service** | Go 1.22 | Go 1.23.x | 1 major | Missing security patches, performance improvements |
-| **dns-monitor service** | Go 1.21 | Go 1.23.x | 2 major | Inconsistent Go versions across services |
-| **failover-controller** | Go 1.21 | Go 1.23.x | 2 major | Older Go version, missing features |
-| **prometheus/client_golang** | v1.17.0 (hello-world) | v1.20.x+ | 3 minor | Missing metrics improvements, security fixes |
-| **prometheus/client_golang** | v1.19.0 (dns-monitor) | v1.20.x+ | 1 minor | Version inconsistency between services |
+All Go services are severely outdated. Go 1.21 reaches end-of-life when Go 1.26 releases (expected Feb 2026). Go 1.22 is one release from EOL.
 
-**Recommendation**: Standardize all Go services to Go 1.23.x and update prometheus/client_golang to v1.20.x+.
+| Service | Current | Latest Stable | Versions Behind | EOL Risk |
+|---------|---------|---------------|-----------------|----------|
+| **hello-world** | Go 1.22 | Go 1.25.6 | 3 major | Near EOL |
+| **dns-monitor** | Go 1.21 | Go 1.25.6 | 4 major | **Already EOL** |
+| **failover-controller** | Go 1.21 | Go 1.25.6 | 4 major | **Already EOL** |
+| **example-api** (Dockerfile) | Go 1.21-alpine | Go 1.25.6 | 4 major | **Already EOL** |
 
-### 1.2 HIGH: GitHub Actions Versions
+**Dependencies also outdated**:
 
-| Action | Current Version | Latest | Issue |
-|--------|----------------|--------|-------|
-| **actions/checkout** | v3 | v4 | 1 major version behind |
-| **bridgecrewio/checkov-action** | v12 | v12+ | Needs verification |
-| **aquasecurity/trivy-action** | v0.12.0 | v0.28.x+ | Significantly outdated (2+ years old) |
+| Dependency | Service | Current | Latest |
+|-----------|---------|---------|--------|
+| prometheus/client_golang | hello-world | v1.17.0 | v1.21.x+ |
+| prometheus/client_golang | dns-monitor, failover | v1.19.0 | v1.21.x+ |
+| miekg/dns | dns-monitor | v1.1.58 | v1.1.62+ |
 
-**Recommendation**: Update all GitHub Actions to latest major versions to get security fixes and new features.
+**Impact**: Missing 3 years of security patches, Swiss Tables maps (60% faster), FIPS 140-3 support, and performance improvements.
 
-### 1.3 HIGH: External Secrets Operator
+**Action**: Upgrade all services to Go 1.25.x immediately.
+
+### 1.2 CRITICAL: Helm Chart Versions - Significantly Behind
+
+| Chart | Current | Latest | Versions Behind | Impact |
+|-------|---------|--------|-----------------|--------|
+| **kube-prometheus-stack** | ~65.3.0 | **81.4.2** | ~16 minor | Missing Prometheus 3.x features, bug fixes, CRD updates |
+| **Thanos (Bitnami)** | ~15.7.0 | **17.3.1** | 2 major | Missing Thanos 0.40.x features, security fixes |
+| **Loki** | ~6.6.0 | **6.51.0** | ~45 minor | Missing Loki 3.x improvements, schema updates |
+| **Fluent Bit** | ~0.47.0 | **0.55.0** | 8 minor | Missing Fluent Bit 4.x, log processing improvements |
+| **Tempo Distributed** | ~1.9.0 | Latest (Tempo 2.9) | Multiple | Missing Tempo 2.9 features, breaking changes |
+| **OTel Collector** | ~0.96.0 | **0.143.0** | ~47 minor | Massive gap - missing critical collector improvements |
+| **Pyroscope** | ~1.7.0 | Latest | Multiple | Missing profiling improvements |
+
+**Most concerning**: OpenTelemetry Collector is ~47 versions behind. This is one of the fastest-moving projects in the CNCF ecosystem.
+
+**Action**: Update all Helm chart dependencies. Test in dev first as kube-prometheus-stack and Thanos have breaking changes.
+
+### 1.3 CRITICAL: External Secrets Operator - Entire Major Version Behind
 
 | Component | Current | Latest | Gap |
 |-----------|---------|--------|-----|
-| **External Secrets Operator** | v0.18.0 | v0.14.x (rebranded versioning) | The chart version `0.18.0` appears inconsistent with dependency `^0` |
+| **External Secrets chart** | v0.18.0 (appVersion v0.18.0) | **v1.3.1** (appVersion v1.2.1) | 1 full major version |
+| **Dependency pin** | `"^0"` | Should be `"~1.3.0"` | Dangerously permissive |
 
-**Issue**: The dependency version `"^0"` is too permissive and could lead to unexpected breaking changes during upgrades.
+**File**: `apps/infra/external-secrets/Chart.yaml:10`
 
-**Recommendation**: Pin to a specific version (e.g., `"0.14.1"`) for reproducible deployments.
+The External Secrets Operator has graduated to **v1.x** with stable APIs. The current `v0.x` line is deprecated. The `"^0"` dependency constraint is extremely dangerous - it will match any `0.x.y` version but NOT the `1.x` line, leaving you permanently pinned to deprecated software.
 
-### 1.4 MEDIUM: Azure Documentation - Outdated Versions
+**Additional concern**: The `unsafeServeV1Beta1` flag is being removed on **2026-05-01**, breaking v1beta1 API consumers.
 
-| Component | Documented Version | Latest | Gap |
-|-----------|-------------------|--------|-----|
-| **Kubernetes (AKS)** | 1.28.3 | 1.31.x+ | 3 minor versions behind |
-| **Cilium** | 1.14.5 | 1.16.x+ | 2 minor versions behind |
-| **Ubuntu VM Image** | 18.04-LTS | 22.04-LTS or 24.04-LTS | 18.04 is EOL (April 2023 for free tier) |
+**Action**: Upgrade to ESO v1.x and pin to `"~1.3.0"`.
 
-**CRITICAL**: Ubuntu 18.04 is End-of-Life and no longer receives security updates!
+### 1.4 HIGH: GitHub Actions - Outdated
 
-### 1.5 MEDIUM: Karpenter API Version Mismatch
+**File**: `.github/workflows/well-architected.yml`
 
-**Azure Documentation uses outdated Karpenter API**:
-```yaml
-# Documented (OUTDATED):
-apiVersion: karpenter.sh/v1beta1
-kind: Provisioner
+| Action | Current | Latest | Gap |
+|--------|---------|--------|-----|
+| **actions/checkout** | v3 | **v4** | 1 major |
+| **aquasecurity/trivy-action** | **v0.12.0** | **v0.33.1** | 21 minor versions (2+ years old) |
 
-# Current (v1.0+):
-apiVersion: karpenter.sh/v1
-kind: NodePool
+Trivy v0.12.0 uses an ancient Trivy binary that lacks:
+- Detection for thousands of newer CVEs
+- Support for SBOM scanning
+- OCI artifact scanning
+- Next-gen Trivy features (arriving 2026)
+
+**Action**: Update `actions/checkout@v4` and `trivy-action@v0.33.1`.
+
+### 1.5 HIGH: Monitoring Module Version Drift
+
+**File**: `terraform/modules/monitoring/prometheus.tf:7`
+
+The Terraform monitoring module pins kube-prometheus-stack to `56.0.0`, while the Helm chart in `apps/infra/observability/prometheus-stack/Chart.yaml` references `~65.3.0`.
+
+| Location | Version | Gap |
+|----------|---------|-----|
+| Terraform module | 56.0.0 | **25 versions behind** the Helm chart |
+| Helm chart dependency | ~65.3.0 | 16 versions behind latest |
+
+**Additional issue in monitoring module**:
 ```
-
-The Karpenter documentation for Azure still references:
-- `Provisioner` CRD (deprecated, replaced by `NodePool`)
-- `karpenter.sh/v1beta1` API (migrated to `karpenter.sh/v1`)
-- `AzureProvider` CRD pattern that changed in recent versions
-
----
-
-## 2. Design Gaps
-
-### 2.1 CRITICAL: Missing Disaster Recovery Plan
-
-**Gap**: No comprehensive DR plan documented.
-
-**Missing Elements**:
-- RTO/RPO targets for each tier (database, cache, application)
-- Cross-region failover procedures
-- Database backup restoration procedures
-- State recovery for Kafka/Redis
-- DNS failover automation (partial - dns-monitor exists but not integrated)
-
-**Recommendation**: Document complete DR runbook with tested procedures.
-
-### 2.2 CRITICAL: No Secret Rotation Strategy
-
-**Gap**: While secrets are stored in AWS Secrets Manager, there's no documented rotation strategy.
-
-**Missing Elements**:
-- Database credential rotation automation
-- API key rotation procedures
-- Certificate renewal automation
-- Service account key rotation
-
-**Recommendation**: Implement AWS Secrets Manager automatic rotation with Lambda functions.
-
-### 2.3 HIGH: Incomplete Multi-Region Support
-
-**Gap**: Documentation mentions multi-region as "Phase 3" but lacks implementation details.
-
-**Missing Elements**:
-- Aurora Global Database configuration
-- Cross-region Kafka replication
-- Global load balancing setup
-- Data consistency guarantees
-- Region failover procedures
-
-### 2.4 HIGH: Missing Pod Security Standards
-
-**Gap**: While OPA/Gatekeeper is mentioned as "planned", there are no Pod Security Standards implemented.
-
-**Current State**:
-- No `PodSecurityPolicy` (deprecated in K8s 1.25+)
-- No `Pod Security Admission` configuration
-- No OPA/Gatekeeper policies defined
-
-**Recommendation**: Implement Kubernetes Pod Security Admission with `restricted` profile for production namespaces.
-
-### 2.5 HIGH: Incomplete Network Policies
-
-**Gap**: Only 3 basic network policies exist:
-- `default-deny-all.yaml`
-- `allow-dns-egress.yaml`
-- `allow-from-same-namespace.yaml`
-
-**Missing Elements**:
-- Namespace-specific ingress/egress rules
-- Database tier isolation
-- Observability stack policies
-- External service whitelist
-- Kafka/Redis specific policies
-
-### 2.6 MEDIUM: No GitOps for Infrastructure
-
-**Gap**: ArgoCD is configured for applications but Terraform/Terragrunt changes are manual.
-
-**Recommendation**: Implement Atlantis or similar for GitOps-style infrastructure changes.
-
-### 2.7 MEDIUM: Missing Capacity Planning Documentation
-
-**Gap**: Scale patterns document mentions 5,000 nodes but no capacity planning guide exists.
-
-**Missing Elements**:
-- Resource quota templates per tier
-- Node sizing recommendations
-- Database sizing guidelines
-- Network capacity planning
-
-### 2.8 MEDIUM: Incomplete Backup Strategy
-
-**Gap**: Aurora backups mentioned but no complete backup strategy.
-
-**Missing Elements**:
-- Kubernetes resource backups (Velero)
-- Persistent volume snapshots
-- ConfigMap/Secret backups
-- Helm release state backup
-
----
-
-## 3. Architectural Weaknesses
-
-### 3.1 CRITICAL: Single Region Design
-
-**Weakness**: Primary design targets single AWS region (`us-east-1`).
-
-**Risks**:
-- Regional outage causes complete service unavailability
-- No geographic redundancy for data
-- Higher latency for geographically distant users
-
-**Recommendation**: Implement active-passive multi-region architecture for critical workloads.
-
-### 3.2 HIGH: Observability Stack Sizing Concerns
-
-**Weakness**: Prometheus with 2-hour local retention may cause data gaps.
-
-**Issues**:
-- If Thanos sidecar fails, metrics could be lost
-- No HA for Thanos compactor (single replica)
-- Pyroscope retention (7 days) may be too short for debugging
-
-**Recommendation**:
-- Increase Prometheus retention to 6-12 hours as buffer
-- Deploy Thanos compactor with leader election
-- Consider extending Pyroscope retention to 14 days
-
-### 3.3 HIGH: Database Single Point of Failure Risks
-
-**Weakness**: While Aurora Multi-AZ is mentioned, several database concerns exist:
-
-**Issues**:
-- No connection pooling (PgBouncer) for PostgreSQL
-- No read replica routing for read-heavy workloads
-- Redis configuration not specified (single instance vs cluster)
-- Kafka replication factor not specified
-
-**Recommendation**: Implement PgBouncer, document Redis cluster mode, ensure Kafka replication factor >= 3.
-
-### 3.4 MEDIUM: Spot Instance Over-Reliance
-
-**Weakness**: NodePools configured with high spot percentages:
-- x86-general: 80% spot
-- arm64-graviton: 90% spot
-- spot-flexible: 100% spot
-
-**Risks**:
-- Spot interruptions could cause service degradation
-- No guaranteed capacity during high-demand periods
-- Complex application state handling during interruptions
-
-**Recommendation**:
-- Reduce spot percentage for stateful workloads to 50% max
-- Implement proper Pod Disruption Budgets
-- Configure Karpenter consolidation policies appropriately
-
-### 3.5 MEDIUM: Insufficient Rate Limiting
-
-**Weakness**: Rate limiting mentioned but not fully implemented.
-
-**Missing Elements**:
-- API Gateway rate limiting configuration
-- Per-tenant rate limits
-- Burst handling configuration
-- Rate limit bypass for internal services
-
-### 3.6 LOW: No Blue-Green/Canary Infrastructure
-
-**Weakness**: While mentioned in CI/CD documentation, no infrastructure for blue-green deployments exists.
-
-**Missing Elements**:
-- Dual deployment infrastructure
-- Traffic splitting configuration
-- Automated rollback triggers
-- Canary analysis automation
-
----
-
-## 4. Outdated Tools and Techniques
-
-### 4.1 HIGH: Loki/Elasticsearch Ambiguity
-
-**Issue**: Documentation mentions both "Loki or Elasticsearch" for log aggregation.
-
-**Problem**: This indicates no clear decision has been made, leading to:
-- Inconsistent deployment across environments
-- Different query languages (LogQL vs Lucene)
-- Different operational requirements
-
-**Recommendation**: Standardize on Loki (already has Helm charts) and remove Elasticsearch references.
-
-### 4.2 HIGH: Deprecated Istio Installation Method
-
-**Azure Documentation Issue**:
-```bash
-# OUTDATED method:
-istioctl install -f istio-operator-config.yaml
-
-# Modern method:
-istioctl install --set profile=default
-# Or use Helm charts for GitOps
+adminPassword = "admin"  # Hardcoded default password
 ```
+Line 36 of `prometheus.tf` contains a hardcoded Grafana admin password.
 
-**Recommendation**: Update to Helm-based Istio installation for better GitOps integration.
+**Action**: Align versions and remove hardcoded password.
 
-### 4.3 MEDIUM: AAD Pod Identity (Legacy)
+### 1.6 HIGH: PostgreSQL Version Behind
 
-**Azure Documentation Issue**: References deprecated AAD Pod Identity.
+**File**: `terraform/modules/rds/postgres.tf:8`
 
-```yaml
-# DEPRECATED:
-aadpodidentity.k8s.io/is-managed-identity: "true"
+| Component | Current | Latest on RDS | Gap |
+|-----------|---------|---------------|-----|
+| PostgreSQL | 15 | **17** | 2 major versions |
 
-# CURRENT (Azure AD Workload Identity):
-azure.workload.identity/client-id: "<client-id>"
-```
+PostgreSQL 17 offers 2x better write throughput, improved WAL processing, better IN clause performance with B-tree indexes, and 20x less memory for vacuum operations. PostgreSQL 15 standard support ends in late 2027.
 
-**Impact**: AAD Pod Identity is deprecated in favor of Azure AD Workload Identity.
+**Action**: Plan upgrade path to PostgreSQL 16 or 17.
 
-### 4.4 MEDIUM: Missing eBPF-based Tools
+### 1.7 MEDIUM: Azure Documentation - Severely Outdated
 
-**Gap**: While Cilium is used, other eBPF-based tools are not leveraged:
+**File**: `docs/azure.md`
 
-**Missing Opportunities**:
-- Tetragon for runtime security
-- Pixie for observability (debugging)
-- Falco with eBPF driver for security monitoring
+| Component | Documented | Current | Gap |
+|-----------|-----------|---------|-----|
+| Kubernetes (AKS) | **1.28.3** | 1.34+ | **6 minor versions behind** |
+| Cilium | **1.14.5** | 1.16.x+ | 2 minor versions |
+| VM size | Standard_DS2_v2 | Dv5/Ev5 series | Legacy VM series |
 
-### 4.5 MEDIUM: No Service Mesh Decision
+AKS 1.28 has already exited standard support. The documented version cannot be deployed on new clusters.
 
-**Issue**: Documentation mentions "optional Istio or Linkerd" with no clear decision.
+### 1.8 MEDIUM: Karpenter Minor Version Gap
 
-**Problems**:
-- Different teams may deploy different meshes
-- No standardized mTLS configuration
-- No traffic management standards
+| Component | Current | Latest | Gap |
+|-----------|---------|--------|-----|
+| Karpenter | 1.8.1 | **1.8.6** | 5 patch versions |
 
-**Recommendation**: Make a clear service mesh decision and document rationale.
+Note: Avoid v1.8.4 due to a known regression with TopologySpreadConstraint scheduling.
 
-### 4.6 LOW: Manual Certificate Management
+### 1.9 LOW: EKS Kubernetes Not Latest
 
-**Gap**: ACM certificates mentioned but no cert-manager for Kubernetes.
+| Component | Current | Latest | Gap |
+|-----------|---------|--------|-----|
+| EKS Kubernetes | 1.34 | **1.35** | 1 minor |
 
-**Missing**:
-- cert-manager installation
-- ClusterIssuer configuration
-- Automatic certificate renewal for internal services
+EKS 1.35 is now available. K8s 1.34 is still under standard support (14 months from release), so this is not urgent but should be planned.
 
 ---
 
-## 5. Security Concerns
+## 2. Design Gaps (Remaining)
 
-### 5.1 CRITICAL: Cluster Endpoint Public Access
+### 2.1 CRITICAL: EKS Cluster Endpoint Still Public
 
 **File**: `terraform/modules/eks/main.tf:7`
 ```hcl
 cluster_endpoint_public_access = true
 ```
 
-**Risk**: Public API server access increases attack surface.
+**This was flagged in the previous review and remains unfixed.** Public API server access is the #1 attack vector for Kubernetes clusters.
 
-**Recommendation**:
-- Set `cluster_endpoint_public_access = false` for production
-- Use VPN or bastion host for cluster access
-- If public access required, use `cluster_endpoint_public_access_cidrs` to restrict IPs
+**Action**: Set to `false` for production or add `cluster_endpoint_public_access_cidrs` to restrict access.
 
-### 5.2 HIGH: Privileged Containers in Istio Config
+### 2.2 CRITICAL: Hardcoded Grafana Admin Password
 
-**Azure Documentation**:
-```yaml
-global:
-  proxy:
-    privileged: true
-  proxy_init:
-    privileged: true
+**File**: `terraform/modules/monitoring/prometheus.tf:36`
+```hcl
+adminPassword = "admin"
 ```
 
-**Risk**: Privileged containers can escape container isolation.
+Hardcoded credentials in IaC are a critical security risk. This will be committed to version control.
 
-**Recommendation**: Use Cilium CNI chaining or Istio CNI plugin to avoid privileged mode.
+**Action**: Source from AWS Secrets Manager via External Secrets Operator.
 
-### 5.3 HIGH: No SBOM Generation
+### 2.3 HIGH: Missing Pod Security Standards
 
-**Gap**: CI/CD mentions SBOM but no implementation exists.
+No Pod Security Admission (PSA) configuration exists anywhere in the codebase. With EKS 1.34, PSA is stable and should be enforced.
 
-**Missing**:
-- Syft/Grype integration for SBOM generation
-- SBOM storage and retrieval
-- Vulnerability tracking from SBOM
+**Action**: Create namespace-level PSA labels enforcing `restricted` profile.
 
-### 5.4 MEDIUM: Incomplete Audit Logging
+### 2.4 HIGH: Incomplete Network Policies
 
-**Gap**: While CloudTrail and VPC Flow Logs are mentioned, Kubernetes audit logging configuration is missing.
+Still only 3 basic policies:
+- `default-deny-all.yaml`
+- `allow-dns-egress.yaml`
+- `allow-from-same-namespace.yaml`
 
-**Missing**:
-- EKS audit log configuration
-- Audit policy for sensitive operations
-- Audit log analysis automation
+**Missing policies for**:
+- Observability namespace (Prometheus scraping, Loki ingestion)
+- Database tier isolation
+- External egress whitelist
+- Inter-namespace communication rules
 
-### 5.5 MEDIUM: No WAF Rules Defined
+### 2.5 HIGH: No Disaster Recovery Plan
 
-**Gap**: AWS WAF mentioned but no rule definitions exist.
+No RTO/RPO targets, no cross-region failover, no tested recovery procedures. DNS failover components exist (dns-monitor, failover-controller) but are not integrated into a DR plan.
 
-**Missing**:
-- OWASP Top 10 rule sets
-- Custom rate limiting rules
-- Geo-blocking rules
-- Bot detection rules
+### 2.6 HIGH: No Secret Rotation Strategy
+
+AWS Secrets Manager is configured but rotation is not automated. No Lambda rotation functions, no rotation schedules.
+
+### 2.7 HIGH: Dockerfile Security Issues
+
+**File**: `services/example-api/Dockerfile`
+```dockerfile
+FROM golang:1.21-alpine
+WORKDIR /app
+COPY . .
+RUN go build -o api .
+CMD ["./api"]
+```
+
+Multiple issues:
+1. **Single-stage build** - final image contains Go toolchain, source code, and build artifacts
+2. **No non-root user** - container runs as root
+3. **No .dockerignore** - likely copies unnecessary files
+4. **No health check** - Docker cannot determine container health
+5. **Go 1.21** - EOL runtime
+
+Compare with hello-world Dockerfile which correctly uses multi-stage builds.
+
+**Action**: Adopt multi-stage build pattern, add non-root user, add HEALTHCHECK.
+
+### 2.8 MEDIUM: No GitOps for Infrastructure
+
+ArgoCD manages applications but Terraform/Terragrunt changes are manual. No Atlantis, Spacelift, or env0 integration.
+
+### 2.9 MEDIUM: Missing Kubernetes Backup (Velero)
+
+No Velero or equivalent for:
+- Kubernetes resource backup
+- PersistentVolume snapshots
+- Namespace disaster recovery
+- Migration between clusters
+
+### 2.10 MEDIUM: RDS `skip_final_snapshot = true`
+
+**File**: `terraform/modules/rds/postgres.tf:29`
+
+Even with the comment "set false for prod", there's no variable or environment-based logic to enforce this. A production deployment using defaults would skip the final snapshot.
+
+**Action**: Default to `false` and require explicit opt-in for dev environments.
+
+---
+
+## 3. Architectural Weaknesses
+
+### 3.1 HIGH: Single Region Design
+
+All infrastructure targets `us-east-1` with no multi-region capability. A regional outage means complete service unavailability.
+
+### 3.2 HIGH: Observability Version Fragmentation
+
+Two separate Prometheus stack versions exist:
+- Terraform module: `kube-prometheus-stack 56.0.0` with 15-day retention
+- Helm chart: `kube-prometheus-stack ~65.3.0` with 2-hour retention
+
+This creates confusion about which is the source of truth and risks deploying different configurations.
+
+### 3.3 HIGH: No Connection Pooling for PostgreSQL
+
+No PgBouncer or RDS Proxy configured. With Kubernetes pods scaling dynamically via Karpenter/HPA, connection exhaustion is a real risk. Each pod creates its own DB connections.
+
+**Action**: Add RDS Proxy or deploy PgBouncer as a sidecar/service.
+
+### 3.4 MEDIUM: Spot Instance Risk Profile
+
+| NodePool | Spot % | Risk |
+|----------|--------|------|
+| x86-general | 80% | Medium - broad instance family diversity helps |
+| arm64-graviton | mixed | Medium |
+| c-series-compute | 70% | High - narrow instance family (c-series only) |
+| spot-flexible | 100% | High - no on-demand fallback |
+
+The c-series pool is especially risky: limiting to only `c7i, c7a, c6i, c6a, c6in` with 70% spot reduces the available capacity pool significantly.
+
+### 3.5 MEDIUM: Karpenter Controller on t3.medium
+
+**File**: `terraform/modules/eks/variables.tf:26`
+```hcl
+default = ["t3.medium"]  # 2 vCPU, 4 GiB
+```
+
+For clusters targeting 1,000-5,000 nodes, t3.medium may be undersized for the Karpenter controller and system pods. Karpenter's scheduling decisions become more resource-intensive at scale.
+
+**Action**: Use m5.large or m6i.large for controller nodes at scale.
+
+### 3.6 LOW: No Blue-Green/Canary Deployment Infrastructure
+
+No Argo Rollouts, Flagger, or traffic splitting configuration exists.
+
+---
+
+## 4. Outdated Tools and Techniques
+
+### 4.1 HIGH: Azure Documentation Uses Deprecated Patterns
+
+**Multiple deprecated patterns in `docs/azure.md`**:
+
+| Pattern | Status | Replacement |
+|---------|--------|-------------|
+| AAD Pod Identity | **Deprecated** | Azure AD Workload Identity |
+| `istioctl install` operator method | Legacy | Helm-based Istio install |
+| Standard_DS2_v2 VMs | Legacy series | Dv5/Ev5 series |
+| AKS 1.28.3 | **Out of support** | AKS 1.33+ |
+| `network_policy = "calico"` (commented) | Outdated with Cilium | Cilium native policy |
+
+### 4.2 HIGH: Fluent Bit Image Pin vs Chart Version Mismatch
+
+**Loki stack values** pin Fluent Bit image to `fluent/fluent-bit:3.1.9`, while the Helm chart version is `~0.47.0`. The latest Fluent Bit is **4.x** (with chart `0.55.0`). Running 3.1.9 when 4.x is available means missing significant log processing improvements.
+
+### 4.3 MEDIUM: No Service Mesh Decision
+
+Documentation mentions "optional Istio or Linkerd" with Cilium also providing some mesh features. No clear architectural decision record (ADR) exists. With Cilium already deployed for CNI, Cilium Service Mesh may be the natural choice, eliminating the need for a separate mesh.
+
+### 4.4 MEDIUM: No cert-manager
+
+ACM handles external certificates but no cert-manager exists for:
+- Internal mTLS certificates
+- Webhook certificates
+- Service-to-service TLS
+
+### 4.5 MEDIUM: Missing eBPF Security Tools
+
+Cilium is deployed for networking but security-specific eBPF tools are absent:
+- **Tetragon** - runtime security enforcement (same Cilium ecosystem)
+- **Falco** with eBPF driver - threat detection
+- **KubeArmor** - application-aware security
+
+### 4.6 LOW: `eksctl` in DR Procedures
+
+**File**: `docs/observability-architecture.md:767`
+```bash
+eksctl create cluster -f cluster.yaml
+```
+
+DR documentation references `eksctl` for cluster creation, but the platform uses Terraform/Terragrunt for IaC. DR procedures should use the same tooling as regular operations.
+
+---
+
+## 5. Security Concerns
+
+### 5.1 CRITICAL: EKS Public Endpoint (unchanged from previous review)
+
+`cluster_endpoint_public_access = true` at `terraform/modules/eks/main.tf:7`
+
+### 5.2 CRITICAL: Hardcoded Credentials
+
+`adminPassword = "admin"` at `terraform/modules/monitoring/prometheus.tf:36`
+
+### 5.3 HIGH: Trivy Scanner Severely Outdated
+
+Trivy action v0.12.0 (from 2023) cannot detect CVEs published after its release. The vulnerability database is fetched at runtime, but the scanner engine itself is missing detection capabilities for newer vulnerability classes.
+
+### 5.4 HIGH: No SBOM Generation in CI/CD
+
+No Syft, Grype, or Trivy SBOM generation step in any workflow.
+
+### 5.5 HIGH: example-api Runs as Root
+
+The example-api Dockerfile has no `USER` directive, meaning the container runs as root. Combined with the single-stage build that includes the entire Go toolchain, this is a significant attack surface.
+
+### 5.6 MEDIUM: No WAF Rules Defined
+
+AWS WAF mentioned in architecture docs but no rule definitions, no managed rule groups, no custom rules.
+
+### 5.7 MEDIUM: Incomplete Audit Logging
+
+No EKS audit log configuration. No audit policy for sensitive Kubernetes API operations.
+
+### 5.8 MEDIUM: No Network Encryption Enforcement
+
+While IRSA is configured (good), there's no enforcement of:
+- TLS for all inter-service communication
+- Encryption in transit for S3/RDS connections
+- mTLS between microservices
 
 ---
 
 ## 6. Documentation Gaps
 
-### 6.1 HIGH: Inconsistent Documentation
+### 6.1 HIGH: Inconsistent Maintainer Emails
 
-**Issues**:
-- `/docs/README.md` doesn't exist (404)
-- TODO.md shows "Phase 2: MISSING (CRITICAL)" but code shows it's implemented
-- Azure and AWS documentation have different maturity levels
+Helm chart maintainers use different email domains:
+- `platform@example.com` (prometheus-stack)
+- `platform@company.com` (loki-stack, tempo)
+- `platform@gaming.com` (otel-collector)
+- `platform@gaming-company.com` (pyroscope)
 
-### 6.2 MEDIUM: Missing Operational Runbooks
+This suggests these are placeholder values, not real contacts.
 
-**Existing Runbooks**:
-- DNS failover procedures (dns-monitor related)
-- SRE runbook (general)
+### 6.2 MEDIUM: Missing ADRs
 
-**Missing Runbooks**:
+No Architecture Decision Records for major choices: Karpenter vs CAS, Loki vs Elasticsearch, Cilium vs Calico, PostgreSQL vs Aurora.
+
+### 6.3 MEDIUM: Missing Operational Runbooks
+
+Only DNS-related runbooks and a general SRE runbook exist. Missing:
 - Database failover procedures
-- Kafka cluster recovery
-- Node replacement procedures
-- Secret rotation procedures
+- Kafka/Redis recovery
+- Observability stack failure
+- Node drain procedures
 - Incident response playbook
 
-### 6.3 MEDIUM: No Architecture Decision Records (ADRs)
+---
 
-**Gap**: Design decisions are embedded in documentation but not formalized.
+## 7. Summary of Changes Since Last Review
 
-**Recommendation**: Create ADR directory with templates for:
-- Why Karpenter over Cluster Autoscaler
-- Why Loki over Elasticsearch
-- Why Cilium over Calico
-- Database selection rationale
+### Fixed Since 2026-01-28
+- EKS version updated to 1.34 (was incorrectly 1.33 in some places)
+- Karpenter NodePools use v1 API (not v1beta1)
+- VPC module updated to v6.5.0
+- EKS module updated to v21.8.0
+- Comprehensive Karpenter NodePool configurations added
+
+### Remains Unfixed
+- EKS public endpoint still enabled
+- Go versions still at 1.21/1.22
+- Trivy action still at v0.12.0
+- actions/checkout still at v3
+- External Secrets still at v0.18.0 with `"^0"` pin
+- Hardcoded Grafana password in Terraform
+- No Pod Security Standards
+- Only 3 network policies
+- No DR plan, no secret rotation
+- Azure docs still reference AKS 1.28.3
 
 ---
 
-## 7. Cost Optimization Gaps
-
-### 7.1 MEDIUM: No Kubecost/OpenCost Integration
-
-**Gap**: Cost estimation documented but no runtime cost visibility.
-
-**Recommendation**: Deploy OpenCost for Kubernetes cost allocation.
-
-### 7.2 MEDIUM: Missing Savings Plans Configuration
-
-**Gap**: Documentation mentions Savings Plans but no automation exists.
-
-**Recommendation**: Document current Savings Plan coverage and implement cost anomaly detection.
-
-### 7.3 LOW: No Resource Right-Sizing Automation
-
-**Gap**: AWS Compute Optimizer mentioned but not integrated.
-
-**Recommendation**: Implement automated right-sizing recommendations via Compute Optimizer.
-
----
-
-## 8. Priority Remediation Roadmap
-
-### Week 1-2 (CRITICAL Items)
-
-1. Fix EKS public endpoint access for production clusters
-2. Update Ubuntu 18.04 references to 22.04/24.04
-3. Standardize Go versions to 1.23.x
-4. Update GitHub Actions to latest versions
-5. Implement Pod Security Admission
-
-### Week 3-4 (HIGH Items)
-
-1. Document complete DR procedures
-2. Implement secret rotation
-3. Add comprehensive network policies
-4. Update Trivy action (v0.12.0 -> v0.28.x)
-5. Remove Istio privileged container requirement
-6. Pin External Secrets chart version
-
-### Month 2 (MEDIUM Items)
-
-1. Implement GitOps for infrastructure (Atlantis)
-2. Deploy cert-manager
-3. Add Kubernetes audit logging
-4. Define WAF rules
-5. Create ADRs for major decisions
-6. Deploy OpenCost
-
-### Month 3 (LOW Items)
-
-1. Evaluate eBPF security tools (Tetragon/Falco)
-2. Implement blue-green infrastructure
-3. Add Compute Optimizer integration
-4. Extend observability retention periods
-
----
-
-## 9. Summary Statistics
+## 8. Consolidated Statistics
 
 | Category | Critical | High | Medium | Low | Total |
 |----------|----------|------|--------|-----|-------|
-| Outdated Software | 1 | 3 | 2 | 0 | 6 |
-| Design Gaps | 2 | 4 | 3 | 0 | 9 |
-| Architecture Weaknesses | 1 | 3 | 2 | 1 | 7 |
-| Outdated Tools | 0 | 2 | 4 | 1 | 7 |
-| Security Concerns | 1 | 3 | 2 | 0 | 6 |
+| Outdated Software | 3 | 4 | 2 | 1 | 10 |
+| Design Gaps | 2 | 5 | 3 | 0 | 10 |
+| Architecture Weaknesses | 0 | 3 | 3 | 1 | 7 |
+| Outdated Tools/Techniques | 0 | 2 | 3 | 1 | 6 |
+| Security Concerns | 2 | 3 | 3 | 0 | 8 |
 | Documentation Gaps | 0 | 1 | 2 | 0 | 3 |
-| Cost Optimization | 0 | 0 | 2 | 1 | 3 |
-| **Total** | **5** | **16** | **17** | **3** | **41** |
+| **Total** | **7** | **18** | **16** | **3** | **44** |
 
 ---
 
-## 10. Appendix: Version Reference
+## 9. Priority Remediation Roadmap
 
-### Current Stable Versions (as of 2026-01-28)
+### Immediate (Week 1) - CRITICAL
 
-| Component | Recommended Version |
-|-----------|-------------------|
-| Go | 1.23.x |
-| Kubernetes (EKS) | 1.31 or 1.32 |
-| Kubernetes (AKS) | 1.31.x |
-| Terraform | 1.7.x |
-| AWS Provider | 5.80.x |
-| Karpenter | 1.1.x (v1 API) |
-| Cilium | 1.16.x |
-| Istio | 1.24.x |
-| Prometheus | 2.54.x |
-| Grafana | 11.x |
-| Loki | 3.2.x |
-| Tempo | 2.6.x |
-| External Secrets | 0.14.x |
-| ArgoCD | 2.13.x |
+1. Set `cluster_endpoint_public_access = false` or add CIDR restrictions
+2. Remove hardcoded `adminPassword = "admin"` from Terraform
+3. Upgrade Go services to 1.25.x (1.21 is EOL)
+4. Update External Secrets Operator to v1.x line
+5. Update kube-prometheus-stack from ~65.3.0 toward 81.x
+
+### Week 2-3 - HIGH
+
+1. Update `trivy-action` from v0.12.0 to v0.33.1
+2. Update `actions/checkout` from v3 to v4
+3. Fix example-api Dockerfile (multi-stage, non-root user)
+4. Upgrade PostgreSQL from 15 to 16 or 17
+5. Align Terraform monitoring module version with Helm chart
+6. Add comprehensive network policies
+7. Implement Pod Security Admission
+8. Add connection pooling (RDS Proxy or PgBouncer)
+9. Document DR procedures with RTO/RPO
+
+### Month 2 - MEDIUM
+
+1. Update Loki chart (~6.6.0 to ~6.51.0)
+2. Update OTel Collector chart (~0.96.0 to ~0.143.0)
+3. Update Fluent Bit chart and image to 4.x
+4. Update Thanos chart (~15.7.0 to ~17.3.0)
+5. Update Azure documentation (AKS 1.34, Cilium 1.16, remove deprecated patterns)
+6. Deploy cert-manager
+7. Implement secret rotation with Lambda
+8. Deploy Velero for K8s backup
+9. Implement WAF rules
+10. Create ADRs
+
+### Month 3 - LOW
+
+1. Upgrade EKS to 1.35
+2. Evaluate Tetragon/Falco for runtime security
+3. Implement Argo Rollouts for canary deployments
+4. Deploy OpenCost
+5. Fix maintainer emails in Helm charts
+
+---
+
+## 10. Version Reference Table (as of 2026-02-02)
+
+| Component | In Platform | Latest Stable | Gap Severity |
+|-----------|------------|---------------|-------------|
+| Go | 1.21 / 1.22 | **1.25.6** | CRITICAL |
+| EKS | 1.34 | 1.35 | LOW |
+| Karpenter | 1.8.1 | 1.8.6 | MEDIUM |
+| kube-prometheus-stack | ~65.3.0 | 81.4.2 | CRITICAL |
+| Thanos (Bitnami) | ~15.7.0 | 17.3.1 | HIGH |
+| Loki | ~6.6.0 | 6.51.0 | MEDIUM |
+| Fluent Bit | ~0.47.0 | 0.55.0 | MEDIUM |
+| Tempo Distributed | ~1.9.0 | Latest (2.9) | MEDIUM |
+| OTel Collector | ~0.96.0 | 0.143.0 | CRITICAL |
+| Pyroscope | ~1.7.0 | Latest | MEDIUM |
+| External Secrets | 0.18.0 | **1.3.1** | CRITICAL |
+| PostgreSQL (RDS) | 15 | 17 | HIGH |
+| trivy-action | 0.12.0 | 0.33.1 | HIGH |
+| actions/checkout | v3 | v4 | HIGH |
+| Terraform EKS module | 21.8.0 | 21.15.1 | LOW |
+| kube-prometheus-stack (TF) | 56.0.0 | 81.4.2 | HIGH |
 
 ---
 
 *This review should be updated quarterly or when major platform changes occur.*
+*Next scheduled review: 2026-05-01*
