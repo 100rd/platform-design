@@ -1,7 +1,7 @@
 # Deployment Inventory
 
 > Auto-generated deployment inventory for all environments.
-> Last updated: 2026-02-03 (manual - workflow will update automatically on push)
+> Last updated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
 
 ## Overview
 
@@ -16,22 +16,26 @@ Applications deployed via ArgoCD from `apps/infra/`
 
 | Application | Chart Version | App Version | Description |
 |-------------|---------------|-------------|-------------|
-| aws-lb-controller | 1.0.0 | 2.7.0 | AWS Load Balancer Controller |
-| cert-manager | 1.0.0 | 1.14.0 | Certificate management for Kubernetes |
-| cilium | 1.0.0 | 1.16.5 | Cilium CNI with Hubble observability |
-| external-secrets | 1.0.0 | 0.9.0 | External Secrets Operator |
-| gatekeeper | 1.0.0 | 3.15.0 | OPA Gatekeeper policy enforcement |
-| rabbitmq-operator | 1.0.0 | 2.12.0 | RabbitMQ Cluster Operator |
-| velero | 1.0.0 | 6.0.0 | Backup and disaster recovery |
+| aws-lb-controller | 3.0.0 | 3.0.0 | AWS Load Balancer Controller - manages ALB and NLB for Kuber |
+| cert-manager | 1.1.0 | 1.17.2 | cert-manager - Automatic TLS certificate management for Kube |
+| cilium | 1.0.0 | 1.16.5 | Cilium CNI with Hubble observability for Kubernetes networki |
+| external-secrets | 1.3.1 | v0.14.1 | Install the External Secrets Operator using the official cha |
+| gatekeeper | 3.18.2 | v3.18.2 | OPA Gatekeeper for Kubernetes policy enforcement |
+| kargo | 0.1.0 | 1.2.0 | Kargo progressive delivery controller |
+| otel-operator | 0.1.0 |  | OpenTelemetry Operator with auto-instrumentation for Go appl |
+| rabbitmq-operator | 1.0.0 | 2.12.0 | RabbitMQ Cluster Operator - Kubernetes-native RabbitMQ lifec |
+| velero | 1.1.0 | 1.15.0 | Velero - Kubernetes backup and disaster recovery |
 
 ### Observability Stack
 
 | Component | Chart Version | App Version | Description |
 |-----------|---------------|-------------|-------------|
-| grafana-dashboards | 1.0.0 | - | Grafana dashboard ConfigMaps |
-| loki | 1.0.0 | 3.0.0 | Log aggregation |
-| prometheus-stack | 1.0.0 | 57.0.0 | Prometheus, Alertmanager, Grafana |
-| tempo | 1.0.0 | 1.9.0 | Distributed tracing |
+| grafana-dashboards | 1.0.0 | 1.0 | Unified Grafana dashboards for platform observability |
+| loki-stack | 1.0.0 | 3.0 | Production Loki + Fluent Bit logging stack for gaming platfo |
+| otel-collector | 1.0.0 | 0.143.0 | OpenTelemetry Collector - Central telemetry pipeline for gam |
+| prometheus-stack | 1.0.0 | v0.70.0 | Production-ready Prometheus + Thanos + Grafana stack for lar |
+| pyroscope | 1.0.0 | 1.18.0 | Grafana Pyroscope continuous profiling for production gaming |
+| tempo | 1.0.0 | 2.3.1 | Production-ready distributed tracing stack with Tempo and Op |
 
 ## Helm Chart Dependencies
 
@@ -39,13 +43,6 @@ External Helm charts used as dependencies:
 
 | Application | Dependency | Version | Repository |
 |-------------|------------|---------|------------|
-| aws-lb-controller | aws-load-balancer-controller | 1.7.1 | https://aws.github.io/eks-charts |
-| cert-manager | cert-manager | v1.14.4 | https://charts.jetstack.io |
-| cilium | cilium | 1.16.5 | https://helm.cilium.io/ |
-| external-secrets | external-secrets | 0.9.13 | https://charts.external-secrets.io |
-| gatekeeper | gatekeeper | 3.15.1 | https://open-policy-agent.github.io/gatekeeper/charts |
-| rabbitmq-operator | rabbitmq-cluster-operator | 4.3.26 | https://charts.bitnami.com/bitnami |
-| velero | velero | 6.0.0 | https://vmware-tanzu.github.io/helm-charts |
 
 ## Environment Configurations
 
@@ -53,40 +50,28 @@ External Helm charts used as dependencies:
 
 | Application | Customizations |
 |-------------|----------------|
-| cert-manager | replicas: 1 |
-| cilium | replicas: 1, hubble-relay: 1 |
-| external-secrets | replicas: 1 |
-| gatekeeper | replicas: 1 |
+| cilium | defaults |
 | rabbitmq-operator | replicas: 1 |
 
 ### integration
 
 | Application | Customizations |
 |-------------|----------------|
-| cert-manager | replicas: 1 |
-| cilium | replicas: 1 |
-| external-secrets | replicas: 1 |
-| gatekeeper | replicas: 1 |
+| cilium | defaults |
 | rabbitmq-operator | replicas: 1 |
 
 ### staging
 
 | Application | Customizations |
 |-------------|----------------|
-| cert-manager | replicas: 2 |
-| cilium | replicas: 2 |
-| external-secrets | replicas: 2 |
-| gatekeeper | replicas: 2 |
+| cilium | defaults |
 | rabbitmq-operator | replicas: 2 |
 
 ### prod
 
 | Application | Customizations |
 |-------------|----------------|
-| cert-manager | replicas: 2, HA enabled |
-| cilium | replicas: 2, hubble-relay: 2 |
-| external-secrets | replicas: 2 |
-| gatekeeper | replicas: 3, audit enabled |
+| cilium | defaults |
 | rabbitmq-operator | replicas: 2 |
 
 ## ArgoCD Configuration

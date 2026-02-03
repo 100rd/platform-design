@@ -1,82 +1,121 @@
+{"generated_at": "2026-02-03T10:58:18Z", "applications": [
 {
-  "generated_at": "2026-02-03T00:00:00Z",
-  "applications": [
-    {
-      "name": "aws-lb-controller",
-      "chartVersion": "1.0.0",
-      "appVersion": "2.7.0",
-      "description": "AWS Load Balancer Controller for EKS ingress",
-      "path": "apps/infra/aws-lb-controller"
-    },
-    {
-      "name": "cert-manager",
-      "chartVersion": "1.0.0",
-      "appVersion": "1.14.0",
-      "description": "Certificate management for Kubernetes",
-      "path": "apps/infra/cert-manager"
-    },
-    {
-      "name": "cilium",
-      "chartVersion": "1.0.0",
-      "appVersion": "1.16.5",
-      "description": "Cilium CNI with Hubble observability",
-      "path": "apps/infra/cilium"
-    },
-    {
-      "name": "external-secrets",
-      "chartVersion": "1.0.0",
-      "appVersion": "0.9.0",
-      "description": "External Secrets Operator",
-      "path": "apps/infra/external-secrets"
-    },
-    {
-      "name": "gatekeeper",
-      "chartVersion": "1.0.0",
-      "appVersion": "3.15.0",
-      "description": "OPA Gatekeeper policy enforcement",
-      "path": "apps/infra/gatekeeper"
-    },
-    {
-      "name": "rabbitmq-operator",
-      "chartVersion": "1.0.0",
-      "appVersion": "2.12.0",
-      "description": "RabbitMQ Cluster Operator",
-      "path": "apps/infra/rabbitmq-operator"
-    },
-    {
-      "name": "velero",
-      "chartVersion": "1.0.0",
-      "appVersion": "6.0.0",
-      "description": "Backup and disaster recovery",
-      "path": "apps/infra/velero"
-    },
-    {
-      "name": "grafana-dashboards",
-      "chartVersion": "1.0.0",
-      "appVersion": "",
-      "description": "Grafana dashboard ConfigMaps",
-      "path": "apps/infra/observability/grafana-dashboards"
-    },
-    {
-      "name": "loki",
-      "chartVersion": "1.0.0",
-      "appVersion": "3.0.0",
-      "description": "Log aggregation system",
-      "path": "apps/infra/observability/loki"
-    },
-    {
-      "name": "prometheus-stack",
-      "chartVersion": "1.0.0",
-      "appVersion": "57.0.0",
-      "description": "Prometheus, Alertmanager, Grafana",
-      "path": "apps/infra/observability/prometheus-stack"
-    },
-    {
-      "name": "tempo",
-      "chartVersion": "1.0.0",
-      "appVersion": "1.9.0",
-      "description": "Distributed tracing backend",
-      "path": "apps/infra/observability/tempo"
-    }
-  ]
+  "name": "aws-lb-controller",
+  "chartVersion": "3.0.0",
+  "appVersion": "3.0.0",
+  "description": "AWS Load Balancer Controller - manages ALB and NLB for Kubernetes",
+  "path": "apps/infra/aws-lb-controller"
 }
+,
+{
+  "name": "cert-manager",
+  "chartVersion": "1.1.0",
+  "appVersion": "1.17.2",
+  "description": "cert-manager - Automatic TLS certificate management for Kubernetes",
+  "path": "apps/infra/cert-manager"
+}
+,
+{
+  "name": "cilium",
+  "chartVersion": "1.0.0",
+  "appVersion": "1.16.5",
+  "description": "Cilium CNI with Hubble observability for Kubernetes networking",
+  "path": "apps/infra/cilium"
+}
+,
+{
+  "name": "external-secrets",
+  "chartVersion": "1.3.1",
+  "appVersion": "v0.14.1",
+  "description": "Install the External Secrets Operator using the official chart",
+  "path": "apps/infra/external-secrets"
+}
+,
+{
+  "name": "gatekeeper",
+  "chartVersion": "3.18.2",
+  "appVersion": "v3.18.2",
+  "description": "OPA Gatekeeper for Kubernetes policy enforcement",
+  "path": "apps/infra/gatekeeper"
+}
+,
+{
+  "name": "kargo",
+  "chartVersion": "0.1.0",
+  "appVersion": "1.2.0",
+  "description": "Kargo progressive delivery controller",
+  "path": "apps/infra/kargo"
+}
+,
+{
+  "name": "grafana-dashboards",
+  "chartVersion": "1.0.0",
+  "appVersion": "1.0",
+  "description": "Unified Grafana dashboards for platform observability",
+  "path": "apps/infra/observability/grafana-dashboards"
+}
+,
+{
+  "name": "loki-stack",
+  "chartVersion": "1.0.0",
+  "appVersion": "3.0",
+  "description": "Production Loki + Fluent Bit logging stack for gaming platform",
+  "path": "apps/infra/observability/loki-stack"
+}
+,
+{
+  "name": "otel-collector",
+  "chartVersion": "1.0.0",
+  "appVersion": "0.143.0",
+  "description": "OpenTelemetry Collector - Central telemetry pipeline for gaming platform",
+  "path": "apps/infra/observability/otel-collector"
+}
+,
+{
+  "name": "prometheus-stack",
+  "chartVersion": "1.0.0",
+  "appVersion": "v0.70.0",
+  "description": "Production-ready Prometheus + Thanos + Grafana stack for large-scale EKS clusters (1K-5K nodes, 100K+ pods)",
+  "path": "apps/infra/observability/prometheus-stack"
+}
+,
+{
+  "name": "pyroscope",
+  "chartVersion": "1.0.0",
+  "appVersion": "1.18.0",
+  "description": "Grafana Pyroscope continuous profiling for production gaming platform",
+  "path": "apps/infra/observability/pyroscope"
+}
+,
+{
+  "name": "tempo",
+  "chartVersion": "1.0.0",
+  "appVersion": "2.3.1",
+  "description": "Production-ready distributed tracing stack with Tempo and OpenTelemetry Collector",
+  "path": "apps/infra/observability/tempo"
+}
+,
+{
+  "name": "otel-operator",
+  "chartVersion": "0.1.0",
+  "appVersion": "",
+  "description": "OpenTelemetry Operator with auto-instrumentation for Go applications",
+  "path": "apps/infra/otel-operator"
+}
+,
+{
+  "name": "rabbitmq-operator",
+  "chartVersion": "1.0.0",
+  "appVersion": "2.12.0",
+  "description": "RabbitMQ Cluster Operator - Kubernetes-native RabbitMQ lifecycle management",
+  "path": "apps/infra/rabbitmq-operator"
+}
+,
+{
+  "name": "velero",
+  "chartVersion": "1.1.0",
+  "appVersion": "1.15.0",
+  "description": "Velero - Kubernetes backup and disaster recovery",
+  "path": "apps/infra/velero"
+}
+]}
