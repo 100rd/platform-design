@@ -24,15 +24,49 @@ dashboards:
     enabled: true
   serviceDeepDive:
     enabled: true
+  argocdInventory:
+    enabled: true
 
 datasources:
   prometheus:
+    name: "Prometheus"
     uid: "prometheus"
   thanos:
+    name: "Thanos"
     uid: "thanos"
   loki:
+    name: "Loki"
     uid: "loki"
   tempo:
+    name: "Tempo"
     uid: "tempo"
   pyroscope:
+    name: "Pyroscope"
     uid: "pyroscope"
+
+# Grafana namespace for ConfigMap
+grafanaNamespace: observability
+
+# Cluster configuration
+cluster:
+  name: ""  # Set per environment
+
+# ArgoCD configuration
+argocd:
+  url: "https://argocd.example.com"  # Override per environment
+
+# Dashboard defaults
+defaultRefresh: "30s"
+defaultTimeRange:
+  from: "now-1h"
+  to: "now"
+
+# SLO targets (used by service-slo dashboard)
+slo:
+  availability: 99.9
+  latencyP99: 500
+
+# Cost estimation (used by node-health dashboard)
+costs:
+  onDemandRate: 0.0416
+  spotDiscount: 0.3

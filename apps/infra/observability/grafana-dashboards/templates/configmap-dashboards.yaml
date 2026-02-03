@@ -1803,6 +1803,715 @@ data:
       "weekStart": ""
     }
 
+  argocd-inventory.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "datasource": "{{ .Values.datasources.prometheus.name }}",
+            "enable": true,
+            "expr": "changes(argocd_app_info{cluster=\"$cluster\"}[5m]) > 0",
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "App Changes",
+            "tagKeys": "name,dest_namespace"
+          }
+        ]
+      },
+      "description": "Centralized view of all deployed applications with versions, health status, and configuration",
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [
+        {
+          "icon": "external link",
+          "title": "ArgoCD UI",
+          "type": "link",
+          "url": "{{ .Values.argocd.url }}"
+        }
+      ],
+      "panels": [
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              }
+            }
+          },
+          "gridPos": {"h": 3, "w": 4, "x": 0, "y": 0},
+          "id": 1,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "expr": "count(argocd_app_info{cluster=\"$cluster\"})",
+              "refId": "A"
+            }
+          ],
+          "title": "Total Applications",
+          "type": "stat"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 3, "w": 4, "x": 4, "y": 0},
+          "id": 2,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "expr": "count(argocd_app_info{cluster=\"$cluster\",health_status=\"Healthy\"})",
+              "refId": "A"
+            }
+          ],
+          "title": "Healthy Apps",
+          "type": "stat"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 1},
+                  {"color": "red", "value": 3}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 3, "w": 4, "x": 8, "y": 0},
+          "id": 3,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "expr": "count(argocd_app_info{cluster=\"$cluster\",health_status=\"Degraded\"})",
+              "refId": "A"
+            }
+          ],
+          "title": "Degraded Apps",
+          "type": "stat"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 1}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 3, "w": 4, "x": 12, "y": 0},
+          "id": 4,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "expr": "count(argocd_app_info{cluster=\"$cluster\",sync_status=\"OutOfSync\"})",
+              "refId": "A"
+            }
+          ],
+          "title": "Out of Sync",
+          "type": "stat"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 3, "w": 4, "x": 16, "y": 0},
+          "id": 5,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "expr": "count(argocd_app_info{cluster=\"$cluster\",sync_status=\"Synced\"})",
+              "refId": "A"
+            }
+          ],
+          "title": "Synced Apps",
+          "type": "stat"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "blue", "value": null}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 3, "w": 4, "x": 20, "y": 0},
+          "id": 6,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "expr": "count(distinct(label_replace(argocd_app_info{cluster=\"$cluster\"}, \"ns\", \"$1\", \"dest_namespace\", \"(.*)\")))",
+              "refId": "A"
+            }
+          ],
+          "title": "Namespaces",
+          "type": "stat"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false}
+              },
+              "mappings": []
+            }
+          },
+          "gridPos": {"h": 6, "w": 8, "x": 0, "y": 3},
+          "id": 7,
+          "options": {
+            "displayLabels": ["percent"],
+            "legend": {"displayMode": "table", "placement": "right", "showLegend": true, "values": ["value", "percent"]},
+            "pieType": "donut",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "expr": "count by (health_status) (argocd_app_info{cluster=\"$cluster\"})",
+              "legendFormat": "{{health_status}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Health Status Distribution",
+          "type": "piechart"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false}
+              },
+              "mappings": []
+            }
+          },
+          "gridPos": {"h": 6, "w": 8, "x": 8, "y": 3},
+          "id": 8,
+          "options": {
+            "displayLabels": ["percent"],
+            "legend": {"displayMode": "table", "placement": "right", "showLegend": true, "values": ["value", "percent"]},
+            "pieType": "donut",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "expr": "count by (sync_status) (argocd_app_info{cluster=\"$cluster\"})",
+              "legendFormat": "{{sync_status}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Sync Status Distribution",
+          "type": "piechart"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false}
+              },
+              "mappings": []
+            }
+          },
+          "gridPos": {"h": 6, "w": 8, "x": 16, "y": 3},
+          "id": 9,
+          "options": {
+            "displayLabels": ["percent"],
+            "legend": {"displayMode": "table", "placement": "right", "showLegend": true, "values": ["value", "percent"]},
+            "pieType": "donut",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "expr": "count by (dest_namespace) (argocd_app_info{cluster=\"$cluster\"})",
+              "legendFormat": "{{dest_namespace}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Applications by Namespace",
+          "type": "piechart"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "custom": {
+                "align": "auto",
+                "cellOptions": {"type": "auto"},
+                "inspect": false,
+                "filterable": true
+              },
+              "links": [
+                {
+                  "title": "View in ArgoCD",
+                  "url": "{{ .Values.argocd.url }}/applications/${__data.fields.Application}"
+                }
+              ],
+              "mappings": [
+                {"options": {"Healthy": {"text": "Healthy", "color": "green"}}, "type": "value"},
+                {"options": {"Degraded": {"text": "Degraded", "color": "red"}}, "type": "value"},
+                {"options": {"Progressing": {"text": "Progressing", "color": "yellow"}}, "type": "value"},
+                {"options": {"Suspended": {"text": "Suspended", "color": "blue"}}, "type": "value"},
+                {"options": {"Missing": {"text": "Missing", "color": "orange"}}, "type": "value"},
+                {"options": {"Unknown": {"text": "Unknown", "color": "gray"}}, "type": "value"},
+                {"options": {"Synced": {"text": "Synced", "color": "green"}}, "type": "value"},
+                {"options": {"OutOfSync": {"text": "OutOfSync", "color": "yellow"}}, "type": "value"}
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Health"},
+                "properties": [
+                  {"id": "custom.cellOptions", "value": {"type": "color-background"}}
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Sync"},
+                "properties": [
+                  {"id": "custom.cellOptions", "value": {"type": "color-background"}}
+                ]
+              }
+            ]
+          },
+          "gridPos": {"h": 12, "w": 24, "x": 0, "y": 9},
+          "id": 10,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": "",
+              "reducer": ["sum"],
+              "show": false
+            },
+            "showHeader": true,
+            "sortBy": [{"displayName": "Application"}]
+          },
+          "targets": [
+            {
+              "expr": "argocd_app_info{cluster=\"$cluster\",name=~\"$app\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Application Inventory",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "cluster": true,
+                  "endpoint": true,
+                  "instance": true,
+                  "job": true,
+                  "namespace": true,
+                  "pod": true,
+                  "service": true,
+                  "Value": true,
+                  "autosync_enabled": false,
+                  "operation": true
+                },
+                "indexByName": {
+                  "name": 0,
+                  "dest_namespace": 1,
+                  "health_status": 2,
+                  "sync_status": 3,
+                  "repo": 4,
+                  "revision": 5,
+                  "project": 6
+                },
+                "renameByName": {
+                  "name": "Application",
+                  "dest_namespace": "Namespace",
+                  "dest_server": "Cluster",
+                  "health_status": "Health",
+                  "sync_status": "Sync",
+                  "repo": "Repository",
+                  "revision": "Revision",
+                  "project": "Project",
+                  "autosync_enabled": "AutoSync"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "off"}
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 21},
+          "id": 11,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "sum(increase(argocd_app_sync_total{cluster=\"$cluster\",phase=\"Succeeded\"}[1h]))",
+              "legendFormat": "Successful Syncs",
+              "refId": "A"
+            },
+            {
+              "expr": "sum(increase(argocd_app_sync_total{cluster=\"$cluster\",phase=\"Failed\"}[1h]))",
+              "legendFormat": "Failed Syncs",
+              "refId": "B"
+            }
+          ],
+          "title": "Sync Activity (Hourly)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "none",
+                "hideFrom": {"tooltip": false, "viz": false, "legend": false},
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {"type": "linear"},
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {"group": "A", "mode": "none"},
+                "thresholdsStyle": {"mode": "off"}
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 21},
+          "id": 12,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "count by (health_status) (argocd_app_info{cluster=\"$cluster\"})",
+              "legendFormat": "{{health_status}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Health Status Over Time",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "custom": {
+                "align": "auto",
+                "cellOptions": {"type": "auto"},
+                "inspect": false
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "red", "value": null}]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Health"},
+                "properties": [
+                  {"id": "custom.cellOptions", "value": {"type": "color-background"}}
+                ]
+              }
+            ]
+          },
+          "gridPos": {"h": 6, "w": 24, "x": 0, "y": 29},
+          "id": 13,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": "",
+              "reducer": ["sum"],
+              "show": false
+            },
+            "showHeader": true
+          },
+          "targets": [
+            {
+              "expr": "argocd_app_info{cluster=\"$cluster\",health_status!=\"Healthy\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Unhealthy Applications (Requires Attention)",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "cluster": true,
+                  "endpoint": true,
+                  "instance": true,
+                  "job": true,
+                  "namespace": true,
+                  "pod": true,
+                  "service": true,
+                  "Value": true,
+                  "operation": true,
+                  "autosync_enabled": true,
+                  "project": true
+                },
+                "renameByName": {
+                  "name": "Application",
+                  "dest_namespace": "Namespace",
+                  "health_status": "Health",
+                  "sync_status": "Sync",
+                  "repo": "Repository"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        }
+      ],
+      "refresh": "{{ .Values.defaultRefresh }}",
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["argocd", "inventory", "gitops", "applications"],
+      "templating": {
+        "list": [
+          {
+            "current": {"selected": false, "text": "Prometheus", "value": "Prometheus"},
+            "hide": 0,
+            "includeAll": false,
+            "label": "Datasource",
+            "multi": false,
+            "name": "DS_PROMETHEUS",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "type": "datasource"
+          },
+          {
+            "current": {"selected": false, "text": "{{ .Values.cluster.name }}", "value": "{{ .Values.cluster.name }}"},
+            "hide": 0,
+            "label": "Cluster",
+            "name": "cluster",
+            "options": [
+              {"selected": true, "text": "{{ .Values.cluster.name }}", "value": "{{ .Values.cluster.name }}"}
+            ],
+            "query": "{{ .Values.cluster.name }}",
+            "skipUrlSync": false,
+            "type": "constant"
+          },
+          {
+            "current": {"selected": false, "text": "All", "value": "$__all"},
+            "datasource": "${DS_PROMETHEUS}",
+            "definition": "label_values(argocd_app_info{cluster=\"$cluster\"}, name)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Application",
+            "multi": true,
+            "name": "app",
+            "options": [],
+            "query": {
+              "query": "label_values(argocd_app_info{cluster=\"$cluster\"}, name)",
+              "refId": "PrometheusVariableQueryEditor-VariableQuery"
+            },
+            "refresh": 2,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "type": "query"
+          }
+        ]
+      },
+      "time": {
+        "from": "{{ .Values.defaultTimeRange.from }}",
+        "to": "{{ .Values.defaultTimeRange.to }}"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "ArgoCD Application Inventory",
+      "uid": "argocd-inventory",
+      "version": 1,
+      "weekStart": ""
+    }
+
   service-slo.json: |
     {
       "annotations": {

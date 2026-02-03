@@ -1,0 +1,82 @@
+{
+  "generated_at": "2026-02-03T00:00:00Z",
+  "applications": [
+    {
+      "name": "aws-lb-controller",
+      "chartVersion": "1.0.0",
+      "appVersion": "2.7.0",
+      "description": "AWS Load Balancer Controller for EKS ingress",
+      "path": "apps/infra/aws-lb-controller"
+    },
+    {
+      "name": "cert-manager",
+      "chartVersion": "1.0.0",
+      "appVersion": "1.14.0",
+      "description": "Certificate management for Kubernetes",
+      "path": "apps/infra/cert-manager"
+    },
+    {
+      "name": "cilium",
+      "chartVersion": "1.0.0",
+      "appVersion": "1.16.5",
+      "description": "Cilium CNI with Hubble observability",
+      "path": "apps/infra/cilium"
+    },
+    {
+      "name": "external-secrets",
+      "chartVersion": "1.0.0",
+      "appVersion": "0.9.0",
+      "description": "External Secrets Operator",
+      "path": "apps/infra/external-secrets"
+    },
+    {
+      "name": "gatekeeper",
+      "chartVersion": "1.0.0",
+      "appVersion": "3.15.0",
+      "description": "OPA Gatekeeper policy enforcement",
+      "path": "apps/infra/gatekeeper"
+    },
+    {
+      "name": "rabbitmq-operator",
+      "chartVersion": "1.0.0",
+      "appVersion": "2.12.0",
+      "description": "RabbitMQ Cluster Operator",
+      "path": "apps/infra/rabbitmq-operator"
+    },
+    {
+      "name": "velero",
+      "chartVersion": "1.0.0",
+      "appVersion": "6.0.0",
+      "description": "Backup and disaster recovery",
+      "path": "apps/infra/velero"
+    },
+    {
+      "name": "grafana-dashboards",
+      "chartVersion": "1.0.0",
+      "appVersion": "",
+      "description": "Grafana dashboard ConfigMaps",
+      "path": "apps/infra/observability/grafana-dashboards"
+    },
+    {
+      "name": "loki",
+      "chartVersion": "1.0.0",
+      "appVersion": "3.0.0",
+      "description": "Log aggregation system",
+      "path": "apps/infra/observability/loki"
+    },
+    {
+      "name": "prometheus-stack",
+      "chartVersion": "1.0.0",
+      "appVersion": "57.0.0",
+      "description": "Prometheus, Alertmanager, Grafana",
+      "path": "apps/infra/observability/prometheus-stack"
+    },
+    {
+      "name": "tempo",
+      "chartVersion": "1.0.0",
+      "appVersion": "1.9.0",
+      "description": "Distributed tracing backend",
+      "path": "apps/infra/observability/tempo"
+    }
+  ]
+}

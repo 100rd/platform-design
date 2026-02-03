@@ -1,0 +1,189 @@
+name: Generate Deployment Inventory
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/**'
+      - 'envs/**'
+      - 'argocd/**'
+  workflow_dispatch:
+
+jobs:
+  generate-inventory:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Generate DEPLOYMENTS.md
+        run: |
+          cat > DEPLOYMENTS.md << 'HEADER'
+          # Deployment Inventory
+
+          > Auto-generated deployment inventory for all environments.
+          > Last updated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+          ## Overview
+
+          This document provides a centralized view of all deployed applications, their versions,
+          and configurations across all environments.
+
+          ---
+
+          HEADER
+
+          # Infrastructure Applications
+          echo "## Infrastructure Applications" >> DEPLOYMENTS.md
+          echo "" >> DEPLOYMENTS.md
+          echo "Applications deployed via ArgoCD from \`apps/infra/\`" >> DEPLOYMENTS.md
+          echo "" >> DEPLOYMENTS.md
+          echo "| Application | Chart Version | App Version | Description |" >> DEPLOYMENTS.md
+          echo "|-------------|---------------|-------------|-------------|" >> DEPLOYMENTS.md
+
+          for chart in $(find apps/infra -name Chart.yaml -not -path '*observability/*' | sort); do
+            app_name=$(dirname "$chart" | xargs basename)
+            chart_version=$(grep '^version:' "$chart" | head -1 | awk '{print $2}' | tr -d '"')
+            app_version=$(grep '^appVersion:' "$chart" | head -1 | awk '{print $2}' | tr -d '"')
+            description=$(grep '^description:' "$chart" | head -1 | sed 's/^description: //' | tr -d '"' | cut -c1-60)
+            echo "| $app_name | $chart_version | $app_version | $description |" >> DEPLOYMENTS.md
+          done
+
+          # Observability Stack
+          echo "" >> DEPLOYMENTS.md
+          echo "### Observability Stack" >> DEPLOYMENTS.md
+          echo "" >> DEPLOYMENTS.md
+          echo "| Component | Chart Version | App Version | Description |" >> DEPLOYMENTS.md
+          echo "|-----------|---------------|-------------|-------------|" >> DEPLOYMENTS.md
+
+          for chart in $(find apps/infra/observability -name Chart.yaml 2>/dev/null | sort); do
+            app_name=$(dirname "$chart" | xargs basename)
+            chart_version=$(grep '^version:' "$chart" | head -1 | awk '{print $2}' | tr -d '"')
+            app_version=$(grep '^appVersion:' "$chart" | head -1 | awk '{print $2}' | tr -d '"')
+            description=$(grep '^description:' "$chart" | head -1 | sed 's/^description: //' | tr -d '"' | cut -c1-60)
+            echo "| $app_name | $chart_version | $app_version | $description |" >> DEPLOYMENTS.md
+          done
+
+          # Dependencies Section
+          echo "" >> DEPLOYMENTS.md
+          echo "## Helm Chart Dependencies" >> DEPLOYMENTS.md
+          echo "" >> DEPLOYMENTS.md
+          echo "External Helm charts used as dependencies:" >> DEPLOYMENTS.md
+          echo "" >> DEPLOYMENTS.md
+          echo "| Application | Dependency | Version | Repository |" >> DEPLOYMENTS.md
+          echo "|-------------|------------|---------|------------|" >> DEPLOYMENTS.md
+
+          for chart in $(find apps/infra -name Chart.yaml | sort); do
+            app_name=$(dirname "$chart" | xargs basename)
+            # Extract dependencies from Chart.yaml
+            if grep -q "^dependencies:" "$chart"; then
+              # Use awk to parse dependencies
+              awk '/^dependencies:/,/^[^ ]/{
+                if (/^  - name:/) { name=$3 }
+                if (/version:/) { ver=$2 }
+                if (/repository:/) { repo=$2; gsub(/"/, "", repo); print name, ver, repo }
+              }' "$chart" | while read dep_name dep_ver dep_repo; do
+                if [ -n "$dep_name" ]; then
+                  echo "| $app_name | $dep_name | $dep_ver | $dep_repo |" >> DEPLOYMENTS.md
+                fi
+              done
+            fi
+          done
+
+          # Environment Configurations
+          echo "" >> DEPLOYMENTS.md
+          echo "## Environment Configurations" >> DEPLOYMENTS.md
+          echo "" >> DEPLOYMENTS.md
+
+          for env in dev integration staging prod; do
+            if [ -d "envs/$env/values/infra" ]; then
+              echo "### $env" >> DEPLOYMENTS.md
+              echo "" >> DEPLOYMENTS.md
+              echo "| Application | Customizations |" >> DEPLOYMENTS.md
+              echo "|-------------|----------------|" >> DEPLOYMENTS.md
+
+              for values_file in $(find "envs/$env/values/infra" -name "*.yaml" 2>/dev/null | sort); do
+                app_name=$(basename "$values_file" .yaml)
+                # Extract key settings (replicas, resources, enabled features)
+                customizations=""
+                if grep -q "replicaCount:" "$values_file" 2>/dev/null; then
+                  replicas=$(grep "replicaCount:" "$values_file" | head -1 | awk '{print $2}')
+                  customizations="replicas: $replicas"
+                fi
+                if grep -q "enabled:" "$values_file" 2>/dev/null; then
+                  enabled_features=$(grep "enabled:" "$values_file" | wc -l | tr -d ' ')
+                  customizations="$customizations, $enabled_features feature toggles"
+                fi
+                if [ -z "$customizations" ]; then
+                  customizations="defaults"
+                fi
+                echo "| $app_name | $customizations |" >> DEPLOYMENTS.md
+              done
+              echo "" >> DEPLOYMENTS.md
+            fi
+          done
+
+          # ArgoCD ApplicationSets
+          echo "## ArgoCD Configuration" >> DEPLOYMENTS.md
+          echo "" >> DEPLOYMENTS.md
+          echo "### ApplicationSets" >> DEPLOYMENTS.md
+          echo "" >> DEPLOYMENTS.md
+
+          for appset in $(find argocd -name "*.yaml" -exec grep -l "kind: ApplicationSet" {} \; 2>/dev/null | sort); do
+            name=$(grep "^  name:" "$appset" | head -1 | awk '{print $2}')
+            echo "- **$name** (\`$appset\`)" >> DEPLOYMENTS.md
+          done
+
+          echo "" >> DEPLOYMENTS.md
+          echo "---" >> DEPLOYMENTS.md
+          echo "" >> DEPLOYMENTS.md
+          echo "*This file is auto-generated by the [generate-inventory](.github/workflows/generate-inventory.yml) workflow.*" >> DEPLOYMENTS.md
+
+      - name: Generate JSON inventory
+        run: |
+          echo '{"generated_at": "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'", "applications": [' > deployments.json
+
+          first=true
+          for chart in $(find apps/infra -name Chart.yaml | sort); do
+            app_name=$(dirname "$chart" | xargs basename)
+            chart_version=$(grep '^version:' "$chart" | head -1 | awk '{print $2}' | tr -d '"')
+            app_version=$(grep '^appVersion:' "$chart" | head -1 | awk '{print $2}' | tr -d '"')
+            description=$(grep '^description:' "$chart" | head -1 | sed 's/^description: //' | tr -d '"')
+
+            if [ "$first" = true ]; then
+              first=false
+            else
+              echo "," >> deployments.json
+            fi
+
+            cat >> deployments.json << EOF
+          {
+            "name": "$app_name",
+            "chartVersion": "$chart_version",
+            "appVersion": "$app_version",
+            "description": "$description",
+            "path": "$(dirname "$chart")"
+          }
+          EOF
+          done
+
+          echo ']}'  >> deployments.json
+
+      - name: Commit changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          if [ -n "$(git status --porcelain DEPLOYMENTS.md deployments.json)" ]; then
+            git add DEPLOYMENTS.md deployments.json
+            git commit -m "docs: update deployment inventory [skip ci]"
+            git push
+          else
+            echo "No changes to commit"
+          fi
