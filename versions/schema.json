@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://platform.io/schemas/version-manifest.json",
+  "title": "Version Manifest",
+  "description": "Centralized version control for platform applications",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "const": "platform.io/v1"
+    },
+    "kind": {
+      "type": "string",
+      "const": "VersionManifest"
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["environment"],
+      "properties": {
+        "environment": {
+          "type": "string",
+          "enum": ["dev", "integration", "staging", "prod"]
+        },
+        "lastUpdated": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "User or system that last updated the manifest"
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["applications"],
+      "properties": {
+        "defaults": {
+          "type": "object",
+          "description": "Default values inherited by all applications",
+          "properties": {
+            "helm": {
+              "$ref": "#/$defs/helmSpec"
+            },
+            "image": {
+              "$ref": "#/$defs/imageSpec"
+            }
+          }
+        },
+        "applications": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/applicationSpec"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "applicationSpec": {
+      "type": "object",
+      "required": ["image"],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this application is deployed in this environment"
+        },
+        "image": {
+          "$ref": "#/$defs/imageSpec"
+        },
+        "helm": {
+          "$ref": "#/$defs/helmSpec"
+        },
+        "config": {
+          "$ref": "#/$defs/configSpec"
+        },
+        "replicas": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Override replica count for this environment"
+        },
+        "resources": {
+          "$ref": "#/$defs/resourcesSpec"
+        }
+      }
+    },
+    "imageSpec": {
+      "type": "object",
+      "required": ["tag"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "description": "Container image repository (overrides default)"
+        },
+        "tag": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+          "description": "Image tag (semver recommended)"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "Image digest for immutable deployments"
+        }
+      }
+    },
+    "helmSpec": {
+      "type": "object",
+      "properties": {
+        "chart": {
+          "type": "string",
+          "description": "Path to Helm chart in repo"
+        },
+        "version": {
+          "type": "string",
+          "description": "Chart version (from Chart.yaml)"
+        },
+        "valuesFile": {
+          "type": "string",
+          "description": "Additional values file path"
+        }
+      }
+    },
+    "configSpec": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "string",
+          "description": "Git commit SHA for config values"
+        },
+        "valuesChecksum": {
+          "type": "string",
+          "description": "SHA256 checksum of merged values"
+        }
+      }
+    },
+    "resourcesSpec": {
+      "type": "object",
+      "properties": {
+        "requests": {
+          "type": "object",
+          "properties": {
+            "cpu": { "type": "string" },
+            "memory": { "type": "string" }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "cpu": { "type": "string" },
+            "memory": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

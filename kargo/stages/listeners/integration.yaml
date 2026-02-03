@@ -1,3 +1,4 @@
+---
 apiVersion: kargo.akuity.io/v1alpha1
 kind: Stage
 metadata:
@@ -21,6 +22,16 @@ spec:
               - branch: main
                 path: ./src
         - uses: yaml-update
+          as: update-version-manifest
+          config:
+            path: ./src/versions/integration/versions.yaml
+            updates:
+              - key: spec.applications.listeners.image.tag
+                value: ${{ imageFrom("listeners").Tag }}
+              - key: metadata.lastUpdated
+                value: ${{ now | date "2006-01-02T15:04:05Z" }}
+        - uses: yaml-update
+          as: update-values
           config:
             path: ./src/envs/integration/values/listeners/values.yaml
             updates:
@@ -29,8 +40,10 @@ spec:
         - uses: git-commit
           config:
             path: ./src
-            messageFromSteps:
-              - yaml-update
+            message: |
+              chore(listeners): promote to integration v${{ imageFrom("listeners").Tag }}
+
+              Image: ${{ imageFrom("listeners").RepoURL }}:${{ imageFrom("listeners").Tag }}
         - uses: git-push
           config:
             path: ./src
@@ -40,4 +53,5 @@ spec:
               - name: listeners-integration
   verification:
     analysisTemplates:
-      - name: smoke-test
+      - name: health-check
+      - name: integration-test

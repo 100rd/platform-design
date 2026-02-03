@@ -1,0 +1,53 @@
+---
+apiVersion: platform.io/v1
+kind: VersionManifest
+metadata:
+  environment: dev
+  lastUpdated: "2026-02-03T00:00:00Z"
+  updatedBy: platform-team
+spec:
+  # Default values inherited by all applications
+  defaults:
+    helm:
+      chart: helm/app
+      version: "0.2.0"
+    image:
+      repository: "${ECR_REGISTRY}"  # Substituted at deploy time
+
+  applications:
+    # --- Mono team applications ---
+    mono:
+      image:
+        tag: "0.1.0"
+      replicas: 1
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+
+    # --- Chains team applications ---
+    chains:
+      image:
+        tag: "0.1.0"
+      replicas: 1
+
+    # --- Direct team applications ---
+    direct:
+      image:
+        tag: "0.1.0"
+      replicas: 1
+
+    # --- Protocols team applications ---
+    protocols:
+      image:
+        tag: "0.1.0"
+      replicas: 1
+
+    # --- Listeners team applications ---
+    listeners:
+      image:
+        tag: "0.1.0"
+      replicas: 1

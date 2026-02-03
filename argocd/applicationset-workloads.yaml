@@ -1,0 +1,139 @@
+---
+# ApplicationSet for workload applications.
+# Generates ArgoCD Applications for each (team × environment) combination.
+# Replaces individual Application files in argocd/workloads/{team}/{env}.yaml
+#
+# Version information flows:
+#   1. Kargo Warehouse detects new image in ECR
+#   2. Kargo Stage promotion updates versions/{env}/versions.yaml
+#   3. Kargo Stage also updates envs/{env}/values/{team}/values.yaml (for ArgoCD)
+#   4. ArgoCD syncs the Application with new image tag
+#
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-workloads
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          # Teams/applications to deploy
+          - list:
+              elements:
+                - team: mono
+                  namespace: mono
+                - team: chains
+                  namespace: chains
+                - team: direct
+                  namespace: direct
+                - team: protocols
+                  namespace: protocols
+                - team: listeners
+                  namespace: listeners
+          # Environments to deploy to
+          - list:
+              elements:
+                - env: dev
+                  cluster: https://kubernetes.default.svc
+                  autoSync: true
+                - env: integration
+                  cluster: https://kubernetes.default.svc
+                  autoSync: true
+                - env: staging
+                  cluster: https://kubernetes.default.svc
+                  autoSync: true
+                - env: prod
+                  cluster: https://kubernetes.default.svc
+                  autoSync: false
+  template:
+    metadata:
+      name: '{{ .team }}-{{ .env }}'
+      namespace: argocd
+      annotations:
+        # Kargo authorization for promotion
+        kargo.akuity.io/authorized-stage: '{{ .team }}:{{ .env }}'
+        # Link to version manifest for visibility
+        platform.io/version-manifest: 'versions/{{ .env }}/versions.yaml'
+      labels:
+        app.kubernetes.io/part-of: platform-workloads
+        app.kubernetes.io/component: '{{ .team }}'
+        app.kubernetes.io/managed-by: applicationset
+        env: '{{ .env }}'
+        team: '{{ .team }}'
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: platform-workloads
+      sources:
+        # Source 1: Helm chart
+        - repoURL: git@github.com:IgorGerasimow/platform-design.git
+          targetRevision: HEAD
+          path: helm/app
+          helm:
+            releaseName: '{{ .team }}'
+            ignoreMissingValueFiles: true
+            valueFiles:
+              # Environment-specific values (contains image.tag from Kargo)
+              - $values/envs/{{ .env }}/values/{{ .team }}/values.yaml
+              # Team-specific base values (if exists)
+              - $values/apps/{{ .team }}/values.yaml
+            values: |
+              fullnameOverride: "{{ .team }}"
+              environment: "{{ .env }}"
+              # Default image repository - override in values if needed
+              image:
+                repository: "${ECR_REGISTRY}/{{ .team }}"
+        # Source 2: Values reference
+        - repoURL: git@github.com:IgorGerasimow/platform-design.git
+          targetRevision: HEAD
+          ref: values
+      destination:
+        server: '{{ .cluster }}'
+        namespace: '{{ .env }}-{{ .namespace }}'
+      syncPolicy:
+        {{- if eq .autoSync true }}
+        automated:
+          prune: true
+          selfHeal: true
+        {{- end }}
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - PruneLast=true
+          - RespectIgnoreDifferences=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jqPathExpressions:
+            - .spec.replicas
+  syncPolicy:
+    preserveResourcesOnDeletion: true
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        - matchExpressions:
+            - key: env
+              operator: In
+              values: [dev]
+        - matchExpressions:
+            - key: env
+              operator: In
+              values: [integration]
+        - matchExpressions:
+            - key: env
+              operator: In
+              values: [staging]
+        - matchExpressions:
+            - key: env
+              operator: In
+              values: [prod]

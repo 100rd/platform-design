@@ -1,3 +1,4 @@
+---
 apiVersion: kargo.akuity.io/v1alpha1
 kind: Stage
 metadata:
@@ -19,7 +20,19 @@ spec:
             checkout:
               - branch: main
                 path: ./src
+        # Update version manifest (source of truth)
         - uses: yaml-update
+          as: update-version-manifest
+          config:
+            path: ./src/versions/dev/versions.yaml
+            updates:
+              - key: spec.applications.mono.image.tag
+                value: ${{ imageFrom("mono").Tag }}
+              - key: metadata.lastUpdated
+                value: ${{ now | date "2006-01-02T15:04:05Z" }}
+        # Update values file (for ArgoCD consumption)
+        - uses: yaml-update
+          as: update-values
           config:
             path: ./src/envs/dev/values/mono/values.yaml
             updates:
@@ -28,8 +41,11 @@ spec:
         - uses: git-commit
           config:
             path: ./src
-            messageFromSteps:
-              - yaml-update
+            message: |
+              chore(mono): promote to dev v${{ imageFrom("mono").Tag }}
+
+              Image: ${{ imageFrom("mono").RepoURL }}:${{ imageFrom("mono").Tag }}
+              Digest: ${{ imageFrom("mono").Digest }}
         - uses: git-push
           config:
             path: ./src

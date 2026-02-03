@@ -1,0 +1,137 @@
+name: Version Manifest Validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "versions/**"
+      - ".github/workflows/version-manifest-validate.yml"
+  pull_request:
+    paths:
+      - "versions/**"
+  workflow_dispatch:
+
+jobs:
+  validate-schema:
+    name: Validate Version Manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          npm install -g ajv-cli ajv-formats
+
+      - name: Validate version manifest schema
+        run: |
+          for env in dev integration staging prod; do
+            echo "Validating versions/${env}/versions.yaml..."
+            # Convert YAML to JSON for ajv validation
+            python3 -c "
+          import yaml, json, sys
+          with open('versions/${env}/versions.yaml') as f:
+              data = yaml.safe_load(f)
+          json.dump(data, sys.stdout)
+          " | ajv validate -s versions/schema.json -d /dev/stdin --strict=false
+          done
+
+      - name: Check required applications exist
+        run: |
+          REQUIRED_APPS="mono chains direct protocols listeners"
+          for env in dev integration staging prod; do
+            echo "Checking versions/${env}/versions.yaml..."
+            for app in $REQUIRED_APPS; do
+              if ! grep -q "^    ${app}:" "versions/${env}/versions.yaml"; then
+                echo "ERROR: Missing required application '${app}' in versions/${env}/versions.yaml"
+                exit 1
+              fi
+            done
+          done
+          echo "All required applications present in all environments"
+
+      - name: Validate image tags are valid
+        run: |
+          for env in dev integration staging prod; do
+            echo "Checking image tags in versions/${env}/versions.yaml..."
+            # Extract all image tags and validate format
+            python3 -c "
+          import yaml, re, sys
+          with open('versions/${env}/versions.yaml') as f:
+              data = yaml.safe_load(f)
+
+          tag_pattern = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9._-]*$')
+          errors = []
+
+          for app, config in data.get('spec', {}).get('applications', {}).items():
+              tag = config.get('image', {}).get('tag', '')
+              if tag and not tag_pattern.match(tag):
+                  errors.append(f'{app}: invalid tag format \"{tag}\"')
+
+          if errors:
+              print('\\n'.join(errors))
+              sys.exit(1)
+          print(f'All image tags valid in ${env}')
+          "
+          done
+
+  diff-environments:
+    name: Generate Environment Diff
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate version diff report
+        run: |
+          echo "## Version Changes" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          for env in dev integration staging prod; do
+            if git diff --quiet origin/main -- "versions/${env}/versions.yaml" 2>/dev/null; then
+              continue
+            fi
+
+            echo "### ${env}" >> $GITHUB_STEP_SUMMARY
+            echo '```diff' >> $GITHUB_STEP_SUMMARY
+            git diff origin/main -- "versions/${env}/versions.yaml" >> $GITHUB_STEP_SUMMARY || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          done
+
+      - name: Compare environments
+        run: |
+          echo "## Environment Comparison" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Application | dev | integration | staging | prod |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------------|-----|-------------|---------|------|" >> $GITHUB_STEP_SUMMARY
+
+          python3 << 'EOF' >> $GITHUB_STEP_SUMMARY
+          import yaml
+
+          envs = ['dev', 'integration', 'staging', 'prod']
+          versions = {}
+
+          for env in envs:
+              try:
+                  with open(f'versions/{env}/versions.yaml') as f:
+                      data = yaml.safe_load(f)
+                      versions[env] = {
+                          app: config.get('image', {}).get('tag', 'N/A')
+                          for app, config in data.get('spec', {}).get('applications', {}).items()
+                      }
+              except:
+                  versions[env] = {}
+
+          all_apps = set()
+          for env in envs:
+              all_apps.update(versions.get(env, {}).keys())
+
+          for app in sorted(all_apps):
+              row = f"| {app} |"
+              for env in envs:
+                  tag = versions.get(env, {}).get(app, 'N/A')
+                  row += f" {tag} |"
+              print(row)
+          EOF
