@@ -78,6 +78,7 @@ External Helm charts used as dependencies:
 
 ### ApplicationSets
 
+- **platform-workloads** (`argocd/applicationset-workloads.yaml`)
 - **platform-infra** (`argocd/applicationset.yaml`)
 
 ---
