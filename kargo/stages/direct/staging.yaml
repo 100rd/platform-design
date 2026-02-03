@@ -1,3 +1,4 @@
+---
 apiVersion: kargo.akuity.io/v1alpha1
 kind: Stage
 metadata:
@@ -21,6 +22,16 @@ spec:
               - branch: main
                 path: ./src
         - uses: yaml-update
+          as: update-version-manifest
+          config:
+            path: ./src/versions/staging/versions.yaml
+            updates:
+              - key: spec.applications.direct.image.tag
+                value: ${{ imageFrom("direct").Tag }}
+              - key: metadata.lastUpdated
+                value: ${{ now | date "2006-01-02T15:04:05Z" }}
+        - uses: yaml-update
+          as: update-values
           config:
             path: ./src/envs/staging/values/direct/values.yaml
             updates:
@@ -29,8 +40,10 @@ spec:
         - uses: git-commit
           config:
             path: ./src
-            messageFromSteps:
-              - yaml-update
+            message: |
+              chore(direct): promote to staging v${{ imageFrom("direct").Tag }}
+
+              Image: ${{ imageFrom("direct").RepoURL }}:${{ imageFrom("direct").Tag }}
         - uses: git-push
           config:
             path: ./src
@@ -40,4 +53,5 @@ spec:
               - name: direct-staging
   verification:
     analysisTemplates:
-      - name: integration-test
+      - name: health-check
+      - name: smoke-test

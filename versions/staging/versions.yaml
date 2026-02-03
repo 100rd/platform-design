@@ -1,0 +1,47 @@
+---
+apiVersion: platform.io/v1
+kind: VersionManifest
+metadata:
+  environment: staging
+  lastUpdated: "2026-02-03T00:00:00Z"
+  updatedBy: platform-team
+spec:
+  defaults:
+    helm:
+      chart: helm/app
+      version: "0.2.0"
+    image:
+      repository: "${ECR_REGISTRY}"
+
+  applications:
+    mono:
+      image:
+        tag: "0.1.0"
+      replicas: 2
+      resources:
+        requests:
+          cpu: 200m
+          memory: 256Mi
+        limits:
+          cpu: 1000m
+          memory: 512Mi
+
+    chains:
+      image:
+        tag: "0.1.0"
+      replicas: 2
+
+    direct:
+      image:
+        tag: "0.1.0"
+      replicas: 2
+
+    protocols:
+      image:
+        tag: "0.1.0"
+      replicas: 2
+
+    listeners:
+      image:
+        tag: "0.1.0"
+      replicas: 2

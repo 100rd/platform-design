@@ -1,3 +1,4 @@
+---
 apiVersion: kargo.akuity.io/v1alpha1
 kind: Stage
 metadata:
@@ -21,6 +22,16 @@ spec:
               - branch: main
                 path: ./src
         - uses: yaml-update
+          as: update-version-manifest
+          config:
+            path: ./src/versions/integration/versions.yaml
+            updates:
+              - key: spec.applications.protocols.image.tag
+                value: ${{ imageFrom("protocols").Tag }}
+              - key: metadata.lastUpdated
+                value: ${{ now | date "2006-01-02T15:04:05Z" }}
+        - uses: yaml-update
+          as: update-values
           config:
             path: ./src/envs/integration/values/protocols/values.yaml
             updates:
@@ -29,8 +40,10 @@ spec:
         - uses: git-commit
           config:
             path: ./src
-            messageFromSteps:
-              - yaml-update
+            message: |
+              chore(protocols): promote to integration v${{ imageFrom("protocols").Tag }}
+
+              Image: ${{ imageFrom("protocols").RepoURL }}:${{ imageFrom("protocols").Tag }}
         - uses: git-push
           config:
             path: ./src
@@ -40,4 +53,5 @@ spec:
               - name: protocols-integration
   verification:
     analysisTemplates:
-      - name: smoke-test
+      - name: health-check
+      - name: integration-test
