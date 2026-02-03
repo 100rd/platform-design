@@ -406,10 +406,16 @@ kube-prometheus-stack:
           revision: 1
           datasource: Prometheus
 
-        # VPC CNI
-        vpc-cni:
-          gnetId: 17942
-          revision: 2
+        # Cilium CNI
+        cilium:
+          gnetId: 16611
+          revision: 1
+          datasource: Prometheus
+
+        # Hubble Network Observability
+        hubble:
+          gnetId: 16613
+          revision: 1
           datasource: Prometheus
 
     # OAuth/SSO Configuration (example: AWS Cognito, Okta, Google)

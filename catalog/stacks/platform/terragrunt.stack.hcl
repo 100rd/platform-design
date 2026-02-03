@@ -2,8 +2,11 @@
 # Platform Stack Template
 # ---------------------------------------------------------------------------------------------------------------------
 # Composable stack that deploys the full platform infrastructure:
-#   VPC → TGW Attachment → EKS → Platform CRDs → ArgoCD
-#                                   ├── Karpenter + Monitoring + RDS
+#   VPC → TGW Attachment → EKS → Cilium → Platform CRDs → ArgoCD
+#                                   ├── Karpenter (Bottlerocket) + Monitoring + RDS
+#
+# CNI: Cilium with ENI IPAM mode (VPC-routable pod IPs)
+# AMI: Bottlerocket (native Cilium support, faster boot, smaller attack surface)
 #
 # Each unit reads its environment-specific configuration from account.hcl and region.hcl
 # in the live tree. Dependencies between units are resolved automatically by Terragrunt.
@@ -32,6 +35,11 @@ unit "secrets" {
 unit "eks" {
   source = "${get_repo_root()}/catalog/units/eks"
   path   = "eks"
+}
+
+unit "cilium" {
+  source = "${get_repo_root()}/catalog/units/cilium"
+  path   = "cilium"
 }
 
 unit "platform-crds" {

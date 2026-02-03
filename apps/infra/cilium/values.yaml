@@ -1,0 +1,235 @@
+# Cilium CNI Configuration for EKS with Bottlerocket
+# https://docs.cilium.io/en/stable/
+
+cilium:
+  enabled: true
+
+  # ---------------------------------------------------------------------------
+  # EKS ENI Mode
+  # Pods get VPC-routable IPs (same behavior as AWS VPC CNI)
+  # ---------------------------------------------------------------------------
+  eni:
+    enabled: true
+    awsEnablePrefixDelegation: true
+    updateEC2AdapterLimitViaAPI: true
+    awsReleaseExcessIPs: true
+
+  ipam:
+    mode: eni
+
+  routingMode: native
+
+  # ---------------------------------------------------------------------------
+  # CNI Configuration
+  # ---------------------------------------------------------------------------
+  cni:
+    chainingMode: none
+    exclusive: true
+
+  enableIPv4Masquerade: true
+  enableIPv6Masquerade: false
+
+  # ---------------------------------------------------------------------------
+  # kube-proxy Replacement
+  # Start with false for safer migration, enable after validation
+  # ---------------------------------------------------------------------------
+  kubeProxyReplacement: false
+
+  # Cluster API server (set via ArgoCD values override)
+  k8sServiceHost: ""
+  k8sServicePort: 443
+
+  # ---------------------------------------------------------------------------
+  # Hubble Observability
+  # ---------------------------------------------------------------------------
+  hubble:
+    enabled: true
+
+    relay:
+      enabled: true
+      replicas: 2
+
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+
+      # Anti-affinity for HA
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    k8s-app: hubble-relay
+                topologyKey: kubernetes.io/hostname
+
+    ui:
+      enabled: true
+      replicas: 2
+
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+
+      # Internal access only by default
+      ingress:
+        enabled: false
+
+      # Backend configuration
+      backend:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+    # Metrics for Prometheus
+    metrics:
+      enabled:
+        - dns
+        - drop
+        - tcp
+        - flow
+        - port-distribution
+        - icmp
+        - httpV2:exemplars=true;labelsContext=source_ip,source_namespace,source_workload,destination_ip,destination_namespace,destination_workload,traffic_direction
+
+      serviceMonitor:
+        enabled: true
+        namespace: monitoring
+        labels:
+          prometheus: kube-prometheus
+
+    # TLS configuration
+    tls:
+      auto:
+        enabled: true
+        method: helm
+
+  # ---------------------------------------------------------------------------
+  # Operator Configuration
+  # ---------------------------------------------------------------------------
+  operator:
+    replicas: 2
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 1000m
+        memory: 512Mi
+
+    # Anti-affinity for HA
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  name: cilium-operator
+              topologyKey: kubernetes.io/hostname
+
+    # Pod disruption budget
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+
+  # ---------------------------------------------------------------------------
+  # Agent Configuration
+  # ---------------------------------------------------------------------------
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 2000m
+      memory: 1Gi
+
+  # Bottlerocket-specific cgroup path
+  cgroup:
+    hostRoot: /sys/fs/cgroup
+
+  # ---------------------------------------------------------------------------
+  # BPF Settings
+  # ---------------------------------------------------------------------------
+  bpf:
+    masquerade: true
+    clockProbe: false
+    preallocateMaps: true
+    tproxy: true
+
+  # Bandwidth manager for QoS
+  bandwidthManager:
+    enabled: true
+    bbr: true
+
+  # Load balancer algorithm
+  loadBalancer:
+    algorithm: maglev
+
+  # Local redirect policy for node-local DNS
+  localRedirectPolicy: true
+
+  # ---------------------------------------------------------------------------
+  # Security
+  # ---------------------------------------------------------------------------
+  securityContext:
+    capabilities:
+      ciliumAgent:
+        - CHOWN
+        - KILL
+        - NET_ADMIN
+        - NET_RAW
+        - IPC_LOCK
+        - SYS_ADMIN
+        - SYS_RESOURCE
+        - DAC_OVERRIDE
+        - FOWNER
+        - SETGID
+        - SETUID
+      cleanCiliumState:
+        - NET_ADMIN
+        - SYS_ADMIN
+        - SYS_RESOURCE
+
+  # ---------------------------------------------------------------------------
+  # Scheduling
+  # ---------------------------------------------------------------------------
+  tolerations:
+    - operator: Exists
+
+  nodeSelector:
+    kubernetes.io/os: linux
+
+  # Priority class for CNI
+  priorityClassName: system-node-critical
+
+  # Pod labels
+  podLabels:
+    app.kubernetes.io/part-of: cilium
+
+  # ---------------------------------------------------------------------------
+  # Prometheus Metrics
+  # ---------------------------------------------------------------------------
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      namespace: monitoring
+      labels:
+        prometheus: kube-prometheus
+      # Trust that prometheus-operator CRDs exist (deployed by observability stack)
+      trustCRDsExist: true

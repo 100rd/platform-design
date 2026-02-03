@@ -1,0 +1,15 @@
+# Staging environment overrides for Cilium
+
+cilium:
+  # HA configuration for staging
+  operator:
+    replicas: 2
+
+  hubble:
+    relay:
+      replicas: 2
+    ui:
+      replicas: 2
+
+  # Keep kube-proxy for staging to validate before prod
+  kubeProxyReplacement: false

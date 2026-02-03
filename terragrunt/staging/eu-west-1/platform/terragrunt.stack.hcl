@@ -29,6 +29,11 @@ unit "eks" {
   path   = "eks"
 }
 
+unit "cilium" {
+  source = "${get_repo_root()}/catalog/units/cilium"
+  path   = "cilium"
+}
+
 unit "karpenter-iam" {
   source = "${get_repo_root()}/catalog/units/karpenter-iam"
   path   = "karpenter-iam"

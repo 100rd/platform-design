@@ -1,0 +1,29 @@
+apiVersion: v2
+name: cilium
+description: Cilium CNI with Hubble observability for Kubernetes networking
+version: 1.0.0
+appVersion: "1.16.5"
+type: application
+
+dependencies:
+  - name: cilium
+    version: "1.16.5"
+    repository: https://helm.cilium.io/
+    condition: cilium.enabled
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - cni
+  - networking
+  - cilium
+  - ebpf
+  - hubble
+  - observability
+  - security
+
+annotations:
+  category: Networking
+  platform: Kubernetes

@@ -1,0 +1,40 @@
+# Production environment overrides for Cilium
+
+cilium:
+  # HA configuration for production
+  operator:
+    replicas: 2
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 2000m
+        memory: 1Gi
+
+  # Higher agent resources for production workloads
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 4000m
+      memory: 2Gi
+
+  hubble:
+    relay:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 200m
+          memory: 256Mi
+        limits:
+          cpu: 1000m
+          memory: 1Gi
+    ui:
+      replicas: 2
+
+  # Enable kube-proxy replacement in prod after validation
+  # Set to true once Cilium is stable
+  kubeProxyReplacement: false
