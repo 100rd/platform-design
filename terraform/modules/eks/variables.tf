@@ -55,6 +55,12 @@ variable "cluster_endpoint_public_access" {
   default     = false
 }
 
+variable "enable_vpc_cni" {
+  description = "Enable AWS VPC CNI addon. Set to false to use Cilium CNI instead (recommended)."
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Tags to apply"
   type        = map(string)

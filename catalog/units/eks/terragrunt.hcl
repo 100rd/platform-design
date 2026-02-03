@@ -4,6 +4,7 @@
 # Reusable unit that provisions a managed Kubernetes cluster with IRSA support and a
 # "system" managed node group using the terraform-aws-modules/eks/aws registry module.
 #
+# CNI: Cilium (deployed separately) — vpc-cni addon is DISABLED by default.
 # The cluster is placed in the private subnets of the VPC and tagged for Karpenter discovery.
 # ---------------------------------------------------------------------------------------------------------------------
 
@@ -61,6 +62,34 @@ inputs = {
   enable_irsa = true
 
   # ---------------------------------------------------------------------------
+  # Cluster Addons
+  # IMPORTANT: vpc-cni is DISABLED because we use Cilium CNI instead.
+  # Cilium is deployed as a separate unit after EKS cluster creation.
+  # ---------------------------------------------------------------------------
+  cluster_addons = {
+    coredns = {
+      most_recent = true
+      # CoreDNS needs Cilium to be ready before pods can communicate
+      configuration_values = jsonencode({
+        tolerations = [
+          {
+            key      = "node.cilium.io/agent-not-ready"
+            operator = "Exists"
+            effect   = "NoSchedule"
+          }
+        ]
+      })
+    }
+    kube-proxy = {
+      most_recent = true
+    }
+    eks-pod-identity-agent = {
+      most_recent = true
+    }
+    # vpc-cni is intentionally NOT included — Cilium is used instead
+  }
+
+  # ---------------------------------------------------------------------------
   # Node security group tags for Karpenter auto-discovery
   # ---------------------------------------------------------------------------
   node_security_group_tags = {
@@ -69,15 +98,29 @@ inputs = {
 
   # ---------------------------------------------------------------------------
   # Managed node groups
-  # The "system" group runs cluster-critical workloads (CoreDNS, kube-proxy, etc.)
+  # The "system" group runs cluster-critical workloads (CoreDNS, Cilium, Karpenter)
+  # Uses Bottlerocket AMI for native Cilium support.
   # Instance types and scaling parameters are defined per environment in account.hcl.
   # ---------------------------------------------------------------------------
   eks_managed_node_groups = {
     system = {
+      ami_type       = "BOTTLEROCKET_x86_64"
       instance_types = local.account_vars.locals.eks_instance_types
       min_size       = local.account_vars.locals.eks_min_size
       max_size       = local.account_vars.locals.eks_max_size
       desired_size   = local.account_vars.locals.eks_desired_size
+
+      # Bottlerocket-specific settings
+      platform = "bottlerocket"
+
+      # Taints to prevent workloads until Cilium is ready
+      taints = {
+        cilium = {
+          key    = "node.cilium.io/agent-not-ready"
+          value  = "true"
+          effect = "NO_SCHEDULE"
+        }
+      }
     }
   }
 

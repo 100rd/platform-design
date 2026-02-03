@@ -1,0 +1,12 @@
+# Integration environment overrides for Cilium
+
+cilium:
+  # Single replica operator for integration
+  operator:
+    replicas: 1
+
+  hubble:
+    relay:
+      replicas: 1
+    ui:
+      replicas: 1

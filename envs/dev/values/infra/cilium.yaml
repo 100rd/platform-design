@@ -1,0 +1,12 @@
+# Dev environment overrides for Cilium
+
+cilium:
+  # Single replica operator for dev
+  operator:
+    replicas: 1
+
+  hubble:
+    relay:
+      replicas: 1
+    ui:
+      replicas: 1

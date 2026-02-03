@@ -2,7 +2,11 @@
 # Karpenter NodePools — Catalog Unit
 # ---------------------------------------------------------------------------------------------------------------------
 # Deploys Karpenter NodePool and EC2NodeClass CRDs via kubernetes_manifest resources.
-# Depends on EKS, Karpenter IAM, and Karpenter Controller.
+# Depends on EKS, Karpenter IAM, Karpenter Controller, and Cilium (for Bottlerocket nodes).
+#
+# AMI Family:
+#   - Bottlerocket: Recommended for Cilium CNI. Faster boot, smaller attack surface.
+#   - AL2023: Legacy option for AWS VPC CNI.
 # ---------------------------------------------------------------------------------------------------------------------
 
 terraform {
@@ -57,6 +61,17 @@ dependency "karpenter_controller" {
   mock_outputs_merge_strategy_with_state  = "shallow"
 }
 
+dependency "cilium" {
+  config_path = "../cilium"
+
+  mock_outputs = {
+    cilium_version = "1.16.5"
+  }
+
+  mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
+  mock_outputs_merge_strategy_with_state  = "shallow"
+}
+
 # ---------------------------------------------------------------------------------------------------------------------
 # Kubernetes provider
 # ---------------------------------------------------------------------------------------------------------------------
@@ -85,4 +100,7 @@ inputs = {
   cluster_name       = dependency.eks.outputs.cluster_name
   node_iam_role_name = dependency.karpenter_iam.outputs.node_iam_role_name
   nodepool_configs   = try(local.account_vars.locals.karpenter_nodepools, {})
+
+  # Use Bottlerocket for Cilium CNI (default), AL2023 for VPC CNI
+  ami_family = try(local.account_vars.locals.karpenter_ami_family, "Bottlerocket")
 }
