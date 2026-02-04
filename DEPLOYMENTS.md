@@ -80,6 +80,9 @@ External Helm charts used as dependencies:
 
 - **platform-workloads** (`argocd/applicationset-workloads.yaml`)
 - **platform-infra** (`argocd/applicationset.yaml`)
+- **infra** (`argocd/bootstrap/applicationsets/infra-appset.yaml`)
+- **observability** (`argocd/bootstrap/applicationsets/observability-appset.yaml`)
+- **role-apps** (`argocd/bootstrap/applicationsets/role-apps-appset.yaml`)
 
 ---
 
