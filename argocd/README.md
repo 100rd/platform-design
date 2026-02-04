@@ -1,27 +1,139 @@
-# ArgoCD ApplicationSet
+# ArgoCD Configuration
 
-This folder contains the ArgoCD configuration used to bootstrap application deployments across multiple clusters.
+This directory contains the complete ArgoCD GitOps configuration, covering both multi-cluster infrastructure bootstrap and workload application deployment.
 
-The `applicationset.yaml` definition relies on a matrix generator that combines:
+## Architecture Overview
 
-- **Git directories** – application sources located under `apps/`. Directories named `*-kustomize` or the root `apps` directory itself are excluded.
-- **Discovered clusters** – any cluster registered with ArgoCD. Environment and cluster labels are used to select value files.
+```
+                    ┌─────────────┐
+                    │  root-app   │  (ArgoCD points here)
+                    └──────┬──────┘
+                           │
+              ┌────────────┼────────────┐
+              ▼            ▼            ▼
+        ┌──────────┐ ┌──────────┐ ┌──────────────┐
+        │  infra   │ │  role    │ │ observability │
+        │  appset  │ │  appset  │ │    appset     │
+        └────┬─────┘ └────┬─────┘ └──────┬───────┘
+             │             │              │
+             ▼             ▼              ▼
+        ALL clusters   By label     ALL clusters
+        apps/infra/*   apps/cluster-roles/<role>/*
+                                   apps/infra/observability/*
 
-For every combination of application path and cluster, an Application is created automatically. Helm value files are loaded from:
-
-1. `apps/<app>/values.yaml`
-2. `envs/<env>/values/<app>.yaml`
-3. `envs/<env>/<cluster>/<app>.yaml`
-
-The resulting Application deploys into the namespace `<env>-<app>` on the target cluster, and namespaces are created automatically.
-
-## Usage
-
-1. Ensure ArgoCD is running and has access to your clusters.
-2. Apply the ApplicationSet:
-
-```bash
-kubectl apply -f argocd/applicationset.yaml -n argocd
+        ┌──────────────┐   ┌──────────────────┐
+        │ platform-    │   │ platform-        │
+        │ infra appset │   │ workloads appset │
+        └──────┬───────┘   └───────┬──────────┘
+               │                    │
+               ▼                    ▼
+        apps/infra/*          apps/{team}/*
+        (Helm charts)         (Kargo promotion)
 ```
 
-After the file is applied, ArgoCD will detect application directories under `apps/` and deploy them to all registered clusters.
+## Directory Structure
+
+```
+argocd/
+├── applicationset.yaml             # Platform infra ApplicationSet (Helm-based)
+├── applicationset-workloads.yaml   # Workload ApplicationSet (Kargo-driven)
+├── appproject-workloads.yaml       # AppProject for workloads
+├── kargo-bootstrap.yaml            # Kargo configuration Application
+│
+├── bootstrap/                      # Multi-cluster bootstrap entry point
+│   ├── root-app.yaml               # Single Application ArgoCD targets
+│   ├── kustomization.yaml          # Lists all bootstrap ApplicationSets
+│   ├── applicationsets/            # Bootstrap ApplicationSet definitions
+│   │   ├── infra-appset.yaml       # Shared infra → ALL clusters
+│   │   ├── role-apps-appset.yaml   # Role-specific apps → matching clusters
+│   │   └── observability-appset.yaml # Monitoring → ALL clusters
+│   └── cluster-secrets/            # Cluster registration templates
+│       └── in-cluster-template.yaml
+│
+├── cluster-envs/                   # Kustomize overlays for multi-cluster envs
+│   ├── base/                       # Common labels & config
+│   ├── dev/
+│   ├── stage/
+│   ├── integration/
+│   └── prod/
+│
+├── overlays/                       # Role+Env combinations (20 total)
+│   ├── dex-dev/
+│   ├── backend-prod/
+│   └── ...
+│
+└── workloads/                      # Explicit Application definitions
+    ├── chains/                     # Per-team, per-env Applications
+    ├── direct/
+    ├── listeners/
+    ├── mono/
+    └── protocols/
+```
+
+## ApplicationSets
+
+### 1. Platform Infrastructure (`applicationset.yaml`)
+
+Deploys Helm-based infrastructure apps from `apps/infra/*` to all clusters. Uses environment-specific value overrides from `envs/<env>/values/infra/<app>.yaml`.
+
+### 2. Platform Workloads (`applicationset-workloads.yaml`)
+
+Deploys workload applications (5 teams x 4 environments = 20 apps) with Kargo-driven image promotion. Auto-sync for dev/integration/staging, manual for prod.
+
+### 3. Bootstrap Infrastructure (`bootstrap/applicationsets/infra-appset.yaml`)
+
+Multi-cluster shared infrastructure from `apps/infra/*` deployed to ALL registered clusters.
+
+### 4. Role-Specific Apps (`bootstrap/applicationsets/role-apps-appset.yaml`)
+
+Role-specific apps from `apps/cluster-roles/<role>/*` deployed only to clusters with matching `cluster-role` label.
+
+### 5. Observability (`bootstrap/applicationsets/observability-appset.yaml`)
+
+Observability stack from `apps/infra/observability/*` deployed to ALL clusters into the `observability` namespace.
+
+## Cluster Label Convention
+
+Every cluster registered with ArgoCD must have these labels on its Secret:
+
+```yaml
+metadata:
+  labels:
+    cluster-role: dex        # one of: dex, backend, 3rd-party, velocity, listeners
+    env: dev                 # one of: dev, stage, integration, prod
+```
+
+See `bootstrap/cluster-secrets/in-cluster-template.yaml` for a full example.
+
+## Onboarding a New Cluster
+
+1. Create a cluster Secret with the correct labels (see template)
+2. ArgoCD will automatically deploy:
+   - Shared infra from `apps/infra/`
+   - Observability stack from `apps/infra/observability/`
+   - Role-specific apps from `apps/cluster-roles/<cluster-role>/`
+   - Using overlays from `overlays/<role>-<env>/`
+
+## Adding a New App
+
+### Shared infra (all clusters)
+
+1. Create Helm chart under `apps/infra/<app-name>/`
+2. Add environment overrides in `envs/<env>/values/infra/<app-name>.yaml`
+3. Auto-discovered by both `applicationset.yaml` and `infra-appset`
+
+### Role-specific app
+
+1. Create directory under `apps/cluster-roles/<role>/<app-name>/`
+2. Add `kustomization.yaml` with manifests or Helm chart reference
+3. Optionally add overlay patches in `overlays/<role>-<env>/<app-name>/`
+4. Auto-discovered by `role-apps-appset`
+
+## Environments
+
+| Environment   | Purpose                    | Promotion Gate          |
+|---------------|----------------------------|-------------------------|
+| `dev`         | Development / testing      | Automatic               |
+| `integration` | Integration testing        | Passing integration tests |
+| `stage`       | Pre-production validation  | Passing tests           |
+| `prod`        | Production                 | Human approval + ticket |

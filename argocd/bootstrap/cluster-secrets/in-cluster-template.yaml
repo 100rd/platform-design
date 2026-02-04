@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cluster-CLUSTER_NAME
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: cluster
+    cluster-role: ROLE       # one of: dex, backend, 3rd-party, velocity, listeners
+    env: ENV                 # one of: dev, stage, integration, prod
+type: Opaque
+stringData:
+  name: CLUSTER_NAME
+  server: https://CLUSTER_API_SERVER
+  config: |
+    {
+      "bearerToken": "<token>",
+      "tlsClientConfig": {
+        "insecure": false,
+        "caData": "<base64-ca>"
+      }
+    }
+---
+# Example: Register the in-cluster as a dex-dev cluster
+#
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: cluster-dex-dev
+#   namespace: argocd
+#   labels:
+#     argocd.argoproj.io/secret-type: cluster
+#     cluster-role: dex
+#     env: dev
+# type: Opaque
+# stringData:
+#   name: dex-dev
+#   server: https://kubernetes.default.svc
+#   config: |
+#     {
+#       "tlsClientConfig": {
+#         "insecure": false
+#       }
+#     }

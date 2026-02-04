@@ -1,0 +1,50 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: infra
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - git:
+              repoURL: https://github.com/IgorGerasimow/platform-design.git
+              revision: HEAD
+              directories:
+                - path: apps/infra/*
+                - path: apps/infra/observability
+                  exclude: true
+          - clusters:
+              selector: {}
+  template:
+    metadata:
+      name: '{{.path.basename}}-{{.name}}'
+      namespace: argocd
+      labels:
+        app.kubernetes.io/part-of: infra
+        cluster-role: '{{.metadata.labels.cluster-role}}'
+        env: '{{.metadata.labels.env}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/IgorGerasimow/platform-design.git
+        targetRevision: HEAD
+        path: '{{.path.path}}'
+      destination:
+        server: '{{.server}}'
+        namespace: '{{.path.basename}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m

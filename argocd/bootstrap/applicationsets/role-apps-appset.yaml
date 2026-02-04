@@ -1,0 +1,57 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: role-apps
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchExpressions:
+                  - key: cluster-role
+                    operator: In
+                    values:
+                      - dex
+                      - backend
+                      - 3rd-party
+                      - velocity
+                      - listeners
+          - git:
+              repoURL: https://github.com/IgorGerasimow/platform-design.git
+              revision: HEAD
+              directories:
+                - path: 'apps/cluster-roles/{{.metadata.labels.cluster-role}}/*'
+  template:
+    metadata:
+      name: '{{.path.basename}}-{{.name}}'
+      namespace: argocd
+      labels:
+        app.kubernetes.io/part-of: role-apps
+        cluster-role: '{{.metadata.labels.cluster-role}}'
+        env: '{{.metadata.labels.env}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/IgorGerasimow/platform-design.git
+        targetRevision: HEAD
+        path: 'argocd/overlays/{{.metadata.labels.cluster-role}}-{{.metadata.labels.env}}/{{.path.basename}}'
+      destination:
+        server: '{{.server}}'
+        namespace: '{{.path.basename}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m

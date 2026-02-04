@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - applicationsets/infra-appset.yaml
+  - applicationsets/role-apps-appset.yaml
+  - applicationsets/observability-appset.yaml
