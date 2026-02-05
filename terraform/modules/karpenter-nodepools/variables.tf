@@ -45,6 +45,17 @@ variable "nodepool_configs" {
       value  = string
       effect = string
     })), [])
+    # --- HPC / Placement Group fields (optional, backward compatible) ---
+    placement_group_name = optional(string)      # EC2NodeClass spec.placement.placementGroupName
+    availability_zone    = optional(string)       # EC2NodeClass spec.placement.availabilityZone (single-AZ pinning)
+    block_device_overrides = optional(object({    # Custom EBS for HPC (io2, high IOPS)
+      volume_type = optional(string, "gp3")
+      volume_size = optional(string)              # Overrides root_volume_size
+      iops        = optional(number, 3000)
+      throughput  = optional(number, 125)          # Ignored for io2
+      encrypted   = optional(bool, true)
+    }))
+
     expire_after = optional(string, "720h")
     disruption_budgets = optional(list(object({
       nodes    = optional(string)

@@ -47,6 +47,7 @@ resource "kubernetes_manifest" "ec2_node_class" {
           var.additional_node_tags
         )
         # Block device mappings for root volume
+        # Supports optional block_device_overrides for HPC workloads (io2, high IOPS)
         blockDeviceMappings = var.ami_family == "Bottlerocket" ? [
           {
             deviceName = "/dev/xvda"
@@ -59,26 +60,36 @@ resource "kubernetes_manifest" "ec2_node_class" {
           },
           {
             deviceName = "/dev/xvdb"
-            ebs = {
-              volumeSize          = try(each.value.root_volume_size, "50Gi")
-              volumeType          = "gp3"
-              encrypted           = true
-              deleteOnTermination = true
-              iops                = 3000
-              throughput          = 125
-            }
+            ebs = merge(
+              {
+                volumeSize          = try(each.value.block_device_overrides.volume_size, try(each.value.root_volume_size, "50Gi"))
+                volumeType          = try(each.value.block_device_overrides.volume_type, "gp3")
+                encrypted           = try(each.value.block_device_overrides.encrypted, true)
+                deleteOnTermination = true
+                iops                = try(each.value.block_device_overrides.iops, 3000)
+              },
+              # throughput only valid for gp3 (not io2)
+              try(each.value.block_device_overrides.volume_type, "gp3") != "io2" ? {
+                throughput = try(each.value.block_device_overrides.throughput, 125)
+              } : {}
+            )
           }
         ] : [
           {
             deviceName = "/dev/xvda"
-            ebs = {
-              volumeSize          = try(each.value.root_volume_size, "50Gi")
-              volumeType          = "gp3"
-              encrypted           = true
-              deleteOnTermination = true
-              iops                = 3000
-              throughput          = 125
-            }
+            ebs = merge(
+              {
+                volumeSize          = try(each.value.block_device_overrides.volume_size, try(each.value.root_volume_size, "50Gi"))
+                volumeType          = try(each.value.block_device_overrides.volume_type, "gp3")
+                encrypted           = try(each.value.block_device_overrides.encrypted, true)
+                deleteOnTermination = true
+                iops                = try(each.value.block_device_overrides.iops, 3000)
+              },
+              # throughput only valid for gp3 (not io2)
+              try(each.value.block_device_overrides.volume_type, "gp3") != "io2" ? {
+                throughput = try(each.value.block_device_overrides.throughput, 125)
+              } : {}
+            )
           }
         ]
       },
@@ -95,6 +106,13 @@ resource "kubernetes_manifest" "ec2_node_class" {
           [settings.kubernetes.node-taints]
           ${join("\n", [for t in try(each.value.taints, []) : "\"${t.key}\" = \"${t.value}:${t.effect}\""])}
           TOML
+        )
+      } : {},
+      # HPC placement group and AZ pinning (optional)
+      try(each.value.placement_group_name, null) != null || try(each.value.availability_zone, null) != null ? {
+        placement = merge(
+          try(each.value.placement_group_name, null) != null ? { placementGroupName = each.value.placement_group_name } : {},
+          try(each.value.availability_zone, null) != null ? { availabilityZone = each.value.availability_zone } : {}
         )
       } : {}
     )
