@@ -210,6 +210,156 @@ locals {
   }
 
   # ===========================================================================
+  # GPU Video Analysis Cluster Configuration
+  # ===========================================================================
+  # Dedicated EKS cluster for real-time video analysis of sport game temperature
+  # maps. Uses GPU instances (NVIDIA A10G for inference, T4 for preprocessing)
+  # with placement groups for low-latency networking.
+  # ===========================================================================
+  gpu_analysis_config = {
+    # --- EKS system node group sizing ---
+    eks_instance_types = ["m6i.large"]
+    eks_min_size       = 2
+    eks_max_size       = 3
+    eks_desired_size   = 2
+
+    # --- Cilium ---
+    cilium_replace_kube_proxy = false
+
+    # --- Karpenter controller ---
+    karpenter_controller_replicas = 2
+    karpenter_log_level           = "info"
+    karpenter_ami_family          = "Bottlerocket"
+
+    # --- Placement groups ---
+    placement_groups = {
+      gpu-cluster = {
+        name     = "staging-euw3-gpu-analysis-cluster"
+        strategy = "cluster"
+      }
+    }
+
+    # --- Karpenter NodePools (GPU-optimized for video analysis) ---
+    karpenter_nodepools = {
+
+      # -----------------------------------------------------------------------
+      # GPU Inference — Real-time video analysis (NVIDIA A10G)
+      # On-demand only for SLA guarantees.
+      # -----------------------------------------------------------------------
+      gpu-inference = {
+        enabled           = true
+        cpu_limit         = 100
+        memory_limit      = 400
+        spot_percentage   = 0          # On-demand — real-time SLA
+        instance_families = ["g5"]     # NVIDIA A10G (24GB VRAM)
+        instance_sizes    = ["xlarge", "2xlarge", "4xlarge"]
+        architectures     = ["amd64"]
+
+        # Single-AZ placement for GPU cluster locality
+        placement_group_name = "staging-euw3-gpu-analysis-cluster"
+        availability_zone    = "eu-west-3a"
+
+        # High-performance storage for video frames and model weights
+        block_device_overrides = {
+          volume_type = "gp3"
+          volume_size = "300Gi"
+          iops        = 10000
+          throughput  = 750
+          encrypted   = true
+        }
+
+        # Conservative disruption — never disrupt during business hours
+        consolidation_policy = "WhenEmpty"
+        consolidate_after    = "300s"
+        disruption_budgets = [
+          { nodes = "0", schedule = "0 9 * * 1-5", duration = "10h" },
+          { nodes = "1" }
+        ]
+
+        labels = {
+          "gpu.nvidia.com/class" = "inference"
+          "gpu.nvidia.com/type"  = "a10g"
+          "workload.io/type"     = "video-analysis"
+        }
+        taints = [
+          { key = "nvidia.com/gpu", value = "true", effect = "NoSchedule" }
+        ]
+
+        expire_after = "1440h"  # 60 days
+        weight       = 10
+      }
+
+      # -----------------------------------------------------------------------
+      # GPU Preprocessing — Video decode, frame extraction (NVIDIA T4)
+      # 70% spot for cost optimization on batch workloads.
+      # -----------------------------------------------------------------------
+      gpu-preprocessing = {
+        enabled           = true
+        cpu_limit         = 100
+        memory_limit      = 400
+        spot_percentage   = 70         # Cost optimization for batch work
+        instance_families = ["g4dn"]   # NVIDIA T4 (16GB VRAM)
+        instance_sizes    = ["xlarge", "2xlarge", "4xlarge"]
+        architectures     = ["amd64"]
+
+        # Single-AZ placement for GPU cluster locality
+        placement_group_name = "staging-euw3-gpu-analysis-cluster"
+        availability_zone    = "eu-west-3a"
+
+        # Storage for video decode buffers
+        block_device_overrides = {
+          volume_type = "gp3"
+          volume_size = "200Gi"
+          iops        = 5000
+          throughput  = 500
+          encrypted   = true
+        }
+
+        # Moderate disruption tolerance
+        consolidation_policy = "WhenEmptyOrUnderutilized"
+        consolidate_after    = "180s"
+
+        labels = {
+          "gpu.nvidia.com/class" = "preprocessing"
+          "gpu.nvidia.com/type"  = "t4"
+          "workload.io/type"     = "video-preprocessing"
+        }
+        taints = [
+          { key = "nvidia.com/gpu", value = "true", effect = "NoSchedule" }
+        ]
+
+        expire_after = "720h"   # 30 days
+        weight       = 20
+      }
+
+      # -----------------------------------------------------------------------
+      # CPU Coordination — Orchestration, API serving
+      # 80% spot, no GPU taint.
+      # -----------------------------------------------------------------------
+      cpu-coordination = {
+        enabled           = true
+        cpu_limit         = 100
+        memory_limit      = 200
+        spot_percentage   = 80
+        instance_families = ["c6i", "c6a", "m6i"]
+        instance_sizes    = ["xlarge", "2xlarge"]
+        architectures     = ["amd64"]
+
+        # Aggressive consolidation for stateless coordination pods
+        consolidation_policy = "WhenEmptyOrUnderutilized"
+        consolidate_after    = "60s"
+
+        labels = {
+          "workload.io/type" = "coordination"
+        }
+
+        expire_after = "720h"   # 30 days
+        weight       = 30
+      }
+    }
+  }
+
+  # ===========================================================================
   # Platform Karpenter NodePools (existing — unchanged)
   # ===========================================================================
   karpenter_nodepools = {
