@@ -6,6 +6,10 @@
 #
 # CNI: Cilium (deployed separately) — vpc-cni addon is DISABLED by default.
 # The cluster is placed in the private subnets of the VPC and tagged for Karpenter discovery.
+#
+# PCI-DSS Controls:
+#   Req 3.4  — Secrets encrypted at rest via KMS CMK (envelope encryption)
+#   Req 10.2 — All control plane log types enabled (api, audit, authenticator, controllerManager, scheduler)
 # ---------------------------------------------------------------------------------------------------------------------
 
 terraform {
@@ -41,6 +45,23 @@ dependency "vpc" {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
+# DEPENDENCY: KMS — PCI-DSS Req 3.4 (secrets encryption)
+# ---------------------------------------------------------------------------------------------------------------------
+
+dependency "kms" {
+  config_path = "../kms"
+
+  mock_outputs = {
+    key_arns = {
+      eks-secrets = "arn:aws:kms:eu-west-1:000000000000:key/mock-eks-secrets-key"
+    }
+  }
+
+  mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
+  mock_outputs_merge_strategy_with_state  = "shallow"
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
 # MODULE INPUTS
 # ---------------------------------------------------------------------------------------------------------------------
 
@@ -60,6 +81,21 @@ inputs = {
 
   # IRSA (IAM Roles for Service Accounts)
   enable_irsa = true
+
+  # ---------------------------------------------------------------------------
+  # Secrets Encryption — PCI-DSS Req 3.4
+  # Uses the eks-secrets KMS CMK from the kms catalog unit.
+  # ---------------------------------------------------------------------------
+  cluster_encryption_config = {
+    provider_key_arn = dependency.kms.outputs.key_arns["eks-secrets"]
+    resources        = ["secrets"]
+  }
+
+  # ---------------------------------------------------------------------------
+  # Control Plane Logging — PCI-DSS Req 10.2
+  # All five log types enabled for comprehensive audit trail.
+  # ---------------------------------------------------------------------------
+  cluster_enabled_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 
   # ---------------------------------------------------------------------------
   # Cluster Addons

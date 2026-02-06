@@ -19,6 +19,14 @@ module "vpc" {
   enable_dns_hostnames = true
   enable_dns_support   = true
 
+  # VPC Flow Logs — PCI-DSS Req 10 (logging & monitoring)
+  enable_flow_log                                 = var.enable_flow_log
+  flow_log_destination_type                       = var.flow_log_destination_type
+  create_flow_log_cloudwatch_log_group            = var.create_flow_log_cloudwatch_log_group
+  flow_log_cloudwatch_log_group_retention_in_days = var.flow_log_cloudwatch_log_group_retention_in_days
+  flow_log_max_aggregation_interval               = var.flow_log_max_aggregation_interval
+  flow_log_traffic_type                           = var.flow_log_traffic_type
+
   # Tags for Karpenter subnet discovery
   private_subnet_tags = merge(
     var.private_subnet_tags,
@@ -37,4 +45,3 @@ module "vpc" {
 
   tags = var.tags
 }
-

@@ -92,6 +92,18 @@ inputs = {
   enable_dns_support   = true
 
   # ---------------------------------------------------------------------------
+  # VPC Flow Logs — PCI-DSS Req 10 (logging & monitoring)
+  # Flow logs capture all network traffic metadata for audit and forensics.
+  # Retention set to 365 days per PCI-DSS Req 10.7.
+  # ---------------------------------------------------------------------------
+  enable_flow_log                                 = true
+  flow_log_destination_type                       = "cloud-watch-logs"
+  create_flow_log_cloudwatch_log_group            = true
+  flow_log_cloudwatch_log_group_retention_in_days = 365
+  flow_log_max_aggregation_interval               = 60
+  flow_log_traffic_type                           = "ALL"
+
+  # ---------------------------------------------------------------------------
   # Subnet tags required by AWS Load Balancer Controller and Karpenter
   # ---------------------------------------------------------------------------
   public_subnet_tags = {

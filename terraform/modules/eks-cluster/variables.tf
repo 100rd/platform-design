@@ -50,6 +50,18 @@ variable "cluster_endpoint_public_access" {
   default     = false
 }
 
+variable "kms_key_arn" {
+  description = "ARN of KMS CMK for EKS secrets envelope encryption. PCI-DSS Req 3.4. Empty string disables encryption."
+  type        = string
+  default     = ""
+}
+
+variable "cluster_enabled_log_types" {
+  description = "List of EKS control plane log types to enable. PCI-DSS Req 10.2 requires comprehensive logging."
+  type        = list(string)
+  default     = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+}
+
 variable "tags" {
   description = "A map of tags to add to all resources"
   type        = map(string)

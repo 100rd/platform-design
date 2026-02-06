@@ -11,6 +11,21 @@ module "eks" {
   authentication_mode = "API_AND_CONFIG_MAP"
 
   # ---------------------------------------------------------------------------
+  # Secrets Encryption — PCI-DSS Req 3.4 (render PAN unreadable)
+  # Encrypts Kubernetes secrets at rest using a KMS CMK via envelope encryption.
+  # ---------------------------------------------------------------------------
+  cluster_encryption_config = var.kms_key_arn != "" ? {
+    provider_key_arn = var.kms_key_arn
+    resources        = ["secrets"]
+  } : {}
+
+  # ---------------------------------------------------------------------------
+  # Control Plane Logging — PCI-DSS Req 10.2
+  # Enables all EKS control plane log types for audit trail completeness.
+  # ---------------------------------------------------------------------------
+  cluster_enabled_log_types = var.cluster_enabled_log_types
+
+  # ---------------------------------------------------------------------------
   # Cluster Addons
   # vpc-cni is DISABLED by default — Cilium CNI is used instead.
   # Set enable_vpc_cni = true to use AWS VPC CNI (legacy mode).

@@ -1,0 +1,149 @@
+---
+# EC2NodeClass for PCI-DSS CDE (Cardholder Data Environment) nodes
+# Dedicated node class for workloads that handle cardholder data.
+#
+# Security hardening:
+#   - Bottlerocket OS (minimal attack surface, immutable root filesystem)
+#   - IMDSv2 required (httpTokens: required)
+#   - Encrypted EBS volumes
+#   - Private subnets only
+#   - No spot instances (payment processing reliability)
+#
+# PCI-DSS Requirements:
+#   Req 1.2 — Network segmentation (dedicated nodes for CDE)
+#   Req 2.2 — System hardening (Bottlerocket, IMDSv2)
+#   Req 3.4 — Encryption of stored CHD (encrypted EBS)
+#   Req 6.3 — Security patches (expireAfter forces AMI refresh)
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: cde-nodes
+  labels:
+    purpose: pci-dss-cde
+    pci-dss-scope: "true"
+spec:
+  # Bottlerocket — smaller attack surface, immutable root, faster boot
+  amiSelectorTerms:
+    - alias: bottlerocket@latest
+
+  # IAM role created by Karpenter Terraform module
+  role: "REPLACE_WITH_KARPENTER_NODE_ROLE_NAME"
+
+  # Subnet discovery — private subnets only
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "REPLACE_WITH_CLUSTER_NAME"
+
+  # Security group discovery
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "REPLACE_WITH_CLUSTER_NAME"
+
+  # Tags for CDE nodes
+  tags:
+    Name: karpenter-cde-node
+    ManagedBy: Karpenter
+    NodePool: cde-nodes
+    pci-dss-scope: "true"
+    Compliance: pci-dss
+
+  # Block device mappings — Bottlerocket uses two volumes
+  blockDeviceMappings:
+    # OS partition (immutable)
+    - deviceName: /dev/xvda
+      ebs:
+        volumeSize: 4Gi
+        volumeType: gp3
+        encrypted: true
+        deleteOnTermination: true
+    # Data partition (container images, logs)
+    - deviceName: /dev/xvdb
+      ebs:
+        volumeSize: 50Gi
+        volumeType: gp3
+        iops: 3000
+        throughput: 125
+        encrypted: true
+        deleteOnTermination: true
+
+  # IMDS v2 required — prevents SSRF-based credential theft
+  metadataOptions:
+    httpEndpoint: enabled
+    httpProtocolIPv6: disabled
+    httpPutResponseHopLimit: 1
+    httpTokens: required
+
+---
+# NodePool for PCI-DSS CDE workloads
+# Only pods with the CDE taint toleration can schedule on these nodes.
+#
+# Key properties:
+#   - Taint: pci-dss=cde:NoSchedule (isolation from non-CDE workloads)
+#   - On-demand only (no spot — payment processing requires reliability)
+#   - Conservative disruption (WhenEmpty only, no consolidation timer)
+#   - 30-day node expiry (forces AMI security updates)
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: cde-nodes
+  labels:
+    pci-dss-scope: "true"
+spec:
+  template:
+    metadata:
+      labels:
+        karpenter.sh/nodepool: cde-nodes
+        node-type: cde
+        pci-dss-scope: "true"
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: cde-nodes
+
+      requirements:
+        # x86 architecture
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+
+        # Linux only
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+
+        # Instance families — compute and general purpose (Intel only for consistency)
+        - key: karpenter.k8s.aws/instance-family
+          operator: In
+          values: ["c6i", "c7i", "m6i", "m7i"]
+
+        # On-demand only — no spot instances for payment processing
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+
+      # CDE taint — only pods with matching toleration can schedule here
+      taints:
+        - key: "pci-dss"
+          value: "cde"
+          effect: "NoSchedule"
+
+      # Force node refresh every 30 days for security patches
+      expireAfter: 720h
+
+  # Resource limits for CDE workload
+  limits:
+    cpu: "32"
+    memory: 64Gi
+
+  # Conservative disruption — never consolidate underutilized CDE nodes
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: Never
+
+    # Disruption budget — only 1 node at a time
+    budgets:
+      - nodes: "1"
+
+  # Scheduling weight
+  weight: 5
