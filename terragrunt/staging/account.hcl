@@ -360,6 +360,23 @@ locals {
   }
 
   # ===========================================================================
+  # GPU Video Pipeline Configuration
+  # ===========================================================================
+  # Data infrastructure for the video analysis pipeline: storage, queuing,
+  # metadata, caching, and delivery.
+  # ===========================================================================
+  video_pipeline_config = {
+    # --- ElastiCache Redis ---
+    redis_engine_version = "7.1"
+    redis_node_type      = "cache.t4g.micro"   # Small for staging
+    redis_num_nodes      = 2                     # Multi-AZ
+
+    # --- CloudFront ---
+    cloudfront_price_class    = "PriceClass_100"  # EU + NA only
+    cloudfront_allowed_countries = ["FR", "DE", "GB", "ES", "IT", "NL", "BE", "AT", "CH", "PT"]
+  }
+
+  # ===========================================================================
   # Platform Karpenter NodePools (existing — unchanged)
   # ===========================================================================
   karpenter_nodepools = {

@@ -82,9 +82,20 @@ Real-time video analysis platform for sport game temperature maps. Dedicated EKS
 ## Data Flow
 
 ```
-Video Stream Ingestion
-         │
-         ▼
+┌──────────────────┐                     ┌──────────────────────┐
+│  Video Upload     │                     │  EventBridge          │
+│  (multi-GB files) │ ──── PutObject ──▶ │  (.mp4/.avi/.mov)    │
+└──────────────────┘                     └──────────┬───────────┘
+                                                     │
+  ┌──────────────────────┐                           ▼
+  │  S3: Raw Video       │               ┌──────────────────────┐
+  │  (Intelligent-Tiering│               │  SQS: Video Jobs     │
+  │   → Glacier 90d      │               │  (1h visibility,     │
+  │   → Deep Archive 180d│               │   14d retention,     │
+  └──────────────────────┘               │   DLQ after 3 fails) │
+                                          └──────────┬───────────┘
+                                                     │ KEDA scales from 0
+                                                     ▼
 ┌──────────────────┐     Low-latency     ┌──────────────────────┐
 │  GPU Preprocessing│ ──────────────────▶ │  GPU Inference        │
 │  (T4 / g4dn)      │  (placement group) │  (A10G / g5)          │
@@ -94,24 +105,41 @@ Video Stream Ingestion
 │  • Resize/normalize│                    │  • Real-time scoring   │
 │  • Batch assembly  │                    │  • Result aggregation  │
 └──────────────────┘                     └──────────┬───────────┘
-                                                     │
-                                                     ▼
-                                          ┌──────────────────────┐
-                                          │  CPU Coordination     │
-                                          │  (c6i/c6a/m6i)       │
-                                          │                        │
-                                          │  • API serving         │
-                                          │  • Job orchestration   │
-                                          │  • Result delivery     │
-                                          │  • Monitoring          │
-                                          └──────────────────────┘
+         │                                           │
+         ▼                                           ▼
+┌──────────────────┐               ┌────────────────────────────┐
+│  S3: Processing   │               │  S3: Results               │
+│  (ephemeral,      │               │  (heat maps, JSON,         │
+│   expires 7 days) │               │   Intelligent-Tiering 30d) │
+└──────────────────┘               └──────────┬─────────────────┘
+                                               │
+                         ┌─────────────────────┼─────────────────────┐
+                         ▼                     ▼                     ▼
+              ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+              │  DynamoDB         │  │  ElastiCache      │  │  CloudFront      │
+              │  (job metadata,   │  │  Redis (cache,    │  │  (CDN delivery,  │
+              │   status, GSIs)   │  │   rate limiting)  │  │   EU edge POPs)  │
+              └──────────────────┘  └──────────────────┘  └──────────┬───────┘
+                                                                      │
+                                              ┌───────────────────────┘
+                                              ▼
+                                   ┌──────────────────────┐
+                                   │  CPU Coordination     │
+                                   │  (c6i/c6a/m6i)       │
+                                   │                        │
+                                   │  • API serving         │
+                                   │  • Job orchestration   │
+                                   │  • Result delivery     │
+                                   │  • Monitoring          │
+                                   └──────────────────────┘
 ```
 
-## Deployment Stack (7 units)
+## Deployment Stack (16 units)
 
 ```
 terragrunt stack apply
 
+  COMPUTE LAYER:
   ① gpu-vpc ─────────────────────────────────────────────────────── VPC + subnets
        │
   ② gpu-placement-group ─────────────────────────────────── cluster strategy, AZ-a
@@ -125,6 +153,19 @@ terragrunt stack apply
            ⑥ gpu-karpenter-controller ───────────── Helm v1.8.1, 2 replicas
                 │
            ⑦ gpu-karpenter-nodepools ────────────── 3 pools: inference, preproc, cpu
+
+  DATA LAYER:
+  ⑧  gpu-s3-raw-video ──────────────────────────── Raw video uploads, auto-tiering
+  ⑨  gpu-s3-processing ─────────────────────────── Ephemeral frames, 7-day expiry
+  ⑩  gpu-s3-results ────────────────────────────── Heat maps + analysis JSON
+  ⑪  gpu-sqs-video-jobs ────────────────────────── Job queue, 1h visibility, DLQ
+  ⑫  gpu-eventbridge-video ─────────────────────── S3 → SQS routing (.mp4/.avi/.mov)
+       (depends on ⑧ + ⑪)
+  ⑬  gpu-dynamodb-jobs ─────────────────────────── Job metadata, GSIs, PITR
+  ⑭  gpu-elasticache ───────────────────────────── Redis 7.1 cache (t4g.micro x2)
+       (depends on ① + ③)
+  ⑮  gpu-cloudfront ────────────────────────────── CDN for results, EU edge POPs
+       (depends on ⑩)
 ```
 
 ## NodePool Comparison
@@ -167,6 +208,12 @@ terragrunt stack apply
 | Cilium | `terraform/modules/cilium` | local (Helm 1.16.5) |
 | Karpenter Controller | `terraform/modules/karpenter` | local (Helm 1.8.1) |
 | Karpenter NodePools | `terraform/modules/karpenter-nodepools` | local |
+| S3 App | `terraform/modules/s3-app` | local |
+| SQS | `terraform/modules/sqs` | local |
+| EventBridge S3→SQS | `terraform/modules/eventbridge-s3-sqs` | local |
+| DynamoDB | `terraform/modules/dynamodb` | local |
+| CloudFront S3 | `terraform/modules/cloudfront-s3` | local |
+| ElastiCache | `terraform/modules/elasticache` | local (Redis 7.1) |
 
 ## Network CIDR Plan
 
@@ -186,4 +233,9 @@ terragrunt stack apply
 | GPU inference (g5) | Variable | On-demand, scales to 0 |
 | GPU preprocessing (g4dn) | Variable | 70% spot discount |
 | CPU coordination | Variable | 80% spot discount |
-| **Base cost (idle)** | **~$313/mo** | No GPU nodes running |
+| S3 storage (raw + results) | ~$52 | Intelligent-Tiering reduces over time |
+| SQS + EventBridge | ~$0 | Free tier covers staging volume |
+| DynamoDB | ~$0.25 | On-demand, low volume |
+| ElastiCache Redis (2x t4g.micro) | ~$50 | Multi-AZ |
+| CloudFront (100 GB/mo) | ~$9 | EU edge locations |
+| **Base cost (idle)** | **~$424/mo** | No GPU nodes running |
