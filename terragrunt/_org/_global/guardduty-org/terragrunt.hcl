@@ -3,6 +3,7 @@
 # ---------------------------------------------------------------------------------------------------------------------
 # Enables GuardDuty across the organization and delegates administration.
 # Depends on the Organization being created first.
+# All protection features enabled: S3, EKS audit + runtime, EBS malware, RDS, Lambda.
 # ---------------------------------------------------------------------------------------------------------------------
 
 terraform {
@@ -30,13 +31,17 @@ inputs = {
   # or to a dedicated security account if created later
   delegated_admin_account_id = local.account_vars.locals.account_id
 
-  enable_s3_protection      = true
-  enable_eks_protection     = true
-  enable_malware_protection = true
-  auto_enable_new_accounts  = true
+  enable_s3_protection            = true
+  enable_eks_audit_log_monitoring = true
+  enable_eks_runtime_monitoring   = true
+  enable_malware_protection       = true
+  enable_rds_protection           = true
+  enable_lambda_protection        = true
+  auto_enable_org_members         = true
 
   tags = {
     Environment = "management"
     ManagedBy   = "terragrunt"
+    Compliance  = "pci-dss"
   }
 }

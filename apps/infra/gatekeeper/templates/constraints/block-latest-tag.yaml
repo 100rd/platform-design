@@ -59,7 +59,7 @@ kind: K8sBlockLatestTag
 metadata:
   name: block-latest-tag
 spec:
-  enforcementAction: warn  # Start with warn
+  enforcementAction: deny
   match:
     kinds:
       - apiGroups: [""]

@@ -58,6 +58,12 @@ resource "helm_release" "cilium" {
       k8sServiceHost = var.cluster_endpoint
       k8sServicePort = 443
 
+      # WireGuard transparent encryption — PCI-DSS Req 4.1 (encrypt data in transit)
+      encryption = {
+        enabled = var.enable_encryption
+        type    = var.encryption_type
+      }
+
       # Hubble observability
       hubble = {
         enabled = var.enable_hubble

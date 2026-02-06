@@ -41,3 +41,8 @@ jobs:
       - name: Go test
         working-directory: ${{ matrix.project }}
         run: go test -race -count=1 -timeout 60s ./...
+      - name: Run gosec SAST
+        working-directory: ${{ matrix.project }}
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec ./...

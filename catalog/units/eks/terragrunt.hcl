@@ -9,6 +9,9 @@
 #
 # PCI-DSS Controls:
 #   Req 3.4  — Secrets encrypted at rest via KMS CMK (envelope encryption)
+#   Req 7.1  — Access limited to authorized personnel via RBAC + access entries
+#   Req 7.2  — Access control system enforced via EKS access entries + K8s RBAC
+#   Req 8.5  — No shared accounts (SSO roles map individual users to K8s groups)
 #   Req 10.2 — All control plane log types enabled (api, audit, authenticator, controllerManager, scheduler)
 # ---------------------------------------------------------------------------------------------------------------------
 
@@ -21,10 +24,19 @@ locals {
   region_vars  = read_terragrunt_config(find_in_parent_folders("region.hcl"))
 
   account_name = local.account_vars.locals.account_name
+  account_id   = local.account_vars.locals.account_id
   aws_region   = local.region_vars.locals.aws_region
   environment  = local.account_vars.locals.environment
 
   cluster_name = "${local.environment}-${local.aws_region}-platform"
+
+  # ---------------------------------------------------------------------------
+  # SSO Role ARNs — constructed from account ID and SSO permission set names.
+  # These are the IAM roles created by AWS IAM Identity Center (SSO).
+  # Pattern: arn:aws:iam::<account_id>:role/aws-reserved/sso.amazonaws.com/<region>/AWSReservedSSO_<PermissionSetName>_*
+  # We use the role path prefix so access entries match any SSO role instance.
+  # ---------------------------------------------------------------------------
+  sso_role_prefix = "arn:aws:iam::${local.account_id}:role/aws-reserved/sso.amazonaws.com"
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -157,6 +169,46 @@ inputs = {
           effect = "NO_SCHEDULE"
         }
       }
+    }
+  }
+
+  # ---------------------------------------------------------------------------
+  # Cluster Creator Admin — bootstrap access
+  # NOTE: Disable this after initial cluster setup and rely solely on
+  # access_entries below for ongoing access. Keeping it enabled during
+  # bootstrap allows the deploying principal to apply RBAC manifests.
+  # ---------------------------------------------------------------------------
+  enable_cluster_creator_admin_permissions = true
+
+  # ---------------------------------------------------------------------------
+  # EKS Access Entries — PCI-DSS Req 7.1, 7.2, 8.5
+  #
+  # Maps AWS IAM Identity Center (SSO) roles to Kubernetes groups.
+  # K8s RBAC ClusterRoles/RoleBindings (kubernetes/rbac/) define what each
+  # group can do. SSO ensures individual user authentication (Req 8.5).
+  #
+  # Role mapping:
+  #   PlatformEngineer SSO -> platform-operators (full workload management)
+  #   ReadOnlyAccess SSO   -> platform-viewers   (read-only cluster access)
+  #   DeveloperAccess SSO  -> platform-viewers   (read-only — devs observe, not operate)
+  # ---------------------------------------------------------------------------
+  access_entries = {
+    platform_engineer = {
+      principal_arn     = "${local.sso_role_prefix}/AWSReservedSSO_PlatformEngineer_*"
+      kubernetes_groups = ["platform-operators"]
+      type              = "STANDARD"
+    }
+
+    readonly_access = {
+      principal_arn     = "${local.sso_role_prefix}/AWSReservedSSO_ReadOnlyAccess_*"
+      kubernetes_groups = ["platform-viewers"]
+      type              = "STANDARD"
+    }
+
+    developer_access = {
+      principal_arn     = "${local.sso_role_prefix}/AWSReservedSSO_DeveloperAccess_*"
+      kubernetes_groups = ["platform-viewers"]
+      type              = "STANDARD"
     }
   }
 

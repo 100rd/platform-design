@@ -44,8 +44,8 @@ loki:
       max_chunk_age: 2h
       max_chunks_per_query: 2000000
 
-      # Retention
-      retention_period: 720h  # 30 days
+      # Retention - PCI-DSS Req 10.7: 1 year minimum
+      retention_period: 8760h  # 365 days
 
       # Split queries by interval
       split_queries_by_interval: 30m

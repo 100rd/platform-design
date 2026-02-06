@@ -27,5 +27,4 @@ jobs:
           quiet: true
           framework: terraform
           output_format: github_failed_only
-          soft_fail: true
-          skip_check: CKV_TF_1,CKV_TF_2
+          soft_fail: false

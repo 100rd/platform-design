@@ -33,6 +33,15 @@ resource "aws_s3_bucket_public_access_block" "this" {
   restrict_public_buckets = true
 }
 
+# S3 access logging - PCI-DSS Req 10.1 (audit trails for all access)
+resource "aws_s3_bucket_logging" "this" {
+  count = var.logging_bucket_name != "" ? 1 : 0
+
+  bucket        = aws_s3_bucket.this.id
+  target_bucket = var.logging_bucket_name
+  target_prefix = "s3-access-logs/${var.bucket_name}/"
+}
+
 resource "aws_s3_bucket_lifecycle_configuration" "this" {
   count  = length(var.lifecycle_rules) > 0 ? 1 : 0
   bucket = aws_s3_bucket.this.id

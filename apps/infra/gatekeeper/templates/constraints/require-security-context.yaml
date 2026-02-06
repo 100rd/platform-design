@@ -49,7 +49,7 @@ kind: K8sRequireSecurityContext
 metadata:
   name: require-security-context
 spec:
-  enforcementAction: warn  # Start with warn, change to deny in production
+  enforcementAction: deny
   match:
     kinds:
       - apiGroups: [""]

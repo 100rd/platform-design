@@ -66,6 +66,25 @@ module "eks" {
   enable_irsa = true
 
   # ---------------------------------------------------------------------------
+  # Cluster Creator Admin — bootstrap access
+  # NOTE: Disable this after initial setup and use access_entries for all access.
+  # Keeping it enabled during bootstrap allows the deploying principal to
+  # configure RBAC before access entries are propagated.
+  # ---------------------------------------------------------------------------
+  enable_cluster_creator_admin_permissions = true
+
+  # ---------------------------------------------------------------------------
+  # Access Entries — PCI-DSS Req 7.1, 7.2, 8.5
+  # Maps IAM principals (SSO roles) to Kubernetes groups for RBAC.
+  # The terraform-aws-modules/eks module v21+ supports access_entries natively.
+  # ---------------------------------------------------------------------------
+  access_entries = { for k, v in var.access_entries : k => {
+    principal_arn     = v.principal_arn
+    kubernetes_groups = v.kubernetes_groups
+    type              = v.type
+  } }
+
+  # ---------------------------------------------------------------------------
   # System node group for Karpenter controller and cluster-critical workloads
   # Uses Bottlerocket by default for Cilium CNI compatibility.
   # ---------------------------------------------------------------------------

@@ -1,0 +1,78 @@
+---
+# Kubernetes RBAC Bindings for Platform Access Control
+#
+# PCI-DSS Requirements:
+#   Req 7.1 — Limit access based on job function
+#   Req 7.2 — Access control system restricts access based on need to know
+#   Req 8.5 — Do not use shared or generic IDs (groups map to SSO roles, not shared accounts)
+#
+# Groups are populated via EKS access entries that map AWS IAM Identity Center
+# (SSO) roles to Kubernetes groups. Each SSO user authenticates individually,
+# satisfying Req 8.5 (no shared accounts).
+#
+# Usage:
+#   kubectl apply -f role-bindings.yaml
+
+# -----------------------------------------------------------------------------
+# platform-viewers: Cluster-wide read-only access
+# Maps to: ReadOnlyAccess SSO role, DeveloperAccess SSO role
+# -----------------------------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: platform-viewers
+  labels:
+    app.kubernetes.io/part-of: platform-rbac
+    pci-dss/requirement: "7.2"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: platform-viewer
+subjects:
+  - kind: Group
+    name: platform-viewers
+    apiGroup: rbac.authorization.k8s.io
+---
+# -----------------------------------------------------------------------------
+# platform-operators: Cluster-wide workload management
+# Maps to: PlatformEngineer SSO role
+# -----------------------------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: platform-operators
+  labels:
+    app.kubernetes.io/part-of: platform-rbac
+    pci-dss/requirement: "7.2"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: platform-operator
+subjects:
+  - kind: Group
+    name: platform-operators
+    apiGroup: rbac.authorization.k8s.io
+---
+# -----------------------------------------------------------------------------
+# cde-operators: CDE namespace only — restricted operations
+# Maps to: CDE operations team members (separate SSO group)
+# Scoped to namespace "cde" via RoleBinding (not ClusterRoleBinding)
+# PCI-DSS Req 7.1: CDE access requires documented business need
+# -----------------------------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cde-operators
+  namespace: cde
+  labels:
+    app.kubernetes.io/part-of: platform-rbac
+    pci-dss/requirement: "7.1"
+    pci-dss/scope: "cde"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cde-operator
+subjects:
+  - kind: Group
+    name: cde-operators
+    apiGroup: rbac.authorization.k8s.io

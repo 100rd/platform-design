@@ -27,6 +27,12 @@ variable "create_iam_policies" {
   default     = true
 }
 
+variable "logging_bucket_name" {
+  description = "Target S3 bucket for access logging (PCI-DSS Req 10.1). Empty string disables logging."
+  type        = string
+  default     = ""
+}
+
 variable "tags" {
   description = "Tags to apply to all resources"
   type        = map(string)

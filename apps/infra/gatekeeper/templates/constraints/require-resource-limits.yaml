@@ -53,7 +53,7 @@ kind: K8sRequireResourceLimits
 metadata:
   name: require-resource-limits
 spec:
-  enforcementAction: warn  # Start with warn, promote to deny after baselining
+  enforcementAction: deny
   match:
     kinds:
       - apiGroups: [""]

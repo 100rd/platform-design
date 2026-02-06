@@ -58,8 +58,12 @@ inputs = {
   # Bandwidth manager for QoS — critical for blockchain P2P networking
   enable_bandwidth_manager = true
 
-  # Default deny policy
-  enable_default_deny = false
+  # Default deny policy — PCI-DSS Req 1.2 (restrict CDE connections)
+  enable_default_deny = true
+
+  # WireGuard transparent encryption — PCI-DSS Req 4.1 (encrypt data in transit)
+  enable_encryption = true
+  encryption_type   = "wireguard"
 
   # HA for operator
   operator_replicas = local.environment == "prod" ? 2 : 1

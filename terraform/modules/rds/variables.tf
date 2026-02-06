@@ -56,6 +56,12 @@ variable "multi_az" {
   default     = true
 }
 
+variable "kms_key_id" {
+  description = "ARN of the KMS CMK for RDS storage encryption. When set, storage_encrypted uses this key instead of the default aws/rds key. Required for PCI-DSS Req 3.4."
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "A map of tags to add to all resources"
   type        = map(string)

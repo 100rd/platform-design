@@ -1,0 +1,44 @@
+---
+# Default ServiceAccount Token Restrictions
+#
+# PCI-DSS Requirements:
+#   Req 7.1 — Limit access to only individuals whose job requires it
+#   Req 7.2 — Deny all unless specifically allowed
+#
+# By default, Kubernetes mounts a service account token into every pod. This
+# grants API access that most workloads do not need. Disabling auto-mount on
+# the default ServiceAccount forces explicit opt-in, reducing the blast radius
+# of container compromise.
+#
+# Applies to: default, cde, kube-system namespaces
+# Workloads that need API access must create a dedicated ServiceAccount with
+# automountServiceAccountToken: true and appropriate RBAC bindings.
+#
+# Usage:
+#   kubectl apply -f default-sa-restrictions.yaml
+
+# default namespace
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: default
+  namespace: default
+automountServiceAccountToken: false
+---
+# CDE namespace — critical for PCI-DSS scope
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: default
+  namespace: cde
+  labels:
+    pci-dss/scope: "cde"
+automountServiceAccountToken: false
+---
+# kube-system namespace — prevents accidental token exposure in system pods
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: default
+  namespace: kube-system
+automountServiceAccountToken: false

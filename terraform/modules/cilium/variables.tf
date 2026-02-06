@@ -51,6 +51,23 @@ variable "enable_default_deny" {
   default     = false
 }
 
+variable "enable_encryption" {
+  description = "Enable transparent encryption for pod-to-pod traffic (PCI-DSS Req 4.1)"
+  type        = bool
+  default     = true
+}
+
+variable "encryption_type" {
+  description = "Encryption type: wireguard or ipsec"
+  type        = string
+  default     = "wireguard"
+
+  validation {
+    condition     = contains(["wireguard", "ipsec"], var.encryption_type)
+    error_message = "encryption_type must be either 'wireguard' or 'ipsec'."
+  }
+}
+
 variable "operator_replicas" {
   description = "Number of Cilium operator replicas"
   type        = number

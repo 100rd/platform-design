@@ -85,6 +85,24 @@ variable "apply_immediately" {
   default     = false
 }
 
+variable "slow_log_enabled" {
+  description = "Enable Redis slow log delivery to CloudWatch (PCI-DSS Req 10.1)"
+  type        = bool
+  default     = true
+}
+
+variable "engine_log_enabled" {
+  description = "Enable Redis engine log delivery to CloudWatch (PCI-DSS Req 10.1)"
+  type        = bool
+  default     = true
+}
+
+variable "log_retention_days" {
+  description = "CloudWatch log retention in days (PCI-DSS Req 10.7: minimum 365)"
+  type        = number
+  default     = 365
+}
+
 variable "tags" {
   description = "Tags to apply to all resources"
   type        = map(string)
