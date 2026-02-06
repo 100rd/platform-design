@@ -1,0 +1,31 @@
+---
+# PCI-DSS CDE DNS Egress Allow
+# Allows pods in the cde namespace to resolve DNS via kube-dns (CoreDNS).
+# Without this, no name resolution is possible due to the default-deny policy.
+#
+# Scope: egress only, port 53 TCP/UDP, to kube-system namespace only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cde-allow-dns
+  namespace: cde
+  labels:
+    pci-dss-scope: "true"
+    pci-dss/control: "network-segmentation"
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

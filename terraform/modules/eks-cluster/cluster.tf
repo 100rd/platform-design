@@ -14,6 +14,21 @@ module "eks" {
   vpc_id     = var.vpc_id
   subnet_ids = var.subnet_ids
 
+  # ---------------------------------------------------------------------------
+  # Secrets Encryption — PCI-DSS Req 3.4 (render PAN unreadable)
+  # Encrypts Kubernetes secrets at rest using a KMS CMK via envelope encryption.
+  # ---------------------------------------------------------------------------
+  cluster_encryption_config = var.kms_key_arn != "" ? {
+    provider_key_arn = var.kms_key_arn
+    resources        = ["secrets"]
+  } : {}
+
+  # ---------------------------------------------------------------------------
+  # Control Plane Logging — PCI-DSS Req 10.2
+  # Enables all EKS control plane log types for audit trail completeness.
+  # ---------------------------------------------------------------------------
+  cluster_enabled_log_types = var.cluster_enabled_log_types
+
   # EKS Managed Node Group(s)
   eks_managed_node_groups = {
     default = {
@@ -26,8 +41,24 @@ module "eks" {
     }
   }
 
-  # Cluster access entry
+  # ---------------------------------------------------------------------------
+  # Cluster Creator Admin — bootstrap access
+  # NOTE: Disable this after initial setup and use access_entries for all access.
+  # Keeping it enabled during bootstrap allows the deploying principal to
+  # configure RBAC before access entries are propagated.
+  # ---------------------------------------------------------------------------
   enable_cluster_creator_admin_permissions = true
+
+  # ---------------------------------------------------------------------------
+  # Access Entries — PCI-DSS Req 7.1, 7.2, 8.5
+  # Maps IAM principals (SSO roles) to Kubernetes groups for RBAC.
+  # The terraform-aws-modules/eks module v21+ supports access_entries natively.
+  # ---------------------------------------------------------------------------
+  access_entries = { for k, v in var.access_entries : k => {
+    principal_arn     = v.principal_arn
+    kubernetes_groups = v.kubernetes_groups
+    type              = v.type
+  } }
 
   tags = var.tags
 }

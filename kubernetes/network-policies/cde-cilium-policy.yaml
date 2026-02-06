@@ -1,0 +1,94 @@
+---
+# PCI-DSS CDE CiliumNetworkPolicy
+# Layer 7-aware network policy for the CDE namespace using Cilium.
+# Provides finer-grained control than standard Kubernetes NetworkPolicy.
+#
+# PCI-DSS Requirements:
+#   Req 1.2.1 — Restrict inbound traffic to the CDE to only that which is necessary
+#   Req 1.3.1 — Restrict outbound traffic from the CDE to only that which is necessary
+#   Req 1.3.2 — Deny all inbound and outbound traffic not explicitly allowed
+#   Req 1.3.4 — No direct public access from untrusted networks to the CDE
+#
+# Traffic matrix:
+#   INGRESS:
+#     - From app namespaces with label pci-dss/cde-access: "true" on port 8443 (HTTPS)
+#   EGRESS:
+#     - To RDS (PostgreSQL) on port 5432, VPC CIDR only (10.20.0.0/16 for prod)
+#     - To ElastiCache (Redis) on port 6379, VPC CIDR only
+#     - To CoreDNS in kube-system on port 53
+#     - NO internet egress (cardholder data must not leave the CDE network boundary)
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cde-l7-policy
+  namespace: cde
+  labels:
+    pci-dss-scope: "true"
+    pci-dss/control: "network-segmentation"
+spec:
+  endpointSelector: {}
+
+  # -------------------------------------------------------------------------
+  # INGRESS RULES
+  # -------------------------------------------------------------------------
+  ingress:
+    # Allow traffic from namespaces explicitly granted CDE access
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ""
+      fromRequires:
+        - matchLabels:
+            k8s:pci-dss/cde-access: "true"
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+
+    # Allow Prometheus scraping from monitoring namespace
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+            - port: "9091"
+              protocol: TCP
+
+  # -------------------------------------------------------------------------
+  # EGRESS RULES
+  # -------------------------------------------------------------------------
+  egress:
+    # DNS resolution via kube-dns
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+
+    # RDS PostgreSQL — VPC CIDR only (database subnets)
+    # Prod VPC CIDR: 10.20.0.0/16 (see catalog/units/vpc/terragrunt.hcl)
+    - toCIDR:
+        - 10.20.0.0/16
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+
+    # ElastiCache Redis — VPC CIDR only
+    - toCIDR:
+        - 10.20.0.0/16
+      toPorts:
+        - ports:
+            - port: "6379"
+              protocol: TCP
+
+  # -------------------------------------------------------------------------
+  # DENY ALL OTHER EGRESS (implicit via endpointSelector + explicit egress rules)
+  # No internet egress — cardholder data must not leave the CDE boundary.
+  # -------------------------------------------------------------------------

@@ -1,0 +1,201 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# Falco Custom Rules for PCI-DSS Compliance
+# ---------------------------------------------------------------------------------------------------------------------
+# These rules supplement the default Falco ruleset with PCI-DSS specific detections.
+#
+# PCI-DSS Requirements Covered:
+#   Req 5.1/5.2  — Anti-malware: detect crypto miners, reverse shells, malicious processes
+#   Req 10.2     — Audit logging: monitor access to sensitive files and processes
+#   Req 11.5     — FIM: detect modification of system binaries and critical files
+#   Req 11.5.1   — Alert on unauthorized modification of critical system files
+#
+# Usage:
+#   Mount as ConfigMap in Falco pod, or pass via custom_rules_yaml variable in Terraform module
+# ---------------------------------------------------------------------------------------------------------------------
+
+# --- PCI-DSS Req 11.5 — File Integrity Monitoring (FIM) ---
+
+- rule: PCI - Modification of System Binaries (FIM)
+  desc: >
+    Detect modification, creation, or deletion of system binaries.
+    PCI-DSS Req 11.5 requires file integrity monitoring on critical system files.
+  condition: >
+    evt.type in (open, openat, openat2) and
+    evt.is_open_write = true and
+    fd.directory in (/usr/bin, /usr/sbin, /bin, /sbin, /usr/local/bin, /usr/local/sbin) and
+    not proc.name in (package_mgmt_binaries)
+  output: >
+    PCI-FIM: System binary modified (file=%fd.name command=%proc.cmdline user=%user.name
+    container=%container.id image=%container.image.repository ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: CRITICAL
+  tags: [pci-dss, fim, req-11.5, filesystem]
+
+- rule: PCI - Modification of System Libraries
+  desc: >
+    Detect writes to shared library directories.
+    Attackers may replace libraries to intercept calls or inject code.
+  condition: >
+    evt.type in (open, openat, openat2) and
+    evt.is_open_write = true and
+    fd.directory pmatch (/lib, /lib64, /usr/lib, /usr/lib64) and
+    not proc.name in (package_mgmt_binaries)
+  output: >
+    PCI-FIM: System library modified (file=%fd.name command=%proc.cmdline user=%user.name
+    container=%container.id ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: CRITICAL
+  tags: [pci-dss, fim, req-11.5, filesystem]
+
+- rule: PCI - Modification of Configuration Files
+  desc: >
+    Detect writes to critical configuration files (PAM, sudoers, SSH, cron).
+    PCI-DSS Req 11.5 covers configuration files that affect security posture.
+  condition: >
+    evt.type in (open, openat, openat2) and
+    evt.is_open_write = true and
+    (fd.name startswith /etc/pam.d/ or
+     fd.name = /etc/sudoers or
+     fd.name startswith /etc/sudoers.d/ or
+     fd.name startswith /etc/ssh/ or
+     fd.name startswith /etc/cron) and
+    not proc.name in (package_mgmt_binaries)
+  output: >
+    PCI-FIM: Critical config modified (file=%fd.name command=%proc.cmdline user=%user.name
+    container=%container.id ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: WARNING
+  tags: [pci-dss, fim, req-11.5, configuration]
+
+# --- PCI-DSS Req 10.2 — Sensitive File Access in CDE Namespace ---
+
+- rule: PCI - Read Sensitive Files in CDE
+  desc: >
+    Detect reads of files containing potential cardholder data or credentials
+    within the CDE namespace. PCI-DSS Req 10.2 requires logging access to
+    cardholder data.
+  condition: >
+    evt.type in (open, openat, openat2) and
+    evt.is_open_read = true and
+    k8s.ns.name = "cde" and
+    (fd.name contains "card" or
+     fd.name contains "pan" or
+     fd.name contains "secret" or
+     fd.name contains "credential" or
+     fd.name contains "token" or
+     fd.name contains ".key" or
+     fd.name contains ".pem" or
+     fd.name contains "password") and
+    not proc.name in (falco, containerd, kubelet)
+  output: >
+    PCI-CDE: Sensitive file read in CDE (file=%fd.name command=%proc.cmdline user=%user.name
+    container=%container.id image=%container.image.repository ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: WARNING
+  tags: [pci-dss, cde, req-10.2, data-access]
+
+# --- PCI-DSS Req 5.1/5.2 — Anti-Malware / Threat Detection ---
+
+- rule: PCI - Crypto Miner Process Detected
+  desc: >
+    Detect processes commonly associated with cryptocurrency mining.
+    PCI-DSS Req 5.1 requires anti-malware on all systems in CDE scope.
+  condition: >
+    spawned_process and
+    (proc.name in (xmrig, minerd, minergate, cpuminer, cryptonight, stratum, ethminer, cgminer, bfgminer, nbminer, t-rex, phoenixminer, gminer, lolminer) or
+     proc.cmdline contains "stratum+tcp" or
+     proc.cmdline contains "stratum+ssl" or
+     proc.cmdline contains "--coin=" or
+     proc.cmdline contains "-o pool." or
+     proc.cmdline contains "cryptonight" or
+     proc.cmdline contains "randomx")
+  output: >
+    PCI-MALWARE: Crypto miner detected (command=%proc.cmdline user=%user.name
+    container=%container.id image=%container.image.repository ns=%k8s.ns.name pod=%k8s.pod.name
+    parent=%proc.pname)
+  priority: CRITICAL
+  tags: [pci-dss, malware, req-5.1, crypto-mining]
+
+- rule: PCI - Outbound Connection from CDE to Non-Approved IPs
+  desc: >
+    Detect outbound network connections from CDE namespace to external IPs.
+    CDE workloads should not initiate connections to the internet.
+    PCI-DSS Req 1.3 restricts network access from CDE.
+  condition: >
+    evt.type in (connect) and
+    evt.dir = < and
+    k8s.ns.name = "cde" and
+    fd.sip.name != "" and
+    not fd.sip.name in (rfc_1918_addresses) and
+    not fd.sport in (53, 443) and
+    not proc.name in (coredns, falco, kubelet)
+  output: >
+    PCI-NETWORK: Outbound connection from CDE to external IP (dest=%fd.sip:%fd.sport
+    command=%proc.cmdline container=%container.id ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: CRITICAL
+  tags: [pci-dss, network, req-1.3, cde, exfiltration]
+
+# --- Privilege Escalation Detection ---
+
+- rule: PCI - Privilege Escalation Attempt
+  desc: >
+    Detect attempts to escalate privileges via setuid/setgid, sudo, or
+    capability manipulation inside containers. PCI-DSS Req 7/8 enforce
+    least privilege and strong access control.
+  condition: >
+    spawned_process and
+    container and
+    (proc.name in (su, sudo, doas) or
+     (evt.type = setuid and evt.rawres = 0) or
+     proc.cmdline contains "nsenter" or
+     proc.cmdline contains "unshare")
+  output: >
+    PCI-PRIVESC: Privilege escalation attempt (command=%proc.cmdline user=%user.name
+    container=%container.id image=%container.image.repository ns=%k8s.ns.name pod=%k8s.pod.name
+    parent=%proc.pname)
+  priority: CRITICAL
+  tags: [pci-dss, privilege-escalation, req-7, req-8]
+
+- rule: PCI - Shell Spawned in Container
+  desc: >
+    Detect interactive shells spawned inside containers. Unexpected shell
+    access may indicate an attacker with code execution. PCI-DSS Req 10.2
+    requires logging of all access to system components.
+  condition: >
+    spawned_process and
+    container and
+    proc.name in (bash, sh, dash, zsh, csh, ksh, fish, ash) and
+    proc.tty != 0 and
+    not proc.pname in (containerd-shim, runc, crio, docker-init)
+  output: >
+    PCI-SHELL: Interactive shell in container (shell=%proc.name command=%proc.cmdline
+    user=%user.name container=%container.id image=%container.image.repository
+    ns=%k8s.ns.name pod=%k8s.pod.name parent=%proc.pname)
+  priority: WARNING
+  tags: [pci-dss, shell, req-10.2, container-security]
+
+# --- Container Drift Detection ---
+
+- rule: PCI - Container Drift Detected
+  desc: >
+    Detect execution of binaries that were not part of the original container image.
+    This indicates container drift which violates immutable infrastructure principles.
+    PCI-DSS Req 11.5 covers change detection on system files.
+  condition: >
+    spawned_process and
+    container and
+    not proc.is_exe_from_memfd = false and
+    (evt.type = execve or evt.type = execveat) and
+    not proc.exepath in (known_binaries)
+  output: >
+    PCI-DRIFT: New binary executed in container (binary=%proc.exepath command=%proc.cmdline
+    container=%container.id image=%container.image.repository ns=%k8s.ns.name pod=%k8s.pod.name)
+  priority: WARNING
+  tags: [pci-dss, drift, req-11.5, container-security]
+
+# --- Macro/List Definitions ---
+
+- list: package_mgmt_binaries
+  items: [dpkg, apt, apt-get, yum, rpm, dnf, apk, pacman, zypper, pip, pip3, npm, gem]
+
+- list: known_binaries
+  items: []
+
+- list: rfc_1918_addresses
+  items: []

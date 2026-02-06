@@ -1,0 +1,36 @@
+---
+# PCI-DSS Cardholder Data Environment (CDE) Namespace
+# This namespace defines the boundary for all workloads that store, process,
+# or transmit cardholder data (CHD) or sensitive authentication data (SAD).
+#
+# PCI-DSS Requirements:
+#   Req 1.2 — Network segmentation controls isolate CDE from non-CDE systems
+#   Req 1.3 — Network access to and from the CDE is restricted
+#   Req 2.2 — System components within the CDE are hardened
+#   Req 6.4 — Public-facing web applications in CDE are protected
+#
+# Security controls enforced:
+#   - Pod Security Standards: restricted (enforce, audit, warn)
+#   - Default-deny NetworkPolicy (cde-default-deny.yaml)
+#   - CiliumNetworkPolicy with explicit allow-list (cde-cilium-policy.yaml)
+#   - Dedicated Karpenter NodePool with CDE taint (cde-nodepool.yaml)
+#   - No internet egress (cardholder data containment)
+#
+# Usage:
+#   kubectl apply -f cde-namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cde
+  labels:
+    # Pod Security Standards — restricted level (strictest)
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    # PCI-DSS scope marker
+    pci-dss-scope: "true"
+  annotations:
+    description: "PCI-DSS Cardholder Data Environment — all workloads handling CHD/SAD must run here"
+    pci-dss/boundary: "cde"
+    pci-dss/requirements: "1.2, 1.3, 2.2, 3.x, 4.x, 6.4"

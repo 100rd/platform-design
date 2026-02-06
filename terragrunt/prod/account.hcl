@@ -35,6 +35,10 @@ locals {
   enable_hpa_defaults           = true
   enable_wpa                    = false
 
+  # --- PCI-DSS CDE Isolation ---
+  # Enable CDE boundary controls in prod (dedicated nodepool, namespace, network policies)
+  enable_cde_isolation = true
+
   karpenter_nodepools = {
     x86 = {
       enabled              = true
@@ -79,6 +83,30 @@ locals {
       consolidation_policy = "WhenEmptyOrUnderutilized"
       consolidate_after    = "300s"
       weight               = 40
+    }
+    # --- PCI-DSS CDE NodePool ---
+    # Dedicated on-demand nodes for cardholder data workloads.
+    # Tainted with pci-dss=cde:NoSchedule to prevent non-CDE pods from scheduling.
+    # No spot instances — payment processing requires reliability.
+    # WhenEmpty consolidation only — avoid disrupting active payment flows.
+    cde = {
+      enabled              = true
+      cpu_limit            = 32
+      memory_limit         = 64
+      spot_percentage      = 0
+      instance_families    = ["c6i", "c7i", "m6i", "m7i"]
+      architectures        = ["amd64"]
+      consolidation_policy = "WhenEmpty"
+      consolidate_after    = "Never"
+      weight               = 5
+      labels = {
+        "node-type"      = "cde"
+        "pci-dss-scope"  = "true"
+      }
+      taints = [
+        { key = "pci-dss", value = "cde", effect = "NoSchedule" }
+      ]
+      expire_after = "720h"
     }
   }
 }

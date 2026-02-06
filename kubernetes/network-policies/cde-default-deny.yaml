@@ -1,0 +1,25 @@
+---
+# PCI-DSS CDE Default Deny NetworkPolicy
+# Denies ALL ingress and egress traffic in the cde namespace by default.
+# Specific allow policies are layered on top per-service.
+#
+# PCI-DSS Requirements:
+#   Req 1.2.1 — Restrict inbound traffic to the CDE to only that which is necessary
+#   Req 1.3.1 — Restrict outbound traffic from the CDE to only that which is necessary
+#   Req 1.3.2 — Deny all inbound and outbound traffic not explicitly allowed
+#
+# This is the baseline — without additional NetworkPolicies, no traffic
+# can enter or leave any pod in the cde namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cde-default-deny-all
+  namespace: cde
+  labels:
+    pci-dss-scope: "true"
+    pci-dss/control: "network-segmentation"
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress

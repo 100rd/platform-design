@@ -33,6 +33,25 @@ resource "aws_security_group" "this" {
   tags = var.tags
 }
 
+# CloudWatch log groups for Redis logging - PCI-DSS Req 10.1, 10.7
+resource "aws_cloudwatch_log_group" "slow_log" {
+  count = var.slow_log_enabled ? 1 : 0
+
+  name              = "/elasticache/${var.name}/slow-log"
+  retention_in_days = var.log_retention_days
+
+  tags = var.tags
+}
+
+resource "aws_cloudwatch_log_group" "engine_log" {
+  count = var.engine_log_enabled ? 1 : 0
+
+  name              = "/elasticache/${var.name}/engine-log"
+  retention_in_days = var.log_retention_days
+
+  tags = var.tags
+}
+
 resource "aws_elasticache_replication_group" "this" {
   replication_group_id = var.name
   description          = var.description
@@ -59,6 +78,28 @@ resource "aws_elasticache_replication_group" "this" {
   maintenance_window       = var.maintenance_window
 
   apply_immediately = var.apply_immediately
+
+  # Redis slow log - PCI-DSS Req 10.1 (audit trails)
+  dynamic "log_delivery_configuration" {
+    for_each = var.slow_log_enabled ? [1] : []
+    content {
+      destination      = aws_cloudwatch_log_group.slow_log[0].name
+      destination_type = "cloudwatch-logs"
+      log_format       = "json"
+      log_type         = "slow-log"
+    }
+  }
+
+  # Redis engine log - PCI-DSS Req 10.1 (audit trails)
+  dynamic "log_delivery_configuration" {
+    for_each = var.engine_log_enabled ? [1] : []
+    content {
+      destination      = aws_cloudwatch_log_group.engine_log[0].name
+      destination_type = "cloudwatch-logs"
+      log_format       = "json"
+      log_type         = "engine-log"
+    }
+  }
 
   tags = var.tags
 }

@@ -1,0 +1,165 @@
+---
+# Kubernetes RBAC ClusterRoles for Platform Access Control
+#
+# PCI-DSS Requirements:
+#   Req 7.1 — Limit access to system components and cardholder data to only those
+#             individuals whose job requires such access
+#   Req 7.2 — Establish an access control system for systems components that restricts
+#             access based on a user's need to know
+#   Req 8.5 — Do not use group, shared, or generic IDs
+#
+# Roles follow least-privilege principle. Each role grants the minimum permissions
+# needed for its function. Users are assigned to K8s groups via EKS access entries
+# mapped from AWS IAM Identity Center (SSO) roles.
+#
+# Usage:
+#   kubectl apply -f cluster-roles.yaml
+
+# -----------------------------------------------------------------------------
+# platform-viewer: Read-only access to non-sensitive cluster resources
+# Intended for: developers, read-only operators, auditors
+# -----------------------------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-viewer
+  labels:
+    app.kubernetes.io/part-of: platform-rbac
+    pci-dss/requirement: "7.1"
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - services
+      - configmaps
+      - events
+      - namespaces
+      - nodes
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - replicasets
+      - statefulsets
+      - daemonsets
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+      - networkpolicies
+    verbs: ["get", "list", "watch"]
+  # Explicitly NO access to secrets — PCI-DSS Req 3.4
+---
+# -----------------------------------------------------------------------------
+# platform-operator: Full management of workloads in assigned namespaces
+# Intended for: platform engineers, SREs
+# Bound via ClusterRoleBinding but scoped by namespace RoleBindings where needed
+# -----------------------------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-operator
+  labels:
+    app.kubernetes.io/part-of: platform-rbac
+    pci-dss/requirement: "7.1"
+rules:
+  # Read access to cluster-wide resources
+  - apiGroups: [""]
+    resources:
+      - namespaces
+      - nodes
+      - events
+      - persistentvolumes
+    verbs: ["get", "list", "watch"]
+  # Full workload management
+  - apiGroups: [""]
+    resources:
+      - pods
+      - services
+      - configmaps
+      - persistentvolumeclaims
+      - serviceaccounts
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - replicasets
+      - statefulsets
+      - daemonsets
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Secrets management — operators can manage secrets but access is audited (Req 10.2)
+  - apiGroups: [""]
+    resources:
+      - secrets
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Pod logs and exec for troubleshooting
+  - apiGroups: [""]
+    resources:
+      - pods/log
+      - pods/exec
+      - pods/portforward
+    verbs: ["get", "create"]
+  # Network policies — operators can view but not modify (security team manages)
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - networkpolicies
+    verbs: ["get", "list", "watch"]
+---
+# -----------------------------------------------------------------------------
+# cde-operator: Restricted access within the CDE namespace only
+# Intended for: CDE operations team handling cardholder data workloads
+# This role is intentionally limited — full CDE access requires separate approval
+# PCI-DSS Req 7.1: Only personnel with documented business need access CDE
+# -----------------------------------------------------------------------------
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cde-operator
+  labels:
+    app.kubernetes.io/part-of: platform-rbac
+    pci-dss/requirement: "7.1"
+    pci-dss/scope: "cde"
+rules:
+  # Read-only access to workload status
+  - apiGroups: [""]
+    resources:
+      - pods
+      - services
+      - events
+      - configmaps
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - replicasets
+      - statefulsets
+    verbs: ["get", "list", "watch"]
+  # Emergency pod restart capability (delete triggers recreation by controller)
+  - apiGroups: [""]
+    resources:
+      - pods
+    verbs: ["create", "delete"]
+  # Pod logs for troubleshooting (no exec — exec in CDE requires break-glass)
+  - apiGroups: [""]
+    resources:
+      - pods/log
+    verbs: ["get"]
+  # Explicitly NO access to:
+  #   - secrets (PCI-DSS Req 3.4 — cardholder data protection)
+  #   - pods/exec (requires break-glass procedure in CDE)
+  #   - networkpolicies (security team only)
+  #   - serviceaccounts (prevent privilege escalation)

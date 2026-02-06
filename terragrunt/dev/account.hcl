@@ -35,6 +35,10 @@ locals {
   enable_hpa_defaults           = false
   enable_wpa                    = false
 
+  # --- PCI-DSS CDE Isolation ---
+  # CDE isolation disabled in dev — cardholder data only exists in prod
+  enable_cde_isolation = false
+
   karpenter_nodepools = {
     x86 = {
       enabled              = true

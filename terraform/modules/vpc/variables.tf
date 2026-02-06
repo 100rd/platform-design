@@ -50,3 +50,43 @@ variable "environment" {
   type        = string
   default     = "dev"
 }
+
+# ---------------------------------------------------------------------------------------------------------------------
+# VPC Flow Logs — PCI-DSS Req 10 (logging & monitoring)
+# ---------------------------------------------------------------------------------------------------------------------
+
+variable "enable_flow_log" {
+  description = "Enable VPC Flow Logs. Required for PCI-DSS compliance."
+  type        = bool
+  default     = true
+}
+
+variable "flow_log_destination_type" {
+  description = "Type of flow log destination. One of: cloud-watch-logs, s3, kinesis-data-firehose."
+  type        = string
+  default     = "cloud-watch-logs"
+}
+
+variable "create_flow_log_cloudwatch_log_group" {
+  description = "Whether to create a CloudWatch log group for VPC flow logs."
+  type        = bool
+  default     = true
+}
+
+variable "flow_log_cloudwatch_log_group_retention_in_days" {
+  description = "Number of days to retain flow logs in CloudWatch. PCI-DSS Req 10.7 mandates 365 days minimum."
+  type        = number
+  default     = 365
+}
+
+variable "flow_log_max_aggregation_interval" {
+  description = "Maximum interval of time (seconds) during which a flow of packets is captured. Valid values: 60, 600."
+  type        = number
+  default     = 60
+}
+
+variable "flow_log_traffic_type" {
+  description = "Type of traffic to capture. Valid values: ACCEPT, REJECT, ALL."
+  type        = string
+  default     = "ALL"
+}

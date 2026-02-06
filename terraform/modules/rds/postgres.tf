@@ -1,3 +1,28 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# RDS PostgreSQL Instance with PCI-DSS Controls
+# ---------------------------------------------------------------------------------------------------------------------
+# PCI-DSS Req 4.1: Encrypt data in transit (rds.force_ssl = 1)
+# PCI-DSS Req 3.4: Encrypt data at rest (KMS CMK)
+# ---------------------------------------------------------------------------------------------------------------------
+
+resource "aws_db_parameter_group" "this" {
+  name        = "${var.identifier}-pg17-ssl"
+  family      = "postgres17"
+  description = "PostgreSQL 17 parameter group with forced SSL (PCI-DSS Req 4.1)"
+
+  parameter {
+    name         = "rds.force_ssl"
+    value        = "1"
+    apply_method = "pending-reboot"
+  }
+
+  tags = var.tags
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
 module "db" {
   source  = "terraform-aws-modules/rds/aws"
   version = "~> 6.0"
@@ -6,8 +31,8 @@ module "db" {
 
   engine               = "postgres"
   engine_version       = "17"
-  family               = "postgres17" # DB parameter group
-  major_engine_version = "17"         # DB option group
+  family               = "postgres17"
+  major_engine_version = "17"
   instance_class       = var.instance_class
 
   allocated_storage     = var.allocated_storage
@@ -18,16 +43,19 @@ module "db" {
   password = var.password
   port     = 5432
 
+  # SSL enforcement via custom parameter group (PCI-DSS Req 4.1)
+  create_db_parameter_group = false
+  parameter_group_name      = aws_db_parameter_group.this.name
+
   multi_az               = var.multi_az
-  db_subnet_group_name   = "dns-failover-subnet-group" # Will be created by module if subnets provided
+  db_subnet_group_name   = "dns-failover-subnet-group"
   subnet_ids             = var.subnet_ids
   vpc_security_group_ids = [module.security_group.security_group_id]
 
-  maintenance_window        = "Mon:00:00-Mon:03:00"
-  backup_window             = "03:00-06:00"
-  backup_retention_period   = 7
-  skip_final_snapshot       = var.environment == "prod" ? false : true
-  final_snapshot_identifier = var.environment == "prod" ? "${var.identifier}-final-snapshot" : null
+  maintenance_window      = "Mon:00:00-Mon:03:00"
+  backup_window           = "03:00-06:00"
+  backup_retention_period = 7
+  skip_final_snapshot     = var.environment == "prod" ? false : true
 
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
   create_cloudwatch_log_group     = true
@@ -36,6 +64,10 @@ module "db" {
   performance_insights_retention_period = 7
   create_monitoring_role                = true
   monitoring_interval                   = 60
+
+  # Encryption at rest with KMS CMK (PCI-DSS Req 3.4)
+  storage_encrypted = true
+  kms_key_id        = var.kms_key_id
 
   tags = var.tags
 }

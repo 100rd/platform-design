@@ -11,6 +11,21 @@ module "eks" {
   authentication_mode = "API_AND_CONFIG_MAP"
 
   # ---------------------------------------------------------------------------
+  # Secrets Encryption — PCI-DSS Req 3.4 (render PAN unreadable)
+  # Encrypts Kubernetes secrets at rest using a KMS CMK via envelope encryption.
+  # ---------------------------------------------------------------------------
+  cluster_encryption_config = var.kms_key_arn != "" ? {
+    provider_key_arn = var.kms_key_arn
+    resources        = ["secrets"]
+  } : {}
+
+  # ---------------------------------------------------------------------------
+  # Control Plane Logging — PCI-DSS Req 10.2
+  # Enables all EKS control plane log types for audit trail completeness.
+  # ---------------------------------------------------------------------------
+  cluster_enabled_log_types = var.cluster_enabled_log_types
+
+  # ---------------------------------------------------------------------------
   # Cluster Addons
   # vpc-cni is DISABLED by default — Cilium CNI is used instead.
   # Set enable_vpc_cni = true to use AWS VPC CNI (legacy mode).
@@ -49,6 +64,25 @@ module "eks" {
 
   # Enable IRSA (IAM Roles for Service Accounts)
   enable_irsa = true
+
+  # ---------------------------------------------------------------------------
+  # Cluster Creator Admin — bootstrap access
+  # NOTE: Disable this after initial setup and use access_entries for all access.
+  # Keeping it enabled during bootstrap allows the deploying principal to
+  # configure RBAC before access entries are propagated.
+  # ---------------------------------------------------------------------------
+  enable_cluster_creator_admin_permissions = true
+
+  # ---------------------------------------------------------------------------
+  # Access Entries — PCI-DSS Req 7.1, 7.2, 8.5
+  # Maps IAM principals (SSO roles) to Kubernetes groups for RBAC.
+  # The terraform-aws-modules/eks module v21+ supports access_entries natively.
+  # ---------------------------------------------------------------------------
+  access_entries = { for k, v in var.access_entries : k => {
+    principal_arn     = v.principal_arn
+    kubernetes_groups = v.kubernetes_groups
+    type              = v.type
+  } }
 
   # ---------------------------------------------------------------------------
   # System node group for Karpenter controller and cluster-critical workloads

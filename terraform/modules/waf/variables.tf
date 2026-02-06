@@ -16,9 +16,9 @@ variable "rate_limit" {
 }
 
 variable "log_retention_days" {
-  description = "CloudWatch log retention in days"
+  description = "CloudWatch log retention in days (PCI-DSS Req 10.7: minimum 365)"
   type        = number
-  default     = 30
+  default     = 365
 }
 
 variable "tags" {
