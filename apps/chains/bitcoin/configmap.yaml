@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bitcoin-config
+  namespace: bitcoin
+data:
+  bitcoin.conf: |
+    # Network
+    listen=1
+    maxconnections=125
+    port=8333
+
+    # RPC
+    server=1
+    rpcport=8332
+    rpcbind=0.0.0.0
+    rpcallowip=10.0.0.0/8
+
+    # Performance
+    dbcache=8192
+    maxmempool=1024
+    par=8
+
+    # Full archive node
+    prune=0
+    txindex=1
+
+    # Logging
+    printtoconsole=1
+    debug=net
+    debug=mempool

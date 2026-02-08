@@ -206,6 +206,52 @@ locals {
         expire_after = "2160h" # 90 days
         weight       = 5       # Highest priority (lowest weight)
       }
+
+      # -----------------------------------------------------------------------
+      # Bitcoin Full Nodes — Bitcoin Core archive nodes
+      # Memory-optimized instances for UTXO set (~15GB), 2TB storage for
+      # full blockchain. No placement group needed (P2P is global).
+      # 2 replicas with RPC load balancing.
+      # -----------------------------------------------------------------------
+      bitcoin-full-nodes = {
+        enabled           = true
+        cpu_limit         = 32
+        memory_limit      = 128
+        spot_percentage   = 0          # On-demand — chain sync takes 5-7 days
+        instance_families = ["r6i", "r7i", "r6a"]  # Memory-optimized for UTXO set
+        instance_sizes    = ["2xlarge", "4xlarge"]  # 8-16 vCPU, 64-128GB RAM
+        architectures     = ["amd64"]
+
+        # No placement group — Bitcoin P2P is global, no latency benefit
+        # Multi-AZ for resilience
+
+        # 2TB gp3 for full blockchain (~700GB) + growth headroom
+        block_device_overrides = {
+          volume_type = "gp3"
+          volume_size = "2000Gi"
+          iops        = 16000
+          throughput  = 1000
+          encrypted   = true
+        }
+
+        # Never auto-disrupt — sync is expensive to repeat
+        consolidation_policy = "WhenEmpty"
+        consolidate_after    = "Never"
+        disruption_budgets = [
+          { nodes = "0" }  # Zero disruption
+        ]
+
+        labels = {
+          "blockchain.io/role"    = "bitcoin-full-node"
+          "blockchain.io/network" = "bitcoin"
+        }
+        taints = [
+          { key = "blockchain.io/role", value = "bitcoin-full-node", effect = "NoSchedule" }
+        ]
+
+        expire_after = "2160h" # 90 days
+        weight       = 10
+      }
     }
   }
 

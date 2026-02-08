@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: bitcoin-p2p
+  namespace: bitcoin
+  labels:
+    app.kubernetes.io/name: bitcoin
+    app.kubernetes.io/component: p2p
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: bitcoin
+  ports:
+    - name: p2p
+      port: 8333
+      targetPort: p2p
+      protocol: TCP
