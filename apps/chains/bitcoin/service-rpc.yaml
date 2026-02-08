@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: bitcoin-rpc
+  namespace: bitcoin
+  labels:
+    app.kubernetes.io/name: bitcoin
+    app.kubernetes.io/component: rpc
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: bitcoin
+  ports:
+    - name: rpc
+      port: 8332
+      targetPort: rpc
+      protocol: TCP

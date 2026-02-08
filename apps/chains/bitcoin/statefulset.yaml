@@ -1,0 +1,141 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: bitcoin
+  namespace: bitcoin
+  labels:
+    app.kubernetes.io/name: bitcoin
+    app.kubernetes.io/component: full-node
+spec:
+  serviceName: bitcoin-headless
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bitcoin
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: bitcoin
+        app.kubernetes.io/component: full-node
+        blockchain.io/role: bitcoin-full-node
+        blockchain.io/network: bitcoin
+    spec:
+      serviceAccountName: bitcoin
+      automountServiceAccountToken: false
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Schedule on bitcoin-full-nodes Karpenter nodepool
+      tolerations:
+        - key: blockchain.io/role
+          value: bitcoin-full-node
+          effect: NoSchedule
+      nodeSelector:
+        blockchain.io/role: bitcoin-full-node
+
+      # Spread replicas across nodes
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: bitcoin
+
+      containers:
+        - name: bitcoind
+          image: lncm/bitcoind:v27.1
+          args:
+            - -conf=/etc/bitcoin/bitcoin.conf
+            - -datadir=/bitcoin/data
+          ports:
+            - name: p2p
+              containerPort: 8333
+              protocol: TCP
+            - name: rpc
+              containerPort: 8332
+              protocol: TCP
+          env:
+            - name: BITCOIN_RPC_USER
+              valueFrom:
+                secretKeyRef:
+                  name: bitcoin-rpc-credentials
+                  key: rpcuser
+            - name: BITCOIN_RPC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: bitcoin-rpc-credentials
+                  key: rpcpassword
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+            limits:
+              cpu: "8"
+              memory: 64Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: bitcoin-data
+              mountPath: /bitcoin/data
+            - name: bitcoin-config
+              mountPath: /etc/bitcoin
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            exec:
+              command:
+                - bitcoin-cli
+                - -datadir=/bitcoin/data
+                - getblockchaininfo
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - bitcoin-cli
+                - -datadir=/bitcoin/data
+                - getblockchaininfo
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            exec:
+              command:
+                - bitcoin-cli
+                - -datadir=/bitcoin/data
+                - getblockchaininfo
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 30
+
+      volumes:
+        - name: bitcoin-config
+          configMap:
+            name: bitcoin-config
+        - name: tmp
+          emptyDir: {}
+
+  volumeClaimTemplates:
+    - metadata:
+        name: bitcoin-data
+      spec:
+        storageClassName: gp3-bitcoin
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Ti
