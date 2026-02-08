@@ -19,9 +19,11 @@ Applications deployed via ArgoCD from `apps/infra/`
 | aws-lb-controller | 3.0.0 | 3.0.0 | AWS Load Balancer Controller - manages ALB and NLB for Kuber |
 | cert-manager | 1.1.0 | 1.17.2 | cert-manager - Automatic TLS certificate management for Kube |
 | cilium | 1.0.0 | 1.16.5 | Cilium CNI with Hubble observability for Kubernetes networki |
+| external-dns | 1.0.0 | 0.15.1 | ExternalDNS - Synchronize Kubernetes resources with DNS prov |
 | external-secrets | 1.3.1 | v0.14.1 | Install the External Secrets Operator using the official cha |
 | gatekeeper | 3.18.2 | v3.18.2 | OPA Gatekeeper for Kubernetes policy enforcement |
 | kargo | 0.1.0 | 1.2.0 | Kargo progressive delivery controller |
+| kyverno | 1.0.0 | 1.13.4 | Kyverno - Kubernetes Native Policy Management |
 | otel-operator | 0.1.0 |  | OpenTelemetry Operator with auto-instrumentation for Go appl |
 | rabbitmq-operator | 1.0.0 | 2.12.0 | RabbitMQ Cluster Operator - Kubernetes-native RabbitMQ lifec |
 | velero | 1.1.0 | 1.15.0 | Velero - Kubernetes backup and disaster recovery |

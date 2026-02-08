@@ -1,4 +1,4 @@
-{"generated_at": "2026-02-06T08:28:47Z", "applications": [
+{"generated_at": "2026-02-08T00:10:47Z", "applications": [
 {
   "name": "aws-lb-controller",
   "chartVersion": "3.0.0",
@@ -24,6 +24,14 @@
 }
 ,
 {
+  "name": "external-dns",
+  "chartVersion": "1.0.0",
+  "appVersion": "0.15.1",
+  "description": "ExternalDNS - Synchronize Kubernetes resources with DNS providers",
+  "path": "apps/infra/external-dns"
+}
+,
+{
   "name": "external-secrets",
   "chartVersion": "1.3.1",
   "appVersion": "v0.14.1",
@@ -45,6 +53,14 @@
   "appVersion": "1.2.0",
   "description": "Kargo progressive delivery controller",
   "path": "apps/infra/kargo"
+}
+,
+{
+  "name": "kyverno",
+  "chartVersion": "1.0.0",
+  "appVersion": "1.13.4",
+  "description": "Kyverno - Kubernetes Native Policy Management",
+  "path": "apps/infra/kyverno"
 }
 ,
 {
