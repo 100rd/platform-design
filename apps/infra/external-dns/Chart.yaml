@@ -1,0 +1,30 @@
+apiVersion: v2
+name: external-dns
+description: ExternalDNS - Synchronize Kubernetes resources with DNS providers
+version: 1.0.0
+appVersion: "0.15.1"
+type: application
+
+dependencies:
+  # ExternalDNS - Automatic DNS record management
+  # https://github.com/kubernetes-sigs/external-dns
+  - name: external-dns
+    version: "1.15.2"
+    repository: https://kubernetes-sigs.github.io/external-dns
+    condition: external-dns.enabled
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - dns
+  - route53
+  - cloudflare
+  - ingress
+  - service
+  - kubernetes
+
+annotations:
+  category: Networking
+  platform: Kubernetes
