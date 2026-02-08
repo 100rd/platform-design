@@ -1,0 +1,163 @@
+# ExternalDNS Configuration
+# https://github.com/kubernetes-sigs/external-dns
+#
+# DISABLED BY DEFAULT - Set external-dns.enabled to true to deploy
+#
+# Prerequisites:
+# - IAM role with Route53 permissions (via IRSA or Pod Identity)
+# - Hosted zone in Route53 (or other supported provider)
+
+external-dns:
+  # Disabled by default - enable when ready to use
+  enabled: false
+
+  # DNS provider configuration
+  # Supported: aws, azure, cloudflare, google, etc.
+  provider:
+    name: aws
+
+  # AWS-specific configuration (Route53)
+  aws:
+    # AWS region
+    region: eu-central-1
+
+    # Zone type: public, private, or empty for both
+    zoneType: ""
+
+    # Prefer CNAME over ALIAS records (ALIAS is AWS-specific but recommended)
+    preferCNAME: false
+
+    # Evaluate target health for ALIAS records
+    evaluateTargetHealth: true
+
+    # Batch size for Route53 changes (max 1000)
+    batchChangeSize: 1000
+
+    # Batch change interval
+    batchChangeInterval: 1s
+
+  # Domain filters - only manage records for these domains
+  domainFilters: []
+  # - example.com
+  # - subdomain.example.net
+
+  # Exclude domains
+  excludeDomains: []
+  # - internal.example.com
+
+  # Zone ID filter - limit to specific hosted zones
+  zoneIdFilters: []
+  # - Z1234567890ABC
+
+  # Sources to watch for DNS records
+  sources:
+    - service
+    - ingress
+    # - istio-gateway
+    # - istio-virtualservice
+    # - contour-httpproxy
+    # - gloo-proxy
+    # - crd  # For DNSEndpoint CRD
+
+  # Sync policy: sync (create/update/delete) or upsert-only (no deletes)
+  policy: upsert-only  # Safer default - won't delete records
+
+  # Registry for ownership tracking
+  registry: txt
+  txtOwnerId: "external-dns"
+  txtPrefix: "_externaldns."
+
+  # Sync interval
+  interval: 1m
+
+  # Trigger resync on source changes
+  triggerLoopOnEvent: true
+
+  # Resource configuration
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  # Replica count (1 is usually sufficient, leader election enabled)
+  replicaCount: 1
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    fsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  # Pod annotations for IRSA (AWS IAM Roles for Service Accounts)
+  # Uncomment and set your IAM role ARN
+  serviceAccount:
+    create: true
+    annotations: {}
+    # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/external-dns-role
+
+  # Tolerations
+  tolerations:
+    - key: CriticalAddonsOnly
+      operator: Exists
+
+  # Priority class
+  priorityClassName: system-cluster-critical
+
+  # Log level (panic, debug, info, warning, error, fatal)
+  logLevel: info
+
+  # Log format (text or json)
+  logFormat: json
+
+  # Prometheus metrics
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      namespace: monitoring
+      interval: 30s
+      labels:
+        prometheus: kube-prometheus
+
+  # Pod disruption budget
+  podDisruptionBudget:
+    minAvailable: 0  # Only 1 replica, so allow disruption
+
+# IAM policy reference (for documentation)
+# Create this IAM policy and attach to the IRSA role:
+#
+# {
+#   "Version": "2012-10-17",
+#   "Statement": [
+#     {
+#       "Effect": "Allow",
+#       "Action": [
+#         "route53:ChangeResourceRecordSets"
+#       ],
+#       "Resource": [
+#         "arn:aws:route53:::hostedzone/*"
+#       ]
+#     },
+#     {
+#       "Effect": "Allow",
+#       "Action": [
+#         "route53:ListHostedZones",
+#         "route53:ListResourceRecordSets",
+#         "route53:ListTagsForResource"
+#       ],
+#       "Resource": ["*"]
+#     }
+#   ]
+# }

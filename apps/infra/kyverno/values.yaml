@@ -1,0 +1,154 @@
+# Kyverno Configuration
+# https://kyverno.io/docs/
+#
+# DISABLED BY DEFAULT - Set kyverno.enabled to true to deploy
+#
+# Note: If you have OPA Gatekeeper deployed, consider which policy engine
+# to use. Running both is possible but may add complexity.
+
+kyverno:
+  # Disabled by default - enable when ready to use
+  enabled: false
+
+  # CRDs are managed by the Kyverno Helm chart (installCRDs: true)
+  # Unlike other tools, Kyverno CRDs are tightly coupled with the controller version
+  crds:
+    install: true
+
+  # Admission controller configuration
+  admissionController:
+    replicas: 3
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    # Security context
+    container:
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+        capabilities:
+          drop:
+            - ALL
+
+    # Anti-affinity for HA
+    antiAffinity:
+      enabled: true
+
+    # Tolerate system node taints
+    tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+
+    # Priority class
+    priorityClassName: system-cluster-critical
+
+  # Background controller for generate/mutate existing resources
+  backgroundController:
+    replicas: 2
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  # Cleanup controller for policy cleanup jobs
+  cleanupController:
+    replicas: 2
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  # Reports controller for policy reports
+  reportsController:
+    replicas: 2
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  # Webhook configuration
+  webhooksCleanup:
+    enabled: true
+
+  # Fail-open mode: don't block resources if Kyverno is unavailable
+  # Set to Fail in production for stricter enforcement
+  config:
+    webhooks:
+      - failurePolicy: Ignore
+        namespaceSelector:
+          matchExpressions:
+            - key: kubernetes.io/metadata.name
+              operator: NotIn
+              values:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+                - cert-manager
+                - external-secrets
+                - argocd
+
+  # Enable policy reports
+  features:
+    policyReports:
+      enabled: true
+    logging:
+      format: json
+
+  # Metrics for Prometheus
+  metricsConfig:
+    metricsExposure:
+      enabled: true
+
+# Example ClusterPolicy templates (disabled by default)
+# Uncomment and customize as needed
+policies:
+  enabled: false
+
+  # Require resource limits on all containers
+  requireResourceLimits:
+    enabled: false
+    validationFailureAction: Audit  # Audit or Enforce
+
+  # Require labels on namespaces
+  requireNamespaceLabels:
+    enabled: false
+    requiredLabels:
+      - team
+      - environment
+
+  # Restrict image registries
+  restrictImageRegistries:
+    enabled: false
+    allowedRegistries:
+      - docker.io
+      - gcr.io
+      - ghcr.io
+      - "*.dkr.ecr.*.amazonaws.com"
+
+  # Require pod security standards
+  podSecurityStandards:
+    enabled: false
+    level: baseline  # privileged, baseline, or restricted
