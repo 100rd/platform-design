@@ -1,0 +1,35 @@
+---
+# Cluster secret for staging eu-west-1 (Ireland) EKS cluster.
+# ArgoCD uses this to discover and deploy to the remote cluster.
+#
+# Prerequisites:
+#   - EKS cluster running in eu-west-1
+#   - Service account token or IAM role for ArgoCD access
+#   - Network connectivity from ArgoCD cluster to target API server
+#
+# Replace placeholders:
+#   - CLUSTER_API_SERVER: EKS cluster endpoint (e.g., https://XXXX.gr7.eu-west-1.eks.amazonaws.com)
+#   - <token>: Service account bearer token
+#   - <base64-ca>: Base64-encoded cluster CA certificate
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cluster-staging-euw1
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: cluster
+    env: staging
+    region: eu-west-1
+    region-short: euw1
+type: Opaque
+stringData:
+  name: staging-euw1
+  server: https://CLUSTER_API_SERVER
+  config: |
+    {
+      "bearerToken": "<token>",
+      "tlsClientConfig": {
+        "insecure": false,
+        "caData": "<base64-ca>"
+      }
+    }

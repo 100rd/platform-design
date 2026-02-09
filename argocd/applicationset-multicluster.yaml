@@ -1,0 +1,145 @@
+---
+# ApplicationSet for multi-cluster workload deployment (active-active).
+#
+# Generates ArgoCD Applications for each (team × cluster) combination in staging.
+# Each regional cluster gets the same workloads deployed with region-aware values.
+#
+# This ApplicationSet complements (not replaces) applicationset-workloads.yaml:
+#   - applicationset-workloads.yaml  → single-cluster, all envs, Kargo promotion
+#   - applicationset-multicluster.yaml → multi-cluster, staging only, region-aware
+#
+# Traffic flow:
+#   External → Global Accelerator → NLB (per region) → Pods
+#   Internal → Cilium ClusterMesh global services → local-first, failover remote
+#
+# Prerequisites:
+#   - Cluster secrets registered (staging-euw1, staging-euc1)
+#   - ClusterMesh connectivity established between clusters
+#   - Global Accelerator pointing to regional NLBs
+#
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: multicluster-workloads
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          # Teams to deploy across clusters
+          - list:
+              elements:
+                - team: mono
+                  namespace: mono
+                - team: chains
+                  namespace: chains
+                - team: direct
+                  namespace: direct
+                - team: protocols
+                  namespace: protocols
+                - team: listeners
+                  namespace: listeners
+          # Target clusters — selected by env + region labels
+          - clusters:
+              selector:
+                matchLabels:
+                  env: staging
+                matchExpressions:
+                  - key: region
+                    operator: In
+                    values:
+                      - eu-west-1
+                      - eu-central-1
+              values:
+                region: '{{ index .metadata.labels "region" }}'
+                regionShort: '{{ index .metadata.labels "region-short" }}'
+  template:
+    metadata:
+      name: '{{ .team }}-{{ .values.regionShort }}'
+      namespace: argocd
+      annotations:
+        kargo.akuity.io/authorized-stage: '{{ .team }}:staging'
+        platform.io/region: '{{ .values.region }}'
+        platform.io/cluster: '{{ .name }}'
+      labels:
+        app.kubernetes.io/part-of: multicluster-workloads
+        app.kubernetes.io/component: '{{ .team }}'
+        app.kubernetes.io/managed-by: applicationset
+        env: staging
+        team: '{{ .team }}'
+        region: '{{ .values.region }}'
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: platform-workloads
+      sources:
+        # Source 1: Helm chart
+        - repoURL: git@github.com:100rd/platform-design.git
+          targetRevision: HEAD
+          path: helm/app
+          helm:
+            releaseName: '{{ .team }}'
+            ignoreMissingValueFiles: true
+            valueFiles:
+              # Base team values
+              - $values/apps/{{ .team }}/values.yaml
+              # Environment-specific values (image.tag from Kargo)
+              - $values/envs/staging/values/{{ .team }}/values.yaml
+              # Region-specific overrides (if exists)
+              - $values/envs/staging/values/{{ .team }}/values-{{ .values.regionShort }}.yaml
+            values: |
+              fullnameOverride: "{{ .team }}"
+              environment: "staging"
+              region: "{{ .values.region }}"
+              regionShort: "{{ .values.regionShort }}"
+              cluster: "{{ .name }}"
+              image:
+                repository: "${ECR_REGISTRY}/{{ .team }}"
+              # Enable Cilium global service for cross-cluster discovery
+              service:
+                global: true
+                globalAffinity: local
+        # Source 2: Values reference
+        - repoURL: git@github.com:100rd/platform-design.git
+          targetRevision: HEAD
+          ref: values
+      destination:
+        server: '{{ .server }}'
+        namespace: 'staging-{{ .namespace }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - PruneLast=true
+          - RespectIgnoreDifferences=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jqPathExpressions:
+            - .spec.replicas
+  syncPolicy:
+    preserveResourcesOnDeletion: true
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        # Deploy to eu-west-1 first, then eu-central-1
+        - matchExpressions:
+            - key: region
+              operator: In
+              values: [eu-west-1]
+        - matchExpressions:
+            - key: region
+              operator: In
+              values: [eu-central-1]

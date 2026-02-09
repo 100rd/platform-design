@@ -1,0 +1,7 @@
+# Region-specific overrides for ExternalDNS in eu-west-1
+# Loaded by multicluster-infra-appset via: values/infra/external-dns-euw1.yaml
+
+external-dns:
+  aws:
+    region: eu-west-1
+  txtOwnerId: "external-dns-euw1"

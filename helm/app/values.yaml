@@ -95,6 +95,14 @@ envFrom: []
 service:
   type: ClusterIP
   port: 80
+  annotations: {}
+  # Cilium ClusterMesh global service — makes this service discoverable across clusters.
+  # Traffic prefers the local cluster; fails over to remote if local pods are unhealthy.
+  global: false
+  # Affinity: "local" (prefer local, failover remote), "remote" (prefer remote), "none" (round-robin)
+  globalAffinity: local
+  # Shared: when true, load-balances across local AND remote pods simultaneously
+  shared: false
 
 # --- Ingress ---
 ingress:
