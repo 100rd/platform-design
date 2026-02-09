@@ -67,6 +67,8 @@ External Helm charts used as dependencies:
 | Application | Customizations |
 |-------------|----------------|
 | cilium | defaults |
+| external-dns-euc1 | defaults |
+| external-dns-euw1 | defaults |
 | rabbitmq-operator | replicas: 2 |
 
 ### prod
@@ -80,9 +82,11 @@ External Helm charts used as dependencies:
 
 ### ApplicationSets
 
+- **multicluster-workloads** (`argocd/applicationset-multicluster.yaml`)
 - **platform-workloads** (`argocd/applicationset-workloads.yaml`)
 - **platform-infra** (`argocd/applicationset.yaml`)
 - **infra** (`argocd/bootstrap/applicationsets/infra-appset.yaml`)
+- **multicluster-infra** (`argocd/bootstrap/applicationsets/multicluster-infra-appset.yaml`)
 - **observability** (`argocd/bootstrap/applicationsets/observability-appset.yaml`)
 - **role-apps** (`argocd/bootstrap/applicationsets/role-apps-appset.yaml`)
 
