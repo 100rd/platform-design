@@ -1,0 +1,219 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Deployments",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Multi-Region Active-Active Overview - Global Accelerator, Pod Distribution, and Cross-Region Metrics",
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "title": "Global Accelerator - Processed Bytes",
+      "description": "Total bytes processed by Global Accelerator per region",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(aws_globalaccelerator_processed_bytes_in_sum{}) by (EndpointGroup)",
+          "legendFormat": "In - {{EndpointGroup}}"
+        },
+        {
+          "expr": "sum(aws_globalaccelerator_processed_bytes_out_sum{}) by (EndpointGroup)",
+          "legendFormat": "Out - {{EndpointGroup}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 15
+          }
+        }
+      }
+    },
+    {
+      "title": "Global Accelerator - New Flow Count",
+      "description": "New TCP/UDP flows per region endpoint group",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(aws_globalaccelerator_new_flow_count_sum{}[$__rate_interval])) by (EndpointGroup)",
+          "legendFormat": "{{EndpointGroup}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 15
+          }
+        }
+      }
+    },
+    {
+      "title": "Global Accelerator - Healthy Hosts",
+      "description": "Number of healthy hosts per endpoint group",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "aws_globalaccelerator_healthy_endpoint_count{EndpointGroup=~\".*eu-west-1.*\"}",
+          "legendFormat": "eu-west-1"
+        },
+        {
+          "expr": "aws_globalaccelerator_healthy_endpoint_count{EndpointGroup=~\".*eu-central-1.*\"}",
+          "legendFormat": "eu-central-1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "green", "value": 2 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"]
+        },
+        "colorMode": "background",
+        "orientation": "horizontal"
+      }
+    },
+    {
+      "title": "Per-Region Pod Count",
+      "description": "Running pods per cluster and namespace",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "count(kube_pod_info{cluster=\"$cluster\", namespace=\"$namespace\", pod=~\".+\"}) by (cluster)",
+          "legendFormat": "{{cluster}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "title": "Per-Region Request Rate",
+      "description": "HTTP request rate per cluster",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{cluster=\"$cluster\", namespace=\"$namespace\"}[$__rate_interval])) by (cluster)",
+          "legendFormat": "{{cluster}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 15
+          }
+        }
+      }
+    },
+    {
+      "title": "Cross-Region Latency",
+      "description": "Latency of flows between clusters (Hubble metrics, P50/P95/P99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(hubble_flows_processed_duration_seconds_bucket{source_cluster!=\"\", destination_cluster!=\"\", source_cluster!=destination_cluster}[$__rate_interval])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(hubble_flows_processed_duration_seconds_bucket{source_cluster!=\"\", destination_cluster!=\"\", source_cluster!=destination_cluster}[$__rate_interval])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(hubble_flows_processed_duration_seconds_bucket{source_cluster!=\"\", destination_cluster!=\"\", source_cluster!=destination_cluster}[$__rate_interval])) by (le))",
+          "legendFormat": "P99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10
+          },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.05 },
+              { "color": "red", "value": 0.1 }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "cluster",
+        "type": "query",
+        "query": "label_values(kube_pod_info, cluster)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "namespace",
+        "type": "query",
+        "query": "label_values(kube_pod_info{cluster=\"$cluster\"}, namespace)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": false,
+        "current": {
+          "selected": false,
+          "text": "production",
+          "value": "production"
+        }
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "title": "Multi-Region Active-Active Overview",
+  "uid": "multiregion-overview"
+}

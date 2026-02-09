@@ -2,7 +2,7 @@
 # Connectivity Stack Template — Network Account
 # ---------------------------------------------------------------------------------------------------------------------
 # Composable stack that deploys centralized networking infrastructure:
-#   VPC → Transit Gateway → RAM Share + Route Tables + VPN + DNS Resolver
+#   VPC -> Transit Gateway -> TGW Peering -> RAM Share + Route Tables + VPN + DNS Resolver
 #
 # Deployed in the network account, shared to workload accounts via RAM.
 #
@@ -20,6 +20,11 @@ unit "vpc" {
 unit "transit-gateway" {
   source = "${get_repo_root()}/catalog/units/transit-gateway"
   path   = "transit-gateway"
+}
+
+unit "tgw-peering" {
+  source = "${get_repo_root()}/catalog/units/tgw-peering"
+  path   = "tgw-peering"
 }
 
 unit "ram-share" {

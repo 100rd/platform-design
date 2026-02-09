@@ -18,8 +18,9 @@ external-dns:
 
   # AWS-specific configuration (Route53)
   aws:
-    # AWS region
-    region: eu-central-1
+    # AWS region — leave empty to use the cluster's region automatically.
+    # This supports multi-region deployments where each cluster manages its own zone.
+    region: ""
 
     # Zone type: public, private, or empty for both
     zoneType: ""
@@ -40,6 +41,11 @@ external-dns:
   domainFilters: []
   # - example.com
   # - subdomain.example.net
+
+  # Multi-region domain filters (uncomment and configure per cluster):
+  # domainFilters:
+  #   - platform.example.com
+  #   - staging.example.com
 
   # Exclude domains
   excludeDomains: []

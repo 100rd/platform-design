@@ -73,6 +73,9 @@ resource "helm_release" "cilium" {
         ui = {
           enabled = var.enable_hubble_ui
         }
+        peerService = {
+          enabled = var.enable_clustermesh
+        }
         metrics = {
           enabled = var.enable_hubble ? [
             "dns",
@@ -139,6 +142,38 @@ resource "helm_release" "cilium" {
       loadBalancer = {
         algorithm = "maglev"
       }
+
+      # ClusterMesh for multi-region service discovery
+      cluster = var.enable_clustermesh ? {
+        name = var.cluster_mesh_name
+        id   = var.cluster_mesh_id
+      } : {}
+
+      clustermesh = var.enable_clustermesh ? {
+        useAPIServer = true
+        apiserver = {
+          replicas = var.clustermesh_apiserver_replicas
+          service = {
+            type = "LoadBalancer"
+            annotations = {
+              "service.beta.kubernetes.io/aws-load-balancer-internal" = "true"
+              "service.beta.kubernetes.io/aws-load-balancer-type"     = "nlb"
+            }
+          }
+          tls = {
+            auto = {
+              enabled = true
+              method  = "helm"
+            }
+          }
+          etcd = {
+            resources = {
+              requests = { cpu = "100m", memory = "256Mi" }
+              limits   = { cpu = "500m", memory = "512Mi" }
+            }
+          }
+        }
+      } : {}
 
       # Enable local redirect policy for node-local DNS
       localRedirectPolicy = true

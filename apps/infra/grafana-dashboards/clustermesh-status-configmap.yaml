@@ -1,0 +1,11 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-clustermesh-status
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  clustermesh-status.json: |-
+    {{- .Files.Get "clustermesh-status.json" | nindent 4 }}

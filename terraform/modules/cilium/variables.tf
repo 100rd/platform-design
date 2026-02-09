@@ -85,3 +85,32 @@ variable "module_depends_on" {
   type        = list(any)
   default     = []
 }
+
+variable "enable_clustermesh" {
+  description = "Enable Cilium ClusterMesh for multi-cluster service discovery"
+  type        = bool
+  default     = false
+}
+
+variable "cluster_mesh_name" {
+  description = "Unique cluster name for ClusterMesh (e.g., staging-euw1)"
+  type        = string
+  default     = ""
+}
+
+variable "cluster_mesh_id" {
+  description = "Unique cluster ID for ClusterMesh (1-255, must be unique per mesh)"
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.cluster_mesh_id >= 0 && var.cluster_mesh_id <= 255
+    error_message = "cluster_mesh_id must be between 0 and 255."
+  }
+}
+
+variable "clustermesh_apiserver_replicas" {
+  description = "Number of ClusterMesh API server replicas"
+  type        = number
+  default     = 2
+}

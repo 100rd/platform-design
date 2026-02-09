@@ -34,6 +34,11 @@ unit "cilium" {
   path   = "cilium"
 }
 
+unit "clustermesh-sg-rules" {
+  source = "${get_repo_root()}/catalog/units/clustermesh-sg-rules"
+  path   = "clustermesh-sg-rules"
+}
+
 unit "karpenter-iam" {
   source = "${get_repo_root()}/catalog/units/karpenter-iam"
   path   = "karpenter-iam"
@@ -72,4 +77,9 @@ unit "rds" {
 unit "monitoring" {
   source = "${get_repo_root()}/catalog/units/monitoring"
   path   = "monitoring"
+}
+
+unit "nlb-ingress" {
+  source = "${get_repo_root()}/catalog/units/nlb-ingress"
+  path   = "nlb-ingress"
 }

@@ -40,9 +40,7 @@ inputs = {
   subnet_ids         = dependency.vpc.outputs.private_subnets
   route_table_id     = try(local.account_vars.locals.tgw_route_table_id, "")
 
-  vpc_route_table_ids = {
-    private = try(dependency.vpc.outputs.private_route_table_ids[0], "")
-  }
+  vpc_route_table_ids = { for i, rt in dependency.vpc.outputs.private_route_table_ids : "private-${i}" => rt }
 
   tags = {
     Environment = local.environment

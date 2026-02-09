@@ -2,11 +2,12 @@
 # Platform Stack Template
 # ---------------------------------------------------------------------------------------------------------------------
 # Composable stack that deploys the full platform infrastructure:
-#   VPC → TGW Attachment → EKS → Cilium → Platform CRDs → ArgoCD
-#                                   ├── Karpenter (Bottlerocket) + Monitoring + RDS
+#   VPC → TGW Attachment → EKS → Cilium → ClusterMesh SG Rules → Platform CRDs → ArgoCD
+#                                   ├── Karpenter (Bottlerocket) + Monitoring + RDS + NLB Ingress
 #
 # CNI: Cilium with ENI IPAM mode (VPC-routable pod IPs)
 # AMI: Bottlerocket (native Cilium support, faster boot, smaller attack surface)
+# Multi-Region: ClusterMesh SG rules + NLB Ingress for active-active setup
 #
 # Each unit reads its environment-specific configuration from account.hcl and region.hcl
 # in the live tree. Dependencies between units are resolved automatically by Terragrunt.
@@ -40,6 +41,11 @@ unit "eks" {
 unit "cilium" {
   source = "${get_repo_root()}/catalog/units/cilium"
   path   = "cilium"
+}
+
+unit "clustermesh-sg-rules" {
+  source = "${get_repo_root()}/catalog/units/clustermesh-sg-rules"
+  path   = "clustermesh-sg-rules"
 }
 
 unit "platform-crds" {
@@ -90,4 +96,9 @@ unit "rds" {
 unit "monitoring" {
   source = "${get_repo_root()}/catalog/units/monitoring"
   path   = "monitoring"
+}
+
+unit "nlb-ingress" {
+  source = "${get_repo_root()}/catalog/units/nlb-ingress"
+  path   = "nlb-ingress"
 }
