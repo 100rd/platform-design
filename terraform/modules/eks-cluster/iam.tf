@@ -1,3 +1,5 @@
+data "aws_region" "current" {}
+
 module "vpc_cni_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   version = "~> 5.0"
@@ -81,8 +83,8 @@ resource "aws_iam_policy" "failover_controller_policy" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret"
         ]
-        # Scoped to specific region - update the region to match your deployment
-        Resource = ["arn:aws:secretsmanager:us-east-1:*:secret:/dns-failover/*"]
+        # Dynamically scoped to the current region
+        Resource = ["arn:aws:secretsmanager:${data.aws_region.current.name}:*:secret:/dns-failover/*"]
       },
       {
         Effect = "Allow"
@@ -132,6 +134,69 @@ module "dns_monitor_irsa" {
     main = {
       provider_arn               = module.eks.oidc_provider_arn
       namespace_service_accounts = ["dns-failover:dns-monitor"]
+    }
+  }
+
+  tags = var.tags
+}
+
+# External Secrets Operator IRSA — Reads from Secrets Manager and Parameter Store
+resource "aws_iam_policy" "external_secrets_policy" {
+  name        = "${var.cluster_name}-external-secrets-policy"
+  description = "Policy for External Secrets Operator to read from AWS Secrets Manager and SSM Parameter Store"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret",
+          "secretsmanager:ListSecretVersionIds"
+        ]
+        Resource = ["arn:aws:secretsmanager:${data.aws_region.current.name}:*:secret:*"]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters",
+          "ssm:GetParametersByPath"
+        ]
+        Resource = ["arn:aws:ssm:${data.aws_region.current.name}:*:parameter/*"]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:DescribeKey"
+        ]
+        Resource = ["*"]
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "secretsmanager.${data.aws_region.current.name}.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+}
+
+module "external_secrets_irsa" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
+  version = "~> 5.0"
+
+  role_name_prefix = "external-secrets-irsa"
+
+  role_policy_arns = {
+    policy = aws_iam_policy.external_secrets_policy.arn
+  }
+
+  oidc_providers = {
+    main = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["external-secrets:external-secrets"]
     }
   }
 

@@ -122,7 +122,7 @@ externalSecrets:
   enabled: false
   refreshInterval: 1h
   secretStoreRef:
-    name: aws-secrets
+    name: aws-secrets-manager
     kind: ClusterSecretStore
   data: []
 
