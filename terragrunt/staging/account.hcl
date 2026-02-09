@@ -11,7 +11,7 @@ locals {
   network_account    = "555555555555"
 
   # Transit Gateway connectivity (shared via RAM from network account)
-  enable_tgw_attachment = false # Enable once TGW is deployed in network account
+  enable_tgw_attachment = true  # Enabled for multi-region connectivity
   transit_gateway_id    = ""    # Populate after network account deployment
   tgw_route_table_id    = ""    # nonprod route table ID from network account
 
@@ -37,6 +37,24 @@ locals {
 
   # --- Cilium ---
   cilium_replace_kube_proxy = false
+
+  # --- ClusterMesh (multi-region) ---
+  enable_clustermesh = true
+  clustermesh_cluster_ids = {
+    "eu-west-1"    = 1
+    "eu-central-1" = 2
+    "eu-west-2"    = 3  # Reserved for future
+    "eu-west-3"    = 4  # Reserved for future
+  }
+  clustermesh_apiserver_replicas = 2
+  peer_vpc_cidrs = {
+    "eu-west-1"    = "10.10.0.0/16"
+    "eu-central-1" = "10.13.0.0/16"
+  }
+
+  # --- External traffic (multi-region) ---
+  enable_nlb_ingress        = true
+  enable_global_accelerator = true
 
   # ===========================================================================
   # Blockchain HPC Cluster Configuration

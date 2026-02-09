@@ -72,4 +72,10 @@ inputs = {
 
   # HA for operator
   operator_replicas = local.environment == "prod" ? 2 : 1
+
+  # ClusterMesh for multi-region service discovery
+  enable_clustermesh            = try(local.account_vars.locals.enable_clustermesh, false)
+  cluster_mesh_name             = try(local.account_vars.locals.enable_clustermesh, false) ? "${local.environment}-${local.region_vars.locals.region_short}" : ""
+  cluster_mesh_id               = try(local.account_vars.locals.enable_clustermesh, false) ? local.account_vars.locals.clustermesh_cluster_ids[local.aws_region] : 0
+  clustermesh_apiserver_replicas = try(local.account_vars.locals.clustermesh_apiserver_replicas, 2)
 }

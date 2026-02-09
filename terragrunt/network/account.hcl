@@ -16,6 +16,13 @@ locals {
   # TGW configuration (blackhole routes for environment isolation)
   tgw_blackhole_cidrs = {}
 
+  # Transit Gateway peering configuration
+  enable_tgw_peering = true
+  tgw_peers = {
+    "eu-central-1" = { tgw_id = "", cidrs = ["10.13.0.0/16"] }
+    "eu-west-1"    = { tgw_id = "", cidrs = ["10.10.0.0/16"] }
+  }
+
   # VPN connections (3rd-party integrations)
   vpn_connections = {
     # Example:
