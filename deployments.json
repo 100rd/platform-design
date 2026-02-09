@@ -1,4 +1,4 @@
-{"generated_at": "2026-02-09T20:59:45Z", "applications": [
+{"generated_at": "2026-02-09T21:09:56Z", "applications": [
 {
   "name": "aws-lb-controller",
   "chartVersion": "3.0.0",
@@ -21,6 +21,14 @@
   "appVersion": "1.16.5",
   "description": "Cilium CNI with Hubble observability for Kubernetes networking",
   "path": "apps/infra/cilium"
+}
+,
+{
+  "name": "cluster-secret-store",
+  "chartVersion": "1.0.0",
+  "appVersion": "1.0.0",
+  "description": "ClusterSecretStore for AWS Secrets Manager — deployed per cluster via ArgoCD",
+  "path": "apps/infra/cluster-secret-store"
 }
 ,
 {
