@@ -5,6 +5,19 @@ metadata:
   name: {{include "app.fullname" .}}
   labels:
     {{- include "app.selectorLabels" . | nindent 4}}
+  {{- if or .Values.service.annotations .Values.service.global }}
+  annotations:
+    {{- if .Values.service.global }}
+    service.cilium.io/global: "true"
+    service.cilium.io/affinity: {{ .Values.service.globalAffinity | default "local" | quote }}
+    {{- if .Values.service.shared }}
+    service.cilium.io/shared: "true"
+    {{- end }}
+    {{- end }}
+    {{- with .Values.service.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
 spec:
   type: {{.Values.service.type}}
   ports:

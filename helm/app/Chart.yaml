@@ -2,6 +2,6 @@
 apiVersion: v2
 name: app
 description: Cloud-native application chart with 12-factor support
-version: 0.2.0
+version: 0.3.0
 appVersion: "1.0"
 type: application

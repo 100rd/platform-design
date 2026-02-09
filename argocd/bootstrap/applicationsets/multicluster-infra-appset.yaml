@@ -1,0 +1,80 @@
+---
+# Multi-cluster infrastructure ApplicationSet.
+#
+# Deploys shared infra apps to ALL registered clusters, with region-aware values.
+# Extends the existing infra-appset.yaml with region label injection so that
+# each cluster gets region-specific configuration (e.g., ExternalDNS zone,
+# cert-manager issuer, AWS LB controller subnet tags).
+#
+# Cluster selection: all clusters with a "region" label.
+# Apps without region-specific values get the same config everywhere.
+#
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: multicluster-infra
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - git:
+              repoURL: https://github.com/100rd/platform-design.git
+              revision: HEAD
+              directories:
+                - path: apps/infra/*
+                - path: apps/infra/observability
+                  exclude: true
+          - clusters:
+              selector:
+                matchExpressions:
+                  - key: region
+                    operator: Exists
+              values:
+                env: '{{ index .metadata.labels "env" }}'
+                region: '{{ index .metadata.labels "region" }}'
+                regionShort: '{{ index .metadata.labels "region-short" }}'
+  template:
+    metadata:
+      name: '{{ .path.basename }}-{{ .values.regionShort }}'
+      namespace: argocd
+      labels:
+        app.kubernetes.io/part-of: multicluster-infra
+        env: '{{ .values.env }}'
+        region: '{{ .values.region }}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/100rd/platform-design.git
+        targetRevision: HEAD
+        path: '{{ .path.path }}'
+        helm:
+          ignoreMissingValueFiles: true
+          valueFiles:
+            # Environment-specific values
+            - '../../../envs/{{ .values.env }}/values/infra/{{ .path.basename }}.yaml'
+            # Region-specific overrides (if exists)
+            - '../../../envs/{{ .values.env }}/values/infra/{{ .path.basename }}-{{ .values.regionShort }}.yaml'
+          values: |
+            environment: "{{ .values.env }}"
+            region: "{{ .values.region }}"
+            regionShort: "{{ .values.regionShort }}"
+            cluster: "{{ .name }}"
+      destination:
+        server: '{{ .server }}'
+        namespace: '{{ .path.basename }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m

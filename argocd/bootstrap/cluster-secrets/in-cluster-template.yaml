@@ -7,6 +7,8 @@ metadata:
     argocd.argoproj.io/secret-type: cluster
     cluster-role: ROLE       # one of: dex, backend, 3rd-party, velocity, listeners
     env: ENV                 # one of: dev, stage, integration, prod
+    region: REGION           # AWS region (e.g., eu-west-1) — used by multicluster ApplicationSets
+    region-short: SHORT      # short name (e.g., euw1) — used in Application names and value file lookups
 type: Opaque
 stringData:
   name: CLUSTER_NAME
@@ -31,6 +33,8 @@ stringData:
 #     argocd.argoproj.io/secret-type: cluster
 #     cluster-role: dex
 #     env: dev
+#     region: eu-west-1
+#     region-short: euw1
 # type: Opaque
 # stringData:
 #   name: dex-dev
