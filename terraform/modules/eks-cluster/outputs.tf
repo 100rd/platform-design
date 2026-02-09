@@ -32,3 +32,8 @@ output "failover_controller_role_arn" {
   description = "IAM Role ARN for Failover Controller service account"
   value       = module.failover_controller_irsa.iam_role_arn
 }
+
+output "external_secrets_irsa_role_arn" {
+  description = "IAM role ARN for External Secrets Operator IRSA"
+  value       = module.external_secrets_irsa.iam_role_arn
+}

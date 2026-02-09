@@ -387,7 +387,7 @@ pyroscope:
 externalSecrets:
   enabled: true
   secretStore:
-    name: aws-parameter-store
+    name: aws-secrets-manager
     kind: SecretStore
 
   s3Credentials:

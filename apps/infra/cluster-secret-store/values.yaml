@@ -1,0 +1,9 @@
+aws:
+  region: eu-central-1
+
+secretStore:
+  name: aws-secrets-manager
+
+serviceAccount:
+  name: external-secrets
+  namespace: external-secrets

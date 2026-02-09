@@ -16,6 +16,24 @@ resource "aws_secretsmanager_secret" "secrets" {
   description = each.value.description
   kms_key_id  = var.kms_key_id
 
+  force_overwrite_replica_secret = each.value.replicate ? var.force_overwrite_replica : null
+
+  # ---------------------------------------------------------------------------
+  # Multi-Region Secret Replication (PCI-DSS Req 3.4)
+  # ---------------------------------------------------------------------------
+  # Replicates secrets to additional AWS regions for multi-cluster access.
+  # Each replica is encrypted with the region-specific KMS CMK.
+  # Only added when the secret has replicate = true and replica_regions is non-empty.
+  # ---------------------------------------------------------------------------
+  dynamic "replica" {
+    for_each = each.value.replicate ? var.replica_regions : []
+
+    content {
+      region     = replica.value.region
+      kms_key_id = replica.value.kms_key_id
+    }
+  }
+
   tags = var.tags
 }
 

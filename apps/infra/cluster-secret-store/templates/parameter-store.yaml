@@ -1,0 +1,18 @@
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: aws-parameter-store
+  labels:
+    app.kubernetes.io/name: aws-parameter-store
+    app.kubernetes.io/component: secrets
+    app.kubernetes.io/managed-by: helm
+spec:
+  provider:
+    aws:
+      service: ParameterStore
+      region: {{ .Values.aws.region }}
+      auth:
+        jwt:
+          serviceAccountRef:
+            name: {{ .Values.serviceAccount.name }}
+            namespace: {{ .Values.serviceAccount.namespace }}

@@ -56,6 +56,21 @@ locals {
   enable_nlb_ingress        = true
   enable_global_accelerator = true
 
+  # --- Secrets Management (multi-region replication) ---
+  # Secrets are created in the primary region and replicated to all replica regions.
+  # Each replica is encrypted with the region-specific KMS CMK for secrets-manager.
+  # replica_kms_key_arns: populate with actual KMS key ARNs after deploying KMS in each region.
+  secrets_config = {
+    primary_region = "eu-central-1"
+    replica_regions = ["eu-west-1", "eu-west-2", "eu-west-3"]
+    rotation_days  = 90
+    replica_kms_key_arns = {
+      "eu-west-1" = "" # TODO: Set to KMS secrets-manager key ARN from eu-west-1 after deployment
+      "eu-west-2" = "" # TODO: Set to KMS secrets-manager key ARN from eu-west-2 after deployment
+      "eu-west-3" = "" # TODO: Set to KMS secrets-manager key ARN from eu-west-3 after deployment
+    }
+  }
+
   # ===========================================================================
   # Blockchain HPC Cluster Configuration
   # ===========================================================================

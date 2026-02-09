@@ -9,6 +9,11 @@
 #   Req 3.4   — Secrets encrypted at rest with KMS CMK (not default aws/secretsmanager key)
 #   Req 3.6.4 — Automatic secret rotation (90-day cycle)
 #
+# Multi-Region Replication:
+#   When deployed in the primary region, secrets with replicate=true are replicated to all
+#   configured replica regions. Each replica is encrypted with a region-specific KMS CMK.
+#   Replication is skipped in non-primary regions to avoid circular replication.
+#
 # Secrets are namespaced by environment, region, and service to avoid collisions and
 # simplify IAM policy scoping.
 #
@@ -28,6 +33,21 @@ locals {
   account_name = local.account_vars.locals.account_name
   aws_region   = local.region_vars.locals.aws_region
   environment  = local.account_vars.locals.environment
+
+  # Secrets config from account.hcl
+  secrets_config = local.account_vars.locals.secrets_config
+
+  # Only replicate when deployed in the primary region to avoid circular replication
+  is_primary_region = local.aws_region == local.secrets_config.primary_region
+
+  # Build replica_regions list only for primary region deployments.
+  # Each replica region references a KMS key ARN from the secrets_config.replica_kms_key_arns map.
+  replica_regions = local.is_primary_region ? [
+    for region in local.secrets_config.replica_regions : {
+      region     = region
+      kms_key_id = lookup(local.secrets_config.replica_kms_key_arns, region, null)
+    }
+  ] : []
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -56,10 +76,12 @@ inputs = {
     "/${local.environment}/${local.aws_region}/platform/database/credentials" = {
       description     = "Platform database credentials"
       enable_rotation = true
+      replicate       = true
     }
     "/${local.environment}/${local.aws_region}/platform/api/keys" = {
       description     = "Platform API keys"
       enable_rotation = false
+      replicate       = true
     }
   }
 
@@ -70,7 +92,11 @@ inputs = {
   # Set rotation_lambda_arn once the rotation Lambda is deployed.
   # Until then, rotation resources are not created (Lambda ARN is null).
   rotation_lambda_arn = null
-  rotation_days       = 90
+  rotation_days       = local.secrets_config.rotation_days
+
+  # Multi-region replication (only active in primary region)
+  replica_regions         = local.replica_regions
+  force_overwrite_replica = false
 
   tags = {
     Environment = local.environment
