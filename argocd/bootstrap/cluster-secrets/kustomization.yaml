@@ -3,3 +3,6 @@ kind: Kustomization
 
 resources:
   - in-cluster-template.yaml
+  # Multi-region staging clusters (uncomment when clusters are ready)
+  # - staging-euw1.yaml
+  # - staging-euc1.yaml

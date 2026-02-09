@@ -5,3 +5,4 @@ resources:
   - applicationsets/infra-appset.yaml
   - applicationsets/role-apps-appset.yaml
   - applicationsets/observability-appset.yaml
+  - applicationsets/multicluster-infra-appset.yaml

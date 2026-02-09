@@ -92,6 +92,14 @@ Role-specific apps from `apps/cluster-roles/<role>/*` deployed only to clusters 
 
 Observability stack from `apps/infra/observability/*` deployed to ALL clusters into the `observability` namespace.
 
+### 6. Multi-Cluster Workloads (`applicationset-multicluster.yaml`)
+
+Deploys workload applications across multiple regional clusters for active-active. Uses cluster selector with `region` label to discover targets. Each app gets Cilium global service annotations for cross-cluster discovery. RollingSync deploys to eu-west-1 first, then eu-central-1.
+
+### 7. Multi-Cluster Infrastructure (`bootstrap/applicationsets/multicluster-infra-appset.yaml`)
+
+Deploys shared infra to all clusters with `region` label. Supports region-specific value overrides via `values/infra/<app>-<regionShort>.yaml`.
+
 ## Cluster Label Convention
 
 Every cluster registered with ArgoCD must have these labels on its Secret:
@@ -101,6 +109,8 @@ metadata:
   labels:
     cluster-role: dex        # one of: dex, backend, 3rd-party, velocity, listeners
     env: dev                 # one of: dev, stage, integration, prod
+    region: eu-west-1        # AWS region (required for multi-cluster ApplicationSets)
+    region-short: euw1       # short name (used in Application names and value file lookups)
 ```
 
 See `bootstrap/cluster-secrets/in-cluster-template.yaml` for a full example.
