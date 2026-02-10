@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tron-rpc
+  namespace: tron
+  labels:
+    app.kubernetes.io/name: tron
+    app.kubernetes.io/component: rpc
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: tron
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: grpc
+      protocol: TCP
+    - name: http-api
+      port: 8090
+      targetPort: http-api
+      protocol: TCP
+    - name: solidity-api
+      port: 8091
+      targetPort: solidity-api
+      protocol: TCP

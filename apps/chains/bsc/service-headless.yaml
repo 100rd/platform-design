@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: bsc-headless
+  namespace: bsc
+  labels:
+    app.kubernetes.io/name: bsc
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: bsc
+  ports:
+    - name: rpc
+      port: 8545
+      targetPort: rpc
+    - name: ws
+      port: 8546
+      targetPort: ws
+    - name: p2p-tcp
+      port: 30311
+      targetPort: p2p-tcp
+    - name: metrics
+      port: 6060
+      targetPort: metrics

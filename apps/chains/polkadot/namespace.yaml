@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: polkadot
+  labels:
+    app.kubernetes.io/name: polkadot
+    app.kubernetes.io/component: blockchain
+    pod-security.kubernetes.io/enforce: restricted

@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ethereum
+  namespace: ethereum
+  labels:
+    app.kubernetes.io/name: ethereum
+    app.kubernetes.io/component: full-node
+spec:
+  serviceName: ethereum-headless
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ethereum
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ethereum
+        app.kubernetes.io/component: full-node
+        blockchain.io/role: ethereum-full-node
+        blockchain.io/network: ethereum
+    spec:
+      serviceAccountName: ethereum
+      automountServiceAccountToken: false
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Schedule on ethereum-full-nodes Karpenter nodepool
+      tolerations:
+        - key: blockchain.io/role
+          value: ethereum-full-node
+          effect: NoSchedule
+      nodeSelector:
+        blockchain.io/role: ethereum-full-node
+
+      # Spread replicas across nodes
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: ethereum
+
+      containers:
+        - name: geth
+          image: ethereum/client-go:v1.14.12
+          args:
+            - --config=/etc/ethereum/config.toml
+            - --datadir=/ethereum/data
+            - --syncmode=snap
+            - --http
+            - --http.addr=0.0.0.0
+            - --http.api=eth,net,web3,txpool
+            - --ws
+            - --ws.addr=0.0.0.0
+            - --metrics
+            - --maxpeers=100
+          ports:
+            - name: p2p-tcp
+              containerPort: 30303
+              protocol: TCP
+            - name: p2p-udp
+              containerPort: 30303
+              protocol: UDP
+            - name: rpc
+              containerPort: 8545
+              protocol: TCP
+            - name: ws
+              containerPort: 8546
+              protocol: TCP
+            - name: metrics
+              containerPort: 6060
+              protocol: TCP
+          env:
+            - name: GETH_RPC_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: ethereum-rpc-credentials
+                  key: jwt-secret
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+            limits:
+              cpu: "8"
+              memory: 64Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: ethereum-data
+              mountPath: /ethereum/data
+            - name: ethereum-config
+              mountPath: /etc/ethereum
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /
+              port: rpc
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: rpc
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /
+              port: rpc
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 30
+
+      volumes:
+        - name: ethereum-config
+          configMap:
+            name: ethereum-config
+        - name: tmp
+          emptyDir: {}
+
+  volumeClaimTemplates:
+    - metadata:
+        name: ethereum-data
+      spec:
+        storageClassName: gp3-ethereum
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Ti

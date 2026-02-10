@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: polygon-listener
+  namespace: polygon
+  labels:
+    app.kubernetes.io/name: polygon-listener
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: polygon-listener

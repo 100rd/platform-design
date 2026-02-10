@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bitcoin-listener
+  namespace: bitcoin
+  labels:
+    app.kubernetes.io/name: bitcoin-listener
+    app.kubernetes.io/component: listener
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bitcoin-listener
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: bitcoin-listener
+        app.kubernetes.io/component: listener
+        blockchain.io/network: bitcoin
+    spec:
+      serviceAccountName: bitcoin-listener
+      automountServiceAccountToken: false
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: bitcoin-listener
+
+      containers:
+        - name: listener
+          image: internal/bitcoin-listener:latest
+          ports:
+            - name: grpc
+              containerPort: 50051
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: CHAIN_RPC_URL
+              value: "http://bitcoin-rpc.bitcoin.svc.cluster.local:8332"
+            - name: BLOCK_CONFIRMATIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: bitcoin-listener-config
+                  key: block-confirmations
+            - name: CHAIN_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: bitcoin-listener-config
+                  key: chain-id
+            - name: BITCOIN_RPC_USER
+              valueFrom:
+                secretKeyRef:
+                  name: bitcoin-rpc-credentials
+                  key: rpcuser
+            - name: BITCOIN_RPC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: bitcoin-rpc-credentials
+                  key: rpcpassword
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            grpc:
+              port: 50051
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            grpc:
+              port: 50051
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}

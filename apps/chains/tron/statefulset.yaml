@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tron
+  namespace: tron
+  labels:
+    app.kubernetes.io/name: tron
+    app.kubernetes.io/component: full-node
+spec:
+  serviceName: tron-headless
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tron
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tron
+        app.kubernetes.io/component: full-node
+        blockchain.io/role: tron-full-node
+        blockchain.io/network: tron
+    spec:
+      serviceAccountName: tron
+      automountServiceAccountToken: false
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Schedule on tron-full-nodes Karpenter nodepool
+      tolerations:
+        - key: blockchain.io/role
+          value: tron-full-node
+          effect: NoSchedule
+      nodeSelector:
+        blockchain.io/role: tron-full-node
+
+      # Spread replicas across nodes
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: tron
+
+      containers:
+        - name: java-tron
+          image: tronprotocol/java-tron:GreatVoyage-v4.7.6
+          env:
+            - name: JVM_OPTS
+              value: "-Xmx24g -Xms24g"
+          args:
+            - --config-file=/etc/tron/main_net_config.conf
+            - --storage-db-directory=/data/tron/database
+            - --storage-index-directory=/data/tron/index
+          ports:
+            - name: p2p
+              containerPort: 18888
+              protocol: TCP
+            - name: grpc
+              containerPort: 50051
+              protocol: TCP
+            - name: http-api
+              containerPort: 8090
+              protocol: TCP
+            - name: solidity-api
+              containerPort: 8091
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "8"
+              memory: 32Gi
+            limits:
+              cpu: "16"
+              memory: 64Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tron-data
+              mountPath: /data/tron
+            - name: tron-config
+              mountPath: /etc/tron
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /wallet/getnowblock
+              port: http-api
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /wallet/getnowblock
+              port: http-api
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /wallet/getnowblock
+              port: http-api
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 60
+
+      volumes:
+        - name: tron-config
+          configMap:
+            name: tron-config
+        - name: tmp
+          emptyDir: {}
+
+  volumeClaimTemplates:
+    - metadata:
+        name: tron-data
+      spec:
+        storageClassName: gp3-tron
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Ti

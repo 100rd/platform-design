@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tron-config
+  namespace: tron
+data:
+  main_net_config.conf: |
+    net {
+      type = mainnet
+    }
+
+    storage {
+      db.version = 2
+      db.engine = "LEVELDB"
+      db.sync = false
+      db.directory = "database"
+      index.directory = "index"
+      index.switch = "on"
+    }
+
+    node {
+      p2p {
+        version = 11111
+      }
+
+      rpc {
+        port = 50051
+        solidityPort = 8091
+        maxConcurrentCallsPerConnection = 100
+        flowControlWindow = 1048576
+        maxConnectionIdleInMillis = 60000
+        maxConnectionAgeInMillis = 120000
+        maxMessageSize = 16777216
+        maxHeaderListSize = 8192
+      }
+
+      http {
+        fullNodePort = 8090
+        solidityPort = 8091
+      }
+
+      listen {
+        port = 18888
+      }
+
+      maxActiveNodes = 30
+      minParticipationRate = 15
+
+      active = []
+      passive = []
+    }
+
+    committee {
+      allowMultiSign = 1
+      allowAdaptiveEnergy = 1
+    }

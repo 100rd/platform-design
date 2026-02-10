@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bsc-listener-config
+  namespace: bsc
+data:
+  block-confirmations: "15"
+  chain-id: "56"
+  topics: "blocks,transactions,events"
+  output-format: "protobuf"

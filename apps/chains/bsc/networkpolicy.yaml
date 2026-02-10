@@ -1,0 +1,60 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: bsc-node-policy
+  namespace: bsc
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: bsc
+  ingress:
+    # P2P from anywhere (BSC network)
+    - fromEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "30311"
+              protocol: TCP
+            - port: "30311"
+              protocol: UDP
+    # RPC + WS from within the cluster only
+    - fromEndpoints:
+        - {}
+      toPorts:
+        - ports:
+            - port: "8545"
+              protocol: TCP
+            - port: "8546"
+              protocol: TCP
+            - port: "6060"
+              protocol: TCP
+  egress:
+    # P2P to BSC network
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "30311"
+              protocol: TCP
+            - port: "30311"
+              protocol: UDP
+    # DNS resolution
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # HTTPS for seed nodes DNS resolution
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+            - port: "53"
+              protocol: UDP

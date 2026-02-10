@@ -1,0 +1,39 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: bitcoin-listener-policy
+  namespace: bitcoin
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: bitcoin-listener
+  ingress:
+    # gRPC and metrics from within the cluster only
+    - fromEndpoints:
+        - {}
+      toPorts:
+        - ports:
+            - port: "50051"
+              protocol: TCP
+            - port: "9090"
+              protocol: TCP
+  egress:
+    # Connect to Bitcoin RPC within the cluster
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: bitcoin
+      toPorts:
+        - ports:
+            - port: "8332"
+              protocol: TCP
+    # DNS resolution
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

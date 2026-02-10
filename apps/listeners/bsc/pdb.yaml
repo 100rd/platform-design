@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bsc-listener
+  namespace: bsc
+  labels:
+    app.kubernetes.io/name: bsc-listener
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bsc-listener

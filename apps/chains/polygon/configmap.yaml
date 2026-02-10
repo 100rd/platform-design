@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: polygon-config
+  namespace: polygon
+data:
+  config.toml: |
+    # Polygon Bor Configuration
+
+    [Eth]
+    SyncMode = "full"
+    GcMode = "archive"
+
+    [Eth.Miner]
+    GasCeil = 30000000
+
+    [Node]
+    DataDir = "/data/polygon"
+
+    [Node.P2P]
+    MaxPeers = 100
+    ListenAddr = ":30303"
+
+    [Node.HTTPServer]
+    Enabled = true
+    ListenAddr = "0.0.0.0"
+    Port = 8545
+    API = "eth,net,web3,txpool,bor"
+
+    [Node.WSServer]
+    Enabled = true
+    ListenAddr = "0.0.0.0"
+    Port = 8546
+
+    [Telemetry]
+    Metrics = true
+    MetricsAddr = "0.0.0.0:7071"

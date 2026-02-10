@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: avalanche-listener-config
+  namespace: avalanche
+data:
+  block-confirmations: "1"
+  chain-id: "43114"
+  topics: "blocks,transactions,events"
+  output-format: "protobuf"

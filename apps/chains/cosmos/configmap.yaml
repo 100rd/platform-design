@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cosmos-config
+  namespace: cosmos
+data:
+  app.toml: |
+    # Cosmos Hub (Gaia) Application Configuration
+    minimum-gas-prices = "0.0025uatom"
+    pruning = "nothing"
+    pruning-keep-recent = "0"
+    pruning-interval = "0"
+
+    [api]
+    enable = true
+    swagger = false
+    address = "tcp://0.0.0.0:1317"
+
+    [grpc]
+    enable = true
+    address = "0.0.0.0:9090"
+
+    [telemetry]
+    enabled = true
+    prometheus-retention-time = 600
+  config.toml: |
+    # Cosmos Hub (Gaia) Tendermint Configuration
+    moniker = "platform-node"
+
+    [rpc]
+    laddr = "tcp://0.0.0.0:26657"
+    cors_allowed_origins = []
+
+    [p2p]
+    laddr = "tcp://0.0.0.0:26656"
+    max_num_inbound_peers = 40
+    max_num_outbound_peers = 10
+
+    [mempool]
+    size = 5000
+    max_txs_bytes = 1073741824
+
+    [instrumentation]
+    prometheus = true
+    prometheus_listen_addr = ":26660"

@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: bsc-p2p
+  namespace: bsc
+  labels:
+    app.kubernetes.io/name: bsc
+    app.kubernetes.io/component: p2p
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: bsc
+  ports:
+    - name: p2p-tcp
+      port: 30311
+      targetPort: p2p-tcp
+      protocol: TCP
+    - name: p2p-udp
+      port: 30311
+      targetPort: p2p-udp
+      protocol: UDP
