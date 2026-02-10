@@ -10,7 +10,7 @@
 #
 # Options:
 #   --auto-approve    Skip confirmation prompts
-#   --region REGION   AWS region (default: us-east-1)
+#   --region REGION   AWS region (default: eu-west-1)
 #   --cluster NAME    Cluster name (default: platform-design-dev)
 #   --skip-tests      Skip post-deployment tests
 #   --help            Show this help message
@@ -29,7 +29,7 @@ NC='\033[0m' # No Color
 
 # Default values
 AUTO_APPROVE=false
-AWS_REGION="${AWS_REGION:-us-east-1}"
+AWS_REGION="${AWS_REGION:-eu-west-1}"
 CLUSTER_NAME="platform-design-dev"
 SKIP_TESTS=false
 
@@ -364,7 +364,7 @@ show_help() {
     echo ""
     echo "Options:"
     echo "  --auto-approve     Skip confirmation prompts"
-    echo "  --region REGION    AWS region (default: us-east-1)"
+    echo "  --region REGION    AWS region (default: eu-west-1)"
     echo "  --cluster NAME     Cluster name (default: platform-design-dev)"
     echo "  --skip-tests       Skip post-deployment tests"
     echo "  --help             Show this help message"

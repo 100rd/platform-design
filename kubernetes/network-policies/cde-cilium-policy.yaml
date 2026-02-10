@@ -4,10 +4,10 @@
 # Provides finer-grained control than standard Kubernetes NetworkPolicy.
 #
 # PCI-DSS Requirements:
-#   Req 1.2.1 — Restrict inbound traffic to the CDE to only that which is necessary
-#   Req 1.3.1 — Restrict outbound traffic from the CDE to only that which is necessary
-#   Req 1.3.2 — Deny all inbound and outbound traffic not explicitly allowed
-#   Req 1.3.4 — No direct public access from untrusted networks to the CDE
+#   Req 1.2.1 -- Restrict inbound traffic to the CDE to only that which is necessary
+#   Req 1.3.1 -- Restrict outbound traffic from the CDE to only that which is necessary
+#   Req 1.3.2 -- Deny all inbound and outbound traffic not explicitly allowed
+#   Req 1.3.4 -- No direct public access from untrusted networks to the CDE
 #
 # Traffic matrix:
 #   INGRESS:
@@ -71,17 +71,19 @@ spec:
             - port: "53"
               protocol: TCP
 
-    # RDS PostgreSQL — VPC CIDR only (database subnets)
+    # RDS PostgreSQL -- VPC CIDR only (database subnets)
     # Prod VPC CIDR: 10.20.0.0/16 (see catalog/units/vpc/terragrunt.hcl)
     - toCIDR:
+        # WARNING: Hardcoded VPC CIDR -- must match the production VPC CIDR
         - 10.20.0.0/16
       toPorts:
         - ports:
             - port: "5432"
               protocol: TCP
 
-    # ElastiCache Redis — VPC CIDR only
+    # ElastiCache Redis -- VPC CIDR only
     - toCIDR:
+        # WARNING: Hardcoded VPC CIDR -- must match the production VPC CIDR
         - 10.20.0.0/16
       toPorts:
         - ports:
@@ -90,5 +92,5 @@ spec:
 
   # -------------------------------------------------------------------------
   # DENY ALL OTHER EGRESS (implicit via endpointSelector + explicit egress rules)
-  # No internet egress — cardholder data must not leave the CDE boundary.
+  # No internet egress -- cardholder data must not leave the CDE boundary.
   # -------------------------------------------------------------------------

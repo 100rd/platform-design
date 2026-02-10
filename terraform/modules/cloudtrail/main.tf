@@ -39,10 +39,14 @@ resource "aws_s3_bucket" "cloudtrail" {
   force_destroy = false
 
   tags = merge(var.tags, {
-    Name         = var.s3_bucket_name
+    Name          = var.s3_bucket_name
     pci-dss-scope = "true"
-    Purpose      = "cloudtrail-audit-logs"
+    Purpose       = "cloudtrail-audit-logs"
   })
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_versioning" "cloudtrail" {
@@ -234,7 +238,7 @@ resource "aws_cloudwatch_log_group" "cloudtrail" {
   kms_key_id        = var.kms_key_arn
 
   tags = merge(var.tags, {
-    Name         = "/aws/cloudtrail/${var.trail_name}"
+    Name          = "/aws/cloudtrail/${var.trail_name}"
     pci-dss-scope = "true"
   })
 }
@@ -327,8 +331,8 @@ resource "aws_cloudtrail" "org_trail" {
   ]
 
   tags = merge(var.tags, {
-    Name         = var.trail_name
+    Name          = var.trail_name
     pci-dss-scope = "true"
-    Compliance   = "pci-dss-req-10"
+    Compliance    = "pci-dss-req-10"
   })
 }

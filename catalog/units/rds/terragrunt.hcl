@@ -132,8 +132,8 @@ inputs = {
 
   # High availability and durability
   multi_az                = local.account_vars.locals.rds_multi_az
-  backup_retention_period = local.account_vars.locals.environment == "prod" ? 30 : 7
-  deletion_protection     = local.account_vars.locals.environment == "prod" ? true : false
+  backup_retention_period = local.environment == "prod" ? 30 : 7
+  deletion_protection     = contains(["prod", "staging"], local.environment)
 
   # Encryption at rest with KMS CMK (PCI-DSS Req 3.4)
   storage_encrypted = true

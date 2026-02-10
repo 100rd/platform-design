@@ -48,7 +48,7 @@ module "db" {
   parameter_group_name      = aws_db_parameter_group.this.name
 
   multi_az               = var.multi_az
-  db_subnet_group_name   = "dns-failover-subnet-group"
+  db_subnet_group_name   = var.db_subnet_group_name
   subnet_ids             = var.subnet_ids
   vpc_security_group_ids = [module.security_group.security_group_id]
 

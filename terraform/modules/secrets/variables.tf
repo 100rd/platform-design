@@ -5,20 +5,7 @@ variable "secrets" {
     enable_rotation = optional(bool, false)
     replicate       = optional(bool, false)
   }))
-  default = {
-    "/dns-failover/cloudflare/api-token" = {
-      description     = "Cloudflare API Token for DNS Failover"
-      enable_rotation = false
-    }
-    "/dns-failover/registrar/credentials" = {
-      description     = "Registrar API Credentials"
-      enable_rotation = false
-    }
-    "/dns-failover/database/credentials" = {
-      description     = "Database Credentials"
-      enable_rotation = true
-    }
-  }
+  default = {}
 }
 
 variable "kms_key_id" {

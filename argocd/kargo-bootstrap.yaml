@@ -8,7 +8,7 @@ metadata:
 spec:
   project: platform-workloads
   source:
-    repoURL: git@github.com:IgorGerasimow/platform-design.git
+    repoURL: git@github.com:100rd/platform-design.git
     targetRevision: HEAD
     path: kargo
     directory:

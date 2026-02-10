@@ -10,7 +10,7 @@ spec:
     - matrix:
         generators:
           - git:
-              repoURL: git@github.com:IgorGerasimow/platform-design.git
+              repoURL: git@github.com:100rd/platform-design.git
               revision: HEAD
               directories:
                 - path: apps/infra/*
@@ -29,7 +29,7 @@ spec:
     spec:
       project: default
       source:
-        repoURL: git@github.com:IgorGerasimow/platform-design.git
+        repoURL: git@github.com:100rd/platform-design.git
         targetRevision: HEAD
         path: '{{ .path.path }}'
         helm:

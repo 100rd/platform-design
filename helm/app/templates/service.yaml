@@ -4,7 +4,7 @@ kind: Service
 metadata:
   name: {{include "app.fullname" .}}
   labels:
-    {{- include "app.selectorLabels" . | nindent 4}}
+    {{- include "app.labels" . | nindent 4}}
   {{- if or .Values.service.annotations .Values.service.global }}
   annotations:
     {{- if .Values.service.global }}

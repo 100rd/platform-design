@@ -3,5 +3,6 @@ kind: Kustomization
 
 resources:
   - infra-appset.yaml
+  - multicluster-infra-appset.yaml
   - role-apps-appset.yaml
   - observability-appset.yaml

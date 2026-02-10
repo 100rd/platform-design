@@ -45,6 +45,23 @@ variable "content_based_deduplication" {
   default     = false
 }
 
+variable "kms_master_key_id" {
+  description = "ARN of the KMS CMK for SQS server-side encryption. When set, KMS encryption is used instead of SQS-managed SSE."
+  type        = string
+  default     = null
+}
+
+variable "kms_data_key_reuse_period_seconds" {
+  description = "Duration (in seconds) that SQS can reuse a data key to encrypt/decrypt messages before calling KMS again. Valid range: 60-86400."
+  type        = number
+  default     = 300
+
+  validation {
+    condition     = var.kms_data_key_reuse_period_seconds >= 60 && var.kms_data_key_reuse_period_seconds <= 86400
+    error_message = "kms_data_key_reuse_period_seconds must be between 60 and 86400."
+  }
+}
+
 variable "create_dlq" {
   description = "Create a dead-letter queue"
   type        = bool

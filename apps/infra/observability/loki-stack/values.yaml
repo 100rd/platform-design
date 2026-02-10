@@ -440,15 +440,15 @@ fluent-bit:
           Name modify
           Match kube.*
           Add cluster ${CLUSTER_NAME}
-          Add environment production
-          Add platform gaming
+          Add environment ""
+          Add platform ""
 
       [FILTER]
           Name modify
           Match host.*
           Add cluster ${CLUSTER_NAME}
-          Add environment production
-          Add platform gaming
+          Add environment ""
+          Add platform ""
           Add source systemd
 
       [FILTER]

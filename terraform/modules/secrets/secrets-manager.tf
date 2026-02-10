@@ -35,6 +35,10 @@ resource "aws_secretsmanager_secret" "secrets" {
   }
 
   tags = var.tags
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # We don't create secret versions here as they contain sensitive data.

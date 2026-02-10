@@ -19,10 +19,20 @@ spec:
         prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: dns-monitor
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
       containers:
         - name: dns-monitor
-          image: dns-monitor:latest # In prod, this would be a real registry URL
+          image: dns-monitor:v1.0.0
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -40,6 +50,6 @@ spec:
             - containerPort: 8080
               name: metrics
       tolerations:
-        # Allow running on master nodes if needed for coverage
-        - key: node-role.kubernetes.io/master
+        # Allow running on control-plane nodes if needed for coverage
+        - key: node-role.kubernetes.io/control-plane
           effect: NoSchedule

@@ -20,10 +20,20 @@ spec:
         prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: failover-controller
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
       containers:
         - name: failover-controller
-          image: failover-controller:latest
+          image: failover-controller:v1.0.0
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: DATABASE_URL
               valueFrom:

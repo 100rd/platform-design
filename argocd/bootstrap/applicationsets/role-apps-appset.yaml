@@ -21,7 +21,7 @@ spec:
                       - velocity
                       - listeners
           - git:
-              repoURL: https://github.com/IgorGerasimow/platform-design.git
+              repoURL: https://github.com/100rd/platform-design.git
               revision: HEAD
               directories:
                 - path: 'apps/cluster-roles/{{.metadata.labels.cluster-role}}/*'
@@ -36,7 +36,7 @@ spec:
     spec:
       project: default
       source:
-        repoURL: https://github.com/IgorGerasimow/platform-design.git
+        repoURL: https://github.com/100rd/platform-design.git
         targetRevision: HEAD
         path: 'argocd/overlays/{{.metadata.labels.cluster-role}}-{{.metadata.labels.env}}/{{.path.basename}}'
       destination:
