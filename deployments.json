@@ -1,4 +1,4 @@
-{"generated_at": "2026-02-10T08:53:58Z", "applications": [
+{"generated_at": "2026-02-10T08:54:26Z", "applications": [
 {
   "name": "aws-lb-controller",
   "chartVersion": "3.0.0",
@@ -18,7 +18,7 @@
 {
   "name": "cilium",
   "chartVersion": "1.0.0",
-  "appVersion": "1.16.5",
+  "appVersion": "1.17.1",
   "description": "Cilium CNI with Hubble observability for Kubernetes networking",
   "path": "apps/infra/cilium"
 }
