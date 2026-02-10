@@ -21,6 +21,23 @@ variable "force_delete" {
   default     = false
 }
 
+variable "encryption_type" {
+  description = "Encryption type for ECR repositories. KMS provides stronger encryption with CMK management. Valid values: AES256, KMS."
+  type        = string
+  default     = "KMS"
+
+  validation {
+    condition     = contains(["AES256", "KMS"], var.encryption_type)
+    error_message = "encryption_type must be either AES256 or KMS."
+  }
+}
+
+variable "kms_key_arn" {
+  description = "ARN of the KMS CMK for ECR repository encryption. Only used when encryption_type is KMS. When null with KMS encryption, AWS uses the default aws/ecr key."
+  type        = string
+  default     = null
+}
+
 variable "cross_account_arns" {
   description = "List of AWS account ARNs allowed to pull images"
   type        = list(string)

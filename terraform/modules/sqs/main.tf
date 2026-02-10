@@ -9,7 +9,10 @@ resource "aws_sqs_queue" "this" {
   fifo_queue                  = var.fifo_queue
   content_based_deduplication = var.fifo_queue ? var.content_based_deduplication : null
 
-  sqs_managed_sse_enabled = true
+  # KMS encryption takes precedence over SQS-managed SSE when a key is provided
+  kms_master_key_id                 = var.kms_master_key_id
+  kms_data_key_reuse_period_seconds = var.kms_master_key_id != null ? var.kms_data_key_reuse_period_seconds : null
+  sqs_managed_sse_enabled           = var.kms_master_key_id == null ? true : null
 
   redrive_policy = var.create_dlq ? jsonencode({
     deadLetterTargetArn = aws_sqs_queue.dlq[0].arn
@@ -26,7 +29,11 @@ resource "aws_sqs_queue" "dlq" {
 
   message_retention_seconds = var.dlq_message_retention_seconds
   fifo_queue                = var.fifo_queue
-  sqs_managed_sse_enabled   = true
+
+  # Mirror encryption settings on the DLQ
+  kms_master_key_id                 = var.kms_master_key_id
+  kms_data_key_reuse_period_seconds = var.kms_master_key_id != null ? var.kms_data_key_reuse_period_seconds : null
+  sqs_managed_sse_enabled           = var.kms_master_key_id == null ? true : null
 
   tags = var.tags
 }

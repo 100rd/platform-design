@@ -18,6 +18,7 @@ serviceAccount:
   annotations: {}
     # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/my-app-role
   labels: {}
+  automountToken: false
 
 # --- Pod Security ---
 podSecurityContext:

@@ -10,6 +10,6 @@ spec:
         semverConstraint: ">=0.1.0"
         discoveryLimit: 5
     - git:
-        repoURL: git@github.com:IgorGerasimow/platform-design.git
+        repoURL: git@github.com:100rd/platform-design.git
         includePaths:
           - apps/mono/**

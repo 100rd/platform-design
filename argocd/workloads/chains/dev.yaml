@@ -12,7 +12,7 @@ metadata:
 spec:
   project: platform-workloads
   sources:
-    - repoURL: git@github.com:IgorGerasimow/platform-design.git
+    - repoURL: git@github.com:100rd/platform-design.git
       targetRevision: HEAD
       path: apps/chains
       helm:
@@ -21,7 +21,7 @@ spec:
           - $values/envs/dev/values/chains/values.yaml
         values: |
           environment: "dev"
-    - repoURL: git@github.com:IgorGerasimow/platform-design.git
+    - repoURL: git@github.com:100rd/platform-design.git
       targetRevision: HEAD
       ref: values
   destination:

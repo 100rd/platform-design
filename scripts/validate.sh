@@ -22,7 +22,7 @@ NC='\033[0m'
 
 # Defaults
 CLUSTER_NAME="${CLUSTER_NAME:-platform-design-dev}"
-AWS_REGION="${AWS_REGION:-us-east-1}"
+AWS_REGION="${AWS_REGION:-eu-west-1}"
 
 # Counters
 PASSED=0

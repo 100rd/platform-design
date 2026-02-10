@@ -234,7 +234,7 @@ gateway:
             action: insert
           # Add region
           - key: cloud.region
-            value: us-east-1
+            value: ""  # TODO: Set via ArgoCD ApplicationSet region injection
             action: insert
           # Remove sensitive data
           - key: password

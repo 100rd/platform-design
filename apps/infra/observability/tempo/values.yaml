@@ -31,7 +31,7 @@ tempo-distributed:
           # S3 bucket for trace storage
           bucket: tempo-traces-prod
           endpoint: s3.us-east-1.amazonaws.com
-          region: us-east-1
+          region: ""  # TODO: Set via ArgoCD ApplicationSet region injection
           access_key: ${S3_ACCESS_KEY}
           secret_key: ${S3_SECRET_KEY}
           insecure: false

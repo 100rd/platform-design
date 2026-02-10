@@ -1,7 +1,6 @@
 variable "cluster_name" {
   description = "Name of the EKS cluster"
   type        = string
-  default     = "dns-failover-cluster"
 }
 
 variable "cluster_version" {

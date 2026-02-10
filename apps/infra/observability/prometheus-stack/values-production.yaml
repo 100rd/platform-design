@@ -135,6 +135,7 @@ kube-prometheus-stack:
       annotations:
         alb.ingress.kubernetes.io/scheme: internet-facing
         alb.ingress.kubernetes.io/target-type: ip
+        # TODO: Replace 123456789012 with actual AWS account ID before production deployment
         alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:123456789012:certificate/xxx
         alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS-1-2-Ext-2018-06
         alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
@@ -144,6 +145,7 @@ kube-prometheus-stack:
         alb.ingress.kubernetes.io/success-codes: '200'
         alb.ingress.kubernetes.io/backend-protocol: HTTP
         # WAF
+        # TODO: Replace 123456789012 with actual AWS account ID before production deployment
         alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:us-east-1:123456789012:regional/webacl/grafana-waf/xxx
       hosts:
       - grafana.prod.example.com
@@ -344,4 +346,5 @@ thanos:
 
   serviceAccount:
     annotations:
+      # TODO: Replace 123456789012 with actual AWS account ID before production deployment
       eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/thanos-s3-access-prod

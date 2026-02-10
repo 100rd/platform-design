@@ -27,11 +27,15 @@ resource "aws_kms_key" "this" {
   policy = data.aws_iam_policy_document.key_policy[each.key].json
 
   tags = merge(var.tags, {
-    Name            = "${var.environment}-${each.key}"
-    pci-dss-scope   = "true"
-    key-purpose     = each.key
-    Environment     = var.environment
+    Name          = "${var.environment}-${each.key}"
+    pci-dss-scope = "true"
+    key-purpose   = each.key
+    Environment   = var.environment
   })
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # ---------------------------------------------------------------------------------------------------------------------

@@ -11,7 +11,7 @@
 # Options:
 #   --auto-approve    Skip confirmation prompts (DANGEROUS!)
 #   --cluster NAME    Cluster name (default: platform-design-dev)
-#   --region REGION   AWS region (default: us-east-1)
+#   --region REGION   AWS region (default: eu-west-1)
 #   --keep-vpc        Keep VPC after cleanup
 #   --help            Show this help message
 #
@@ -30,7 +30,7 @@ NC='\033[0m'
 # Defaults
 AUTO_APPROVE=false
 CLUSTER_NAME="platform-design-dev"
-AWS_REGION="${AWS_REGION:-us-east-1}"
+AWS_REGION="${AWS_REGION:-eu-west-1}"
 KEEP_VPC=false
 
 # Script directory
@@ -292,7 +292,7 @@ show_help() {
     echo "Options:"
     echo "  --auto-approve    Skip confirmation prompts (DANGEROUS!)"
     echo "  --cluster NAME    Cluster name (default: platform-design-dev)"
-    echo "  --region REGION   AWS region (default: us-east-1)"
+    echo "  --region REGION   AWS region (default: eu-west-1)"
     echo "  --keep-vpc        Keep VPC after cleanup"
     echo "  --help            Show this help message"
     echo ""

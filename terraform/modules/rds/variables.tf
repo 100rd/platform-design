@@ -1,7 +1,6 @@
 variable "identifier" {
   description = "The name of the RDS instance"
   type        = string
-  default     = "dns-failover-db"
 }
 
 variable "vpc_id" {
@@ -12,6 +11,11 @@ variable "vpc_id" {
 variable "subnet_ids" {
   description = "List of subnet IDs for the DB subnet group"
   type        = list(string)
+}
+
+variable "db_subnet_group_name" {
+  description = "Name of the DB subnet group to place the RDS instance in"
+  type        = string
 }
 
 variable "allowed_security_group_ids" {

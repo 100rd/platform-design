@@ -11,6 +11,10 @@ spec:
       template:
         spec:
           serviceAccountName: dns-sync
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            fsGroup: 65534
           volumes:
             - name: config-volume
               configMap:
@@ -20,8 +24,14 @@ spec:
                 name: dns-zones
           containers:
             - name: octodns
-              image: octodns/octodns:latest
+              image: octodns/octodns:1.8.0
               command: ["octodns-sync", "--config-file=/config/octodns-config.yaml", "--doit"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
               env:
                 - name: CLOUDFLARE_TOKEN
                   valueFrom:

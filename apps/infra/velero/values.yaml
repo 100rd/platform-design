@@ -14,7 +14,7 @@ velero:
         prefix: velero
         default: true
         config:
-          region: us-east-1  # Set to your region
+          region: ""  # TODO: Set via ArgoCD ApplicationSet region injection
           s3ForcePathStyle: false
 
       # Cross-region backup for disaster recovery
@@ -24,7 +24,7 @@ velero:
         bucket: ""  # REQUIRED for DR: Set to DR region S3 bucket
         prefix: velero-dr
         config:
-          region: us-west-2  # DR region
+          region: ""  # TODO: Set via ArgoCD ApplicationSet region injection (DR region)
           s3ForcePathStyle: false
 
     # Volume snapshots (EBS)
@@ -32,13 +32,13 @@ velero:
       - name: aws-primary
         provider: aws
         config:
-          region: us-east-1  # Set to your region
+          region: ""  # TODO: Set via ArgoCD ApplicationSet region injection
 
       # Cross-region volume snapshots
       - name: aws-dr
         provider: aws
         config:
-          region: us-west-2  # DR region
+          region: ""  # TODO: Set via ArgoCD ApplicationSet region injection (DR region)
 
     # Features
     features: EnableCSI

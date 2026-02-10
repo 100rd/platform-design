@@ -6,7 +6,7 @@ metadata:
 spec:
   description: Workload applications managed by Kargo promotion pipeline
   sourceRepos:
-    - git@github.com:IgorGerasimow/platform-design.git
+    - git@github.com:100rd/platform-design.git
   destinations:
     - server: https://kubernetes.default.svc
       namespace: dev-*
@@ -20,5 +20,35 @@ spec:
     - group: ""
       kind: Namespace
   namespaceResourceWhitelist:
-    - group: "*"
-      kind: "*"
+    - group: "apps"
+      kind: "Deployment"
+    - group: "apps"
+      kind: "StatefulSet"
+    - group: "apps"
+      kind: "DaemonSet"
+    - group: ""
+      kind: "Service"
+    - group: ""
+      kind: "ConfigMap"
+    - group: ""
+      kind: "Secret"
+    - group: ""
+      kind: "ServiceAccount"
+    - group: "autoscaling"
+      kind: "HorizontalPodAutoscaler"
+    - group: "policy"
+      kind: "PodDisruptionBudget"
+    - group: "networking.k8s.io"
+      kind: "NetworkPolicy"
+    - group: "networking.k8s.io"
+      kind: "Ingress"
+    - group: "external-secrets.io"
+      kind: "ExternalSecret"
+    - group: "monitoring.coreos.com"
+      kind: "ServiceMonitor"
+    - group: "monitoring.coreos.com"
+      kind: "PodMonitor"
+    - group: "batch"
+      kind: "Job"
+    - group: "batch"
+      kind: "CronJob"

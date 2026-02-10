@@ -42,6 +42,43 @@ resource "aws_s3_bucket_logging" "this" {
   target_prefix = "s3-access-logs/${var.bucket_name}/"
 }
 
+# ---------------------------------------------------------------------------------------------------------------------
+# Bucket Policy — Enforce TLS (PCI-DSS Req 4.1)
+# ---------------------------------------------------------------------------------------------------------------------
+# Denies any S3 operation over an insecure (non-TLS) transport. This ensures all data
+# in transit to/from the bucket is encrypted, satisfying PCI-DSS Requirement 4.1.
+# Pattern sourced from the CloudTrail module's DenyInsecureTransport statement.
+# ---------------------------------------------------------------------------------------------------------------------
+
+resource "aws_s3_bucket_policy" "this" {
+  bucket = aws_s3_bucket.this.id
+  policy = data.aws_iam_policy_document.bucket_policy.json
+}
+
+data "aws_iam_policy_document" "bucket_policy" {
+  statement {
+    sid    = "DenyInsecureTransport"
+    effect = "Deny"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions   = ["s3:*"]
+    resources = [
+      aws_s3_bucket.this.arn,
+      "${aws_s3_bucket.this.arn}/*",
+    ]
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
 resource "aws_s3_bucket_lifecycle_configuration" "this" {
   count  = length(var.lifecycle_rules) > 0 ? 1 : 0
   bucket = aws_s3_bucket.this.id

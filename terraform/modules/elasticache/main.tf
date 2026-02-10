@@ -22,8 +22,8 @@ resource "aws_security_group" "this" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow all outbound"
+    cidr_blocks = [var.vpc_cidr]
+    description = "Allow outbound within VPC"
   }
 
   lifecycle {
@@ -102,4 +102,8 @@ resource "aws_elasticache_replication_group" "this" {
   }
 
   tags = var.tags
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }

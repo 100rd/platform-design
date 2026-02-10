@@ -11,8 +11,8 @@ pyroscope:
       backend: s3
       s3:
         bucket: gaming-platform-profiling-data
-        region: us-west-2
-        endpoint: s3.us-west-2.amazonaws.com
+        region: ""  # TODO: Set via ArgoCD ApplicationSet region injection
+        endpoint: s3.us-east-1.amazonaws.com
 
         # Use IRSA for authentication
         access_key_id: ""
@@ -53,7 +53,7 @@ pyroscope:
       # S3 bucket configuration
       s3:
         bucket_name: gaming-platform-profiling-data
-        region: us-west-2
+        region: ""  # TODO: Set via ArgoCD ApplicationSet region injection
 
     # Ingestion configuration
     limits:

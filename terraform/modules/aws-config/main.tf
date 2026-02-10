@@ -35,6 +35,10 @@ resource "aws_s3_bucket" "config" {
     pci-dss-scope = "true"
     Purpose       = "aws-config-snapshots"
   })
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_versioning" "config" {

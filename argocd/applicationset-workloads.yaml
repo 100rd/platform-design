@@ -69,7 +69,7 @@ spec:
       project: platform-workloads
       sources:
         # Source 1: Helm chart
-        - repoURL: git@github.com:IgorGerasimow/platform-design.git
+        - repoURL: git@github.com:100rd/platform-design.git
           targetRevision: HEAD
           path: helm/app
           helm:
@@ -87,7 +87,7 @@ spec:
               image:
                 repository: "${ECR_REGISTRY}/{{ .team }}"
         # Source 2: Values reference
-        - repoURL: git@github.com:IgorGerasimow/platform-design.git
+        - repoURL: git@github.com:100rd/platform-design.git
           targetRevision: HEAD
           ref: values
       destination:

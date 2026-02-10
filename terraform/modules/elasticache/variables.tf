@@ -14,6 +14,11 @@ variable "vpc_id" {
   type        = string
 }
 
+variable "vpc_cidr" {
+  description = "VPC CIDR block for restricting egress traffic"
+  type        = string
+}
+
 variable "subnet_ids" {
   description = "List of subnet IDs for the cache subnet group"
   type        = list(string)
