@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: polkadot
+  namespace: polkadot
+  labels:
+    app.kubernetes.io/name: polkadot
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: polkadot

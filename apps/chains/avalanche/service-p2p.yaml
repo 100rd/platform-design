@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: avalanche-p2p
+  namespace: avalanche
+  labels:
+    app.kubernetes.io/name: avalanche
+    app.kubernetes.io/component: p2p
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: avalanche
+  ports:
+    - name: p2p
+      port: 9651
+      targetPort: p2p
+      protocol: TCP

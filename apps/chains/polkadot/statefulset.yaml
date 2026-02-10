@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: polkadot
+  namespace: polkadot
+  labels:
+    app.kubernetes.io/name: polkadot
+    app.kubernetes.io/component: full-node
+spec:
+  serviceName: polkadot-headless
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: polkadot
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: polkadot
+        app.kubernetes.io/component: full-node
+        blockchain.io/role: polkadot-full-node
+        blockchain.io/network: polkadot
+    spec:
+      serviceAccountName: polkadot
+      automountServiceAccountToken: false
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Schedule on polkadot-full-nodes Karpenter nodepool
+      tolerations:
+        - key: blockchain.io/role
+          value: polkadot-full-node
+          effect: NoSchedule
+      nodeSelector:
+        blockchain.io/role: polkadot-full-node
+
+      # Spread replicas across nodes
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: polkadot
+
+      containers:
+        - name: polkadot
+          image: parity/polkadot:v1.16.2
+          args:
+            - --name=platform-node
+            - --chain=polkadot
+            - --base-path=/data/polkadot
+            - --rpc-external
+            - --rpc-port=9933
+            - --ws-external
+            - --ws-port=9944
+            - --prometheus-external
+            - --prometheus-port=9615
+            - --pruning=archive
+            - --rpc-cors=all
+            - --rpc-methods=safe
+          ports:
+            - name: p2p
+              containerPort: 30333
+              protocol: TCP
+            - name: rpc
+              containerPort: 9933
+              protocol: TCP
+            - name: ws
+              containerPort: 9944
+              protocol: TCP
+            - name: metrics
+              containerPort: 9615
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "4"
+              memory: 8Gi
+            limits:
+              cpu: "8"
+              memory: 16Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: polkadot-data
+              mountPath: /data/polkadot
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: rpc
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: rpc
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: rpc
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 30
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+  volumeClaimTemplates:
+    - metadata:
+        name: polkadot-data
+      spec:
+        storageClassName: gp3-polkadot
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Ti

@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: solana-listener-config
+  namespace: solana
+data:
+  block-confirmations: "32"
+  chain-id: "mainnet-beta"
+  topics: "blocks,transactions,events"
+  output-format: "protobuf"

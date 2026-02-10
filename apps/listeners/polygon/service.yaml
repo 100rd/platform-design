@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: polygon-listener
+  namespace: polygon
+  labels:
+    app.kubernetes.io/name: polygon-listener
+    app.kubernetes.io/component: listener
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: polygon-listener
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: grpc
+    - name: metrics
+      port: 9090
+      targetPort: metrics

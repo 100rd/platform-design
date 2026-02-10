@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: solana-headless
+  namespace: solana
+  labels:
+    app.kubernetes.io/name: solana
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: solana
+  ports:
+    - name: rpc
+      port: 8899
+      targetPort: rpc
+    - name: ws
+      port: 8900
+      targetPort: ws
+    - name: p2p-tcp
+      port: 8001
+      targetPort: p2p-tcp
+    - name: gossip
+      port: 8000
+      targetPort: gossip

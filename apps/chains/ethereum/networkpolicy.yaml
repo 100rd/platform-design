@@ -1,0 +1,60 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: ethereum-node-policy
+  namespace: ethereum
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: ethereum
+  ingress:
+    # P2P from anywhere (Ethereum network) - TCP and UDP
+    - fromEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "30303"
+              protocol: TCP
+            - port: "30303"
+              protocol: UDP
+    # RPC + WS from within the cluster only
+    - fromEndpoints:
+        - {}
+      toPorts:
+        - ports:
+            - port: "8545"
+              protocol: TCP
+            - port: "8546"
+              protocol: TCP
+            - port: "6060"
+              protocol: TCP
+  egress:
+    # P2P to Ethereum network
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "30303"
+              protocol: TCP
+            - port: "30303"
+              protocol: UDP
+    # DNS resolution
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # HTTPS for bootnodes and discovery
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+            - port: "53"
+              protocol: UDP

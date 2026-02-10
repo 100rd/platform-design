@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: polkadot-config
+  namespace: polkadot
+data:
+  args: |
+    --name=platform-node
+    --chain=polkadot
+    --base-path=/data/polkadot
+    --rpc-external
+    --rpc-port=9933
+    --ws-external
+    --ws-port=9944
+    --prometheus-external
+    --prometheus-port=9615
+    --pruning=archive
+    --rpc-cors=all
+    --rpc-methods=safe

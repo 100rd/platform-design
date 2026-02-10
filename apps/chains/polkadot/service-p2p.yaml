@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: polkadot-p2p
+  namespace: polkadot
+  labels:
+    app.kubernetes.io/name: polkadot
+    app.kubernetes.io/component: p2p
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: polkadot
+  ports:
+    - name: p2p
+      port: 30333
+      targetPort: p2p
+      protocol: TCP

@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bitcoin-listener-config
+  namespace: bitcoin
+data:
+  block-confirmations: "6"
+  chain-id: "bitcoin-mainnet"
+  topics: "blocks,transactions,events"
+  output-format: "protobuf"

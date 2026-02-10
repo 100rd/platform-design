@@ -1,0 +1,50 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: polygon-listener-policy
+  namespace: polygon
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: polygon-listener
+  ingress:
+    # gRPC + metrics from within the cluster only
+    - fromEndpoints:
+        - {}
+      toPorts:
+        - ports:
+            - port: "50051"
+              protocol: TCP
+            - port: "9090"
+              protocol: TCP
+  egress:
+    # Chain RPC access (polygon-rpc service)
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: polygon
+      toPorts:
+        - ports:
+            - port: "8545"
+              protocol: TCP
+            - port: "8546"
+              protocol: TCP
+    # Kafka / NATS messaging
+    - toEndpoints:
+        - {}
+      toPorts:
+        - ports:
+            - port: "9092"
+              protocol: TCP
+            - port: "4222"
+              protocol: TCP
+    # DNS resolution
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

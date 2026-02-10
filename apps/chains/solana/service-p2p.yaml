@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: solana-p2p
+  namespace: solana
+  labels:
+    app.kubernetes.io/name: solana
+    app.kubernetes.io/component: p2p
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: solana
+  ports:
+    - name: gossip
+      port: 8000
+      targetPort: gossip
+      protocol: UDP
+    - name: p2p-tcp
+      port: 8001
+      targetPort: p2p-tcp
+      protocol: TCP
+    - name: p2p-udp
+      port: 8001
+      targetPort: p2p-udp
+      protocol: UDP

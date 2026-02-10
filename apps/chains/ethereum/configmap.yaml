@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ethereum-config
+  namespace: ethereum
+data:
+  config.toml: |
+    [Eth]
+    SyncMode = "snap"
+    NoPruning = false
+    NoPrefetch = false
+    TxLookupLimit = 2350000
+
+    [Node]
+    DataDir = "/ethereum/data"
+
+    [Node.P2P]
+    MaxPeers = 100
+    ListenAddr = ":30303"
+
+    [Node.HTTPServer]
+    Enabled = true
+    ListenAddr = "0.0.0.0"
+    Port = 8545
+    API = "eth,net,web3,txpool"
+    VirtualHosts = ["*"]
+
+    [Node.WSServer]
+    Enabled = true
+    ListenAddr = "0.0.0.0"
+    Port = 8546
+    API = "eth,net,web3,txpool"
+
+    [Metrics]
+    Enabled = true
+    HTTP = "0.0.0.0"
+    Port = 6060

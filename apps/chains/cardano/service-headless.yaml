@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cardano-headless
+  namespace: cardano
+  labels:
+    app.kubernetes.io/name: cardano
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: cardano
+  ports:
+    - name: p2p
+      port: 3001
+      targetPort: p2p
+    - name: ogmios
+      port: 1337
+      targetPort: ogmios
+    - name: metrics
+      port: 12788
+      targetPort: metrics

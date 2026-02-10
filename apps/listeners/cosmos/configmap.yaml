@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cosmos-listener-config
+  namespace: cosmos
+data:
+  block-confirmations: "1"
+  chain-id: "cosmoshub-4"
+  topics: "blocks,transactions,events"
+  output-format: "protobuf"

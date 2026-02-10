@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bitcoin-listener
+  namespace: bitcoin
+  labels:
+    app.kubernetes.io/name: bitcoin-listener
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bitcoin-listener

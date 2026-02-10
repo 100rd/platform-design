@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: avalanche-headless
+  namespace: avalanche
+  labels:
+    app.kubernetes.io/name: avalanche
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: avalanche
+  ports:
+    - name: rpc
+      port: 9650
+      targetPort: rpc
+    - name: p2p
+      port: 9651
+      targetPort: p2p

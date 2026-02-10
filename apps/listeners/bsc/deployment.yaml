@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bsc-listener
+  namespace: bsc
+  labels:
+    app.kubernetes.io/name: bsc-listener
+    app.kubernetes.io/component: listener
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bsc-listener
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: bsc-listener
+        app.kubernetes.io/component: listener
+        blockchain.io/network: bsc
+    spec:
+      serviceAccountName: bsc-listener
+      automountServiceAccountToken: false
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Schedule on bsc Karpenter nodepool
+      tolerations:
+        - key: blockchain.io/role
+          value: bsc-full-node
+          effect: NoSchedule
+      nodeSelector:
+        blockchain.io/role: bsc-full-node
+
+      # Spread replicas across nodes
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: bsc-listener
+
+      containers:
+        - name: listener
+          image: internal/bsc-listener:latest
+          ports:
+            - name: grpc
+              containerPort: 50051
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: CHAIN_RPC_URL
+              value: "http://bsc-rpc.bsc.svc.cluster.local:8545"
+            - name: CHAIN_WS_URL
+              value: "ws://bsc-rpc.bsc.svc.cluster.local:8546"
+            - name: BLOCK_CONFIRMATIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: bsc-listener-config
+                  key: block-confirmations
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          livenessProbe:
+            grpc:
+              port: 50051
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            grpc:
+              port: 50051
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cardano-listener
+  namespace: cardano
+  labels:
+    app.kubernetes.io/name: cardano-listener
+    app.kubernetes.io/component: listener
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: cardano-listener
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: grpc
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP

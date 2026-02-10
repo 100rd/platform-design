@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cardano-rpc
+  namespace: cardano
+  labels:
+    app.kubernetes.io/name: cardano
+    app.kubernetes.io/component: rpc
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: cardano
+  ports:
+    - name: ogmios
+      port: 1337
+      targetPort: ogmios
+      protocol: TCP
+    - name: metrics
+      port: 12788
+      targetPort: metrics
+      protocol: TCP

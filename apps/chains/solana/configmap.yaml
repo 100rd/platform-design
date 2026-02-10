@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: solana-config
+  namespace: solana
+data:
+  validator.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    exec solana-validator \
+      --no-voting \
+      --ledger /solana/data/ledger \
+      --accounts /solana/data/accounts \
+      --snapshots /solana/data/snapshots \
+      --rpc-port 8899 \
+      --rpc-bind-address 0.0.0.0 \
+      --dynamic-port-range 8001-8020 \
+      --full-rpc-api \
+      --no-skip-initial-accounts-db-snapshot-download \
+      --known-validator 7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2 \
+      --known-validator GdnSyH3YtwcxFvQrVVJMm1JhTS4QVX7MFsX56uJLUfiZ \
+      --known-validator DE1bawNcRJB9rVm3buyMVfr8mBEoyyu73NBovf2oXJsJ \
+      --known-validator CakcnaRDHka2gXyfbEd2d3xsvkJkqsLw2akB3zsN1D2S \
+      --entrypoint entrypoint.mainnet-beta.solana.com:8001 \
+      --entrypoint entrypoint2.mainnet-beta.solana.com:8001 \
+      --entrypoint entrypoint3.mainnet-beta.solana.com:8001 \
+      --expected-genesis-hash 5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d \
+      --wal-recovery-mode skip_any_corrupted_record \
+      --limit-ledger-size \
+      --log -

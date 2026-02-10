@@ -1,0 +1,48 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cardano-listener-policy
+  namespace: cardano
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: cardano-listener
+  ingress:
+    # gRPC + metrics from within the cluster only
+    - fromEndpoints:
+        - {}
+      toPorts:
+        - ports:
+            - port: "50051"
+              protocol: TCP
+            - port: "9090"
+              protocol: TCP
+  egress:
+    # To chain RPC service (Cardano node via Ogmios)
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: cardano
+      toPorts:
+        - ports:
+            - port: "1337"
+              protocol: TCP
+    # To Kafka/NATS message broker
+    - toEndpoints:
+        - {}
+      toPorts:
+        - ports:
+            - port: "9092"
+              protocol: TCP
+            - port: "4222"
+              protocol: TCP
+    # DNS resolution
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

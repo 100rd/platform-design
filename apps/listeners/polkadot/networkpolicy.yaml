@@ -1,0 +1,41 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: polkadot-listener-policy
+  namespace: polkadot
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: polkadot-listener
+  ingress:
+    # gRPC and metrics from within the cluster only
+    - fromEndpoints:
+        - {}
+      toPorts:
+        - ports:
+            - port: "50051"
+              protocol: TCP
+            - port: "9090"
+              protocol: TCP
+  egress:
+    # Connect to Polkadot RPC and WS within the cluster
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: polkadot
+      toPorts:
+        - ports:
+            - port: "9933"
+              protocol: TCP
+            - port: "9944"
+              protocol: TCP
+    # DNS resolution
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tron-listener-config
+  namespace: tron
+data:
+  block-confirmations: "20"
+  chain-id: "tron-mainnet"
+  topics: "blocks,transactions,events"
+  output-format: "protobuf"

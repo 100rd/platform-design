@@ -1,0 +1,52 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: avalanche-node-policy
+  namespace: avalanche
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: avalanche
+  ingress:
+    # P2P/Staking from anywhere (Avalanche network)
+    - fromEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "9651"
+              protocol: TCP
+    # RPC from within the cluster only
+    - fromEndpoints:
+        - {}
+      toPorts:
+        - ports:
+            - port: "9650"
+              protocol: TCP
+  egress:
+    # P2P/Staking to Avalanche network
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "9651"
+              protocol: TCP
+    # DNS resolution
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # HTTPS for seed nodes DNS resolution
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+            - port: "53"
+              protocol: UDP

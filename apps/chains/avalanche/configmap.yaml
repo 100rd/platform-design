@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: avalanche-config
+  namespace: avalanche
+data:
+  node.json: |
+    {
+      "http-host": "0.0.0.0",
+      "http-port": 9650,
+      "staking-port": 9651,
+      "db-dir": "/data/avalanche",
+      "network-id": "mainnet",
+      "http-allowed-hosts": "*",
+      "api-admin-enabled": false,
+      "log-level": "info",
+      "log-display-level": "info",
+      "snow-sample-size": 20,
+      "snow-quorum-size": 15,
+      "health-check-frequency": "30s"
+    }

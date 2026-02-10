@@ -1,0 +1,148 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: polygon
+  namespace: polygon
+  labels:
+    app.kubernetes.io/name: polygon
+    app.kubernetes.io/component: full-node
+spec:
+  serviceName: polygon-headless
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: polygon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: polygon
+        app.kubernetes.io/component: full-node
+        blockchain.io/role: polygon-full-node
+        blockchain.io/network: polygon
+    spec:
+      serviceAccountName: polygon
+      automountServiceAccountToken: false
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Schedule on polygon-full-nodes Karpenter nodepool
+      tolerations:
+        - key: blockchain.io/role
+          value: polygon-full-node
+          effect: NoSchedule
+      nodeSelector:
+        blockchain.io/role: polygon-full-node
+
+      # Spread replicas across nodes
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: polygon
+
+      containers:
+        - name: bor
+          image: 0xpolygon/bor:v1.5.2
+          args:
+            - server
+            - --chain=mainnet
+            - --datadir=/data/polygon
+            - --http
+            - --http.addr=0.0.0.0
+            - --http.port=8545
+            - --http.api=eth,net,web3,txpool,bor
+            - --ws
+            - --ws.addr=0.0.0.0
+            - --ws.port=8546
+            - --syncmode=full
+            - --gcmode=archive
+            - --maxpeers=100
+            - --metrics
+            - --metrics.addr=0.0.0.0
+            - --metrics.port=7071
+            - --port=30303
+          ports:
+            - name: p2p-tcp
+              containerPort: 30303
+              protocol: TCP
+            - name: p2p-udp
+              containerPort: 30303
+              protocol: UDP
+            - name: rpc
+              containerPort: 8545
+              protocol: TCP
+            - name: ws
+              containerPort: 8546
+              protocol: TCP
+            - name: metrics
+              containerPort: 7071
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+            limits:
+              cpu: "8"
+              memory: 64Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: polygon-data
+              mountPath: /data/polygon
+            - name: polygon-config
+              mountPath: /etc/polygon
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /
+              port: rpc
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: rpc
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /
+              port: rpc
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 30
+
+      volumes:
+        - name: polygon-config
+          configMap:
+            name: polygon-config
+        - name: tmp
+          emptyDir: {}
+
+  volumeClaimTemplates:
+    - metadata:
+        name: polygon-data
+      spec:
+        storageClassName: gp3-polygon
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 4Ti

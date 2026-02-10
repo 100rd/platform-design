@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: polkadot-headless
+  namespace: polkadot
+  labels:
+    app.kubernetes.io/name: polkadot
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: polkadot
+  ports:
+    - name: rpc
+      port: 9933
+      targetPort: rpc
+    - name: ws
+      port: 9944
+      targetPort: ws
+    - name: p2p
+      port: 30333
+      targetPort: p2p
+    - name: metrics
+      port: 9615
+      targetPort: metrics

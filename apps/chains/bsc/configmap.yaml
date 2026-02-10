@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bsc-config
+  namespace: bsc
+data:
+  config.toml: |
+    [Eth]
+    SyncMode = "full"
+    NoPruning = false
+    NoPrefetch = false
+    LightPeers = 100
+    UltraLightFraction = 75
+    DatabaseCache = 16384
+
+    [Eth.Miner]
+    GasCeil = 140000000
+    GasPrice = 1000000000
+
+    [Eth.TxPool]
+    Locals = []
+    NoLocals = true
+    Journal = "transactions.rlp"
+    Rejournal = 3600000000000
+    PriceLimit = 1000000000
+    PriceBump = 10
+    AccountSlots = 512
+    GlobalSlots = 10000
+    AccountQueue = 256
+    GlobalQueue = 5000
+    Lifetime = 10800000000000
+
+    [Node]
+    DataDir = "/data/bsc"
+    InsecureUnlockAllowed = false
+    NoUSB = true
+    IPCPath = "geth.ipc"
+    HTTPHost = "0.0.0.0"
+    HTTPPort = 8545
+    HTTPVirtualHosts = ["*"]
+    HTTPModules = ["eth", "net", "web3", "txpool"]
+    WSHost = "0.0.0.0"
+    WSPort = 8546
+    WSModules = ["eth", "net", "web3"]
+
+    [Node.P2P]
+    MaxPeers = 100
+    NoDiscovery = false
+    ListenAddr = ":30311"
+
+    [Metrics]
+    Enabled = true
+    HTTP = "0.0.0.0"
+    Port = 6060
