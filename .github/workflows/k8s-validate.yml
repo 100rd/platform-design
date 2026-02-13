@@ -32,7 +32,7 @@ jobs:
           - dir: network-policies
             label: Network policies
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install kubeconform
         run: |
           KUBECONFORM_VERSION="v0.6.7"
@@ -58,7 +58,7 @@ jobs:
     name: Validate ArgoCD configs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install kubeconform
         run: |
           KUBECONFORM_VERSION="v0.6.7"

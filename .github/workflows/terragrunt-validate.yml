@@ -18,7 +18,7 @@ jobs:
     name: HCL Format Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install Terragrunt
         run: |
           TERRAGRUNT_VERSION="0.68.12"
@@ -38,7 +38,7 @@ jobs:
     name: Validate Catalog Units
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Validate HCL syntax (balanced braces)
         shell: bash
         run: |
