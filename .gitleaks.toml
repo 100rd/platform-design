@@ -6,6 +6,11 @@ title = "Gitleaks config for platform-design"
     '''\.terraform\.lock\.hcl''',
     '''go\.sum''',
     '''go\.mod''',
+    # ArgoCD notifications config — token value is a variable reference ($slack-token),
+    # not a literal secret. Actual secret lives in AWS Secrets Manager.
+    '''argocd/notifications/notifications-cm\.yaml''',
+    # ArgoCD notifications ExternalSecret — xoxb-... in comment is an example format only
+    '''argocd/notifications/external-secret\.yaml''',
   ]
   regexTarget = "match"
   regexes = [

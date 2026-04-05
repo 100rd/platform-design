@@ -42,7 +42,9 @@ jobs:
       - name: Validate ${{ matrix.label }}
         run: |
           if [ -d "${{ matrix.dir }}" ]; then
-            find "${{ matrix.dir }}" -name '*.yaml' -o -name '*.yml' | \
+            # Exclude falco-pci-rules.yaml: Falco rules file (YAML list), not a K8s manifest
+            find "${{ matrix.dir }}" \( -name '*.yaml' -o -name '*.yml' \) \
+              ! -name 'falco-pci-rules.yaml' | \
               xargs kubeconform \
                 -strict \
                 -summary \
@@ -68,7 +70,10 @@ jobs:
       - name: Validate ArgoCD manifests
         run: |
           if [ -d "argocd" ]; then
-            find argocd -name '*.yaml' -o -name '*.yml' | \
+            # Exclude applicationset-workloads.yaml: uses Go template syntax ({{- if ...}})
+            # that breaks YAML/kubeconform parsing — validated separately via ArgoCD itself
+            find argocd \( -name '*.yaml' -o -name '*.yml' \) \
+              ! -name 'applicationset-workloads.yaml' | \
               xargs kubeconform \
                 -summary \
                 -kubernetes-version 1.32.0 \

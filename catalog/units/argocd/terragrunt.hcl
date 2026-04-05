@@ -92,7 +92,7 @@ inputs = {
   ha_enabled    = try(local.account_vars.locals.argocd_ha_enabled, local.environment == "prod")
   enable_dex    = try(local.account_vars.locals.argocd_enable_dex, false)
 
-  controller_resources = try(local.account_vars.locals.argocd_controller_resources, null)
+  controller_resources  = try(local.account_vars.locals.argocd_controller_resources, null)
   repo_server_resources = try(local.account_vars.locals.argocd_repo_server_resources, null)
 
   tags = {
