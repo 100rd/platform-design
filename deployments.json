@@ -1,16 +1,16 @@
-{"generated_at": "2026-02-10T08:54:26Z", "applications": [
+{"generated_at": "2026-04-05T19:02:53Z", "applications": [
 {
   "name": "aws-lb-controller",
-  "chartVersion": "3.0.0",
-  "appVersion": "3.0.0",
+  "chartVersion": "3.1.0",
+  "appVersion": "3.1.0",
   "description": "AWS Load Balancer Controller - manages ALB and NLB for Kubernetes",
   "path": "apps/infra/aws-lb-controller"
 }
 ,
 {
   "name": "cert-manager",
-  "chartVersion": "1.1.0",
-  "appVersion": "1.17.2",
+  "chartVersion": "1.2.0",
+  "appVersion": "1.20.1",
   "description": "cert-manager - Automatic TLS certificate management for Kubernetes",
   "path": "apps/infra/cert-manager"
 }
@@ -97,7 +97,7 @@
 ,
 {
   "name": "prometheus-stack",
-  "chartVersion": "1.0.0",
+  "chartVersion": "1.1.0",
   "appVersion": "v0.70.0",
   "description": "Production-ready Prometheus + Thanos + Grafana stack for large-scale EKS clusters (1K-5K nodes, 100K+ pods)",
   "path": "apps/infra/observability/prometheus-stack"
