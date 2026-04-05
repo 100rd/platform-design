@@ -14,6 +14,7 @@
 
 # ─── SNS Topic ────────────────────────────────────────────────────────────────
 
+#checkov:skip=CKV_AWS_26:KMS encryption is optional; set var.kms_key_arn to encrypt in production deployments
 resource "aws_sns_topic" "alerts" {
   name              = "${var.project}-${var.environment}-alerts"
   kms_master_key_id = var.kms_key_arn != "" ? var.kms_key_arn : null
