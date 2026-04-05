@@ -13,7 +13,9 @@
 #   region.hcl   - defines aws_region, region_short, azs
 # -----------------------------------------------------------------------------
 
-terragrunt_version_constraint = ">= 0.68.0"
+# Exact version pin — eliminates drift between developers and CI.
+# Mirrors infra/versions.hcl: terragrunt_version = "0.99.5"
+terragrunt_version_constraint = "= 0.99.5"
 
 # -----------------------------------------------------------------------------
 # Locals: Read hierarchy config files
@@ -97,6 +99,7 @@ generate "provider" {
 
 # -----------------------------------------------------------------------------
 # Generate: Terraform and Provider Version Constraints
+# Exact pin: mirrors infra/versions.hcl terraform_version = "1.14.8"
 # -----------------------------------------------------------------------------
 generate "versions" {
   path      = "versions_override.tf"
@@ -104,7 +107,7 @@ generate "versions" {
 
   contents = <<-EOF
     terraform {
-      required_version = ">= 1.11.0"
+      required_version = "= 1.14.8"
 
       required_providers {
         aws = {

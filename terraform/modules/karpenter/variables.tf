@@ -11,7 +11,8 @@ variable "cluster_endpoint" {
 variable "karpenter_version" {
   description = "Karpenter Helm chart version"
   type        = string
-  default     = "1.8.1"
+  # Updated 2026-04-05 from 1.8.1 to 1.10.0 (mirrors infra versions.hcl)
+  default = "1.10.0"
 }
 
 variable "karpenter_controller_role_arn" {

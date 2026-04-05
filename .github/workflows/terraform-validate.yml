@@ -5,11 +5,21 @@ on:
     branches: [main, feature/terragrunt]
     paths:
       - "terraform/**"
+      - "catalog/**"
+      - ".tflint.hcl"
+      - ".checkov.yml"
       - ".github/workflows/terraform-validate.yml"
   pull_request:
     paths:
       - "terraform/**"
+      - "catalog/**"
+      - ".tflint.hcl"
+      - ".checkov.yml"
   workflow_dispatch:
+
+env:
+  TF_VERSION: "1.14.8"
+  TFLINT_VERSION: "v0.53.0"
 
 jobs:
   fmt-check:
@@ -17,9 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
-          terraform_version: "1.11.0"
+          terraform_version: ${{ env.TF_VERSION }}
       - name: Terraform fmt
         run: terraform fmt -check -recursive -diff terraform/modules/
 
@@ -50,9 +60,9 @@ jobs:
           - wpa
     steps:
       - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
-          terraform_version: "1.11.0"
+          terraform_version: ${{ env.TF_VERSION }}
       - name: Terraform init
         working-directory: terraform/modules/${{ matrix.module }}
         run: terraform init -backend=false
@@ -60,3 +70,76 @@ jobs:
         working-directory: terraform/modules/${{ matrix.module }}
         run: terraform validate
         continue-on-error: true
+
+  # ---------------------------------------------------------------------------
+  # TFLint — Terraform linter with AWS ruleset
+  # Catches deprecated arguments, missing required variables, naming violations
+  # that Checkov and Trivy miss. Mirrors infra/.github/workflows/terraform-checks.yml
+  # ---------------------------------------------------------------------------
+  tflint:
+    name: TFLint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+
+      - name: Initialize TFLint plugins
+        run: tflint --init --config "$(pwd)/.tflint.hcl"
+
+      - name: Run TFLint on terraform/modules/
+        run: tflint --recursive --config "$(pwd)/.tflint.hcl" --format compact --chdir terraform/modules
+
+  # ---------------------------------------------------------------------------
+  # Trivy — Infrastructure security scanning
+  # Scans terraform/modules/ and catalog/ for HIGH/CRITICAL misconfigurations.
+  #
+  # NOTE: exit-code is set to 0 (soft-fail) because the codebase has known
+  # violations that are being tracked in SYNC_ROADMAP.md Phase 1.1.
+  # Switch to exit-code: 1 once known violations in terraform/modules/ and
+  # catalog/ are remediated.
+  # ---------------------------------------------------------------------------
+  trivy-config-scan:
+    name: Trivy Config Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy on terraform/modules/
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          scan-type: config
+          scan-ref: terraform/modules
+          severity: HIGH,CRITICAL
+          exit-code: 0  # soft-fail: see comment above
+          format: table
+
+      - name: Run Trivy on catalog/
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          scan-type: config
+          scan-ref: catalog
+          severity: HIGH,CRITICAL
+          exit-code: 0  # soft-fail: see comment above
+          format: table
+
+  # ---------------------------------------------------------------------------
+  # Checkov CIS — CIS AWS Foundations Benchmark enforcement
+  # Complements the Well-Architected custom policies in well-architected.yml.
+  # Uses .checkov.yml at repo root (framework: terraform, CKV_AWS_* checks).
+  # ---------------------------------------------------------------------------
+  checkov-cis:
+    name: Checkov CIS Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Checkov CIS scan
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: terraform/modules
+          config_file: .checkov.yml
+          output_format: cli
+          download_external_modules: false

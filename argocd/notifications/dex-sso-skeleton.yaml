@@ -1,0 +1,124 @@
+---
+# ArgoCD Dex SSO Skeleton — IAM Identity Center SAML
+#
+# STATUS: DISABLED — enable_dex = false (default in terraform/modules/argocd)
+# This file documents the Dex configuration pattern for when SSO is enabled.
+#
+# To enable:
+#   1. Set up an AWS IAM Identity Center SAML application for ArgoCD
+#   2. Store the SAML metadata URL and client secrets in Secrets Manager
+#      at path: platform/<env>/argocd/dex-secret
+#   3. Change enable_dex = true in the argocd Terraform module for the env
+#   4. Apply the dex-sso-values-patch.yaml (uncomment below)
+#   5. Deploy the dex-secret ExternalSecret (see dex-external-secret.yaml)
+#
+# SYNC_ROADMAP: Phase 3.6 — ArgoCD SSO via Dex + IAM Identity Center
+# Source pattern: infra/k8s/system/argocd/values.yaml — configs.cm.dex.config
+
+# -----------------------------------------------------------------------------
+# Step 1: ExternalSecret for Dex OIDC client secret (deploy this first)
+# -----------------------------------------------------------------------------
+# apiVersion: external-secrets.io/v1
+# kind: ExternalSecret
+# metadata:
+#   name: argocd-dex-secret
+#   namespace: argocd
+# spec:
+#   refreshInterval: 1h
+#   secretStoreRef:
+#     kind: ClusterSecretStore
+#     name: aws-secrets-manager
+#   target:
+#     name: argocd-dex-secret
+#     creationPolicy: Owner
+#   data:
+#     - secretKey: client-id
+#       remoteRef:
+#         key: platform/prod/argocd/dex-secret
+#         property: client-id
+#     - secretKey: client-secret
+#       remoteRef:
+#         key: platform/prod/argocd/dex-secret
+#         property: client-secret
+
+# -----------------------------------------------------------------------------
+# Step 2: ArgoCD ConfigMap patch — Dex config block
+# Apply as a Kustomize patch targeting argocd-cm in the argocd namespace.
+# -----------------------------------------------------------------------------
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: argocd-cm
+#   namespace: argocd
+# data:
+#   # Dex configuration for AWS IAM Identity Center SAML
+#   dex.config: |
+#     connectors:
+#       - type: saml
+#         id: aws-sso
+#         name: AWS IAM Identity Center
+#         config:
+#           # IAM Identity Center SAML app SSO URL
+#           # Found in: IAM Identity Center > Applications > ArgoCD > Configuration
+#           ssoURL: https://REPLACE_ME.awsapps.com/start
+#
+#           # CA data for SAML signing certificate (base64 encoded PEM)
+#           # Found in: IAM Identity Center > Applications > ArgoCD > SAML metadata
+#           caData: ""
+#
+#           # ArgoCD SAML callback URL (must match IAM IC app ACS URL)
+#           redirectURI: https://argocd.REPLACE_ME.internal/api/dex/callback
+#           entityIssuer: https://argocd.REPLACE_ME.internal/api/dex/callback
+#
+#           # Attribute mappings — must match IAM Identity Center attribute names
+#           usernameAttr: email
+#           emailAttr: email
+#           groupsAttr: groups
+
+# -----------------------------------------------------------------------------
+# Step 3: RBAC ConfigMap patch — map IAM IC groups to ArgoCD roles
+# This mirrors infra's RBAC policy:
+#   platform-admins → role:platform-admin (full access)
+#   developers       → role:developer (workloads only)
+#   readonly-users   → role:readonly (view only)
+# -----------------------------------------------------------------------------
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: argocd-rbac-cm
+#   namespace: argocd
+# data:
+#   policy.default: role:readonly
+#   policy.csv: |
+#     p, role:platform-admin, applications, *, */*, allow
+#     p, role:platform-admin, clusters, *, *, allow
+#     p, role:platform-admin, repositories, *, *, allow
+#     p, role:platform-admin, projects, *, *, allow
+#     p, role:platform-admin, accounts, *, *, allow
+#     p, role:platform-admin, logs, get, */*, allow
+#     p, role:platform-admin, exec, create, */*, allow
+#
+#     p, role:developer, applications, get, workloads/*, allow
+#     p, role:developer, applications, sync, workloads/*, allow
+#     p, role:developer, applications, action/*, workloads/*, allow
+#     p, role:developer, logs, get, workloads/*, allow
+#     p, role:developer, projects, get, workloads, allow
+#     p, role:developer, repositories, get, *, allow
+#
+#     p, role:readonly, applications, get, */*, allow
+#     p, role:readonly, clusters, get, *, allow
+#     p, role:readonly, repositories, get, *, allow
+#     p, role:readonly, projects, get, *, allow
+#     p, role:readonly, logs, get, */*, allow
+#
+#     # Map IAM Identity Center group names to roles
+#     # Group names must match exactly what IAM IC sends in the SAML groups attribute
+#     g, platform-admins, role:platform-admin
+#     g, developers, role:developer
+#     g, readonly-users, role:readonly
+#   scopes: "[groups, email]"
+
+# NOTE: Keep admin.enabled: "false" in argocd-cm for production.
+# For dev/break-glass access, use:
+#   kubectl -n argocd patch cm argocd-cm -p '{"data":{"admin.enabled":"true"}}'
+# and reset the admin password immediately.

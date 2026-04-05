@@ -1,0 +1,67 @@
+---
+# ArgoCD Notifications ConfigMap
+# Configures Slack notifications for app-sync-succeeded and app-sync-failed events.
+#
+# The Slack token is injected via argocd-notifications-secret (ExternalSecret).
+# See external-secret.yaml in this directory.
+#
+# Source pattern: infra/k8s/system/argocd/values.yaml — notifications.cm block
+# SYNC_ROADMAP: Phase 3.7 — ArgoCD Slack Notifications
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: argocd
+    app.kubernetes.io/component: notifications
+data:
+  # Slack service — token is read from argocd-notifications-secret
+  service.slack: |
+    token: $slack-token
+
+  # Template: application synced successfully (green)
+  template.app-sync-succeeded: |
+    slack:
+      attachments: |
+        [{
+          "title": "{{.app.metadata.name}}",
+          "title_link": "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
+          "color": "#18be52",
+          "fields": [
+            {"title": "Sync Status", "value": "{{.app.status.sync.status}}", "short": true},
+            {"title": "Repository", "value": "{{.app.spec.source.repoURL}}", "short": true}
+          ]
+        }]
+
+  # Template: application sync failed (red)
+  template.app-sync-failed: |
+    slack:
+      attachments: |
+        [{
+          "title": "{{.app.metadata.name}} FAILED",
+          "title_link": "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
+          "color": "#E96D76",
+          "fields": [
+            {"title": "Sync Status", "value": "{{.app.status.sync.status}}", "short": true},
+            {"title": "Message", "value": "{{range .app.status.conditions}}{{.message}}{{end}}", "short": false}
+          ]
+        }]
+
+  # Trigger: fire on successful sync
+  trigger.on-sync-succeeded: |
+    - description: Application synced successfully
+      send:
+        - app-sync-succeeded
+      when: app.status.operationState.phase in ['Succeeded']
+
+  # Trigger: fire on failed sync
+  trigger.on-sync-failed: |
+    - description: Application sync failed
+      send:
+        - app-sync-failed
+      when: app.status.operationState.phase in ['Error', 'Failed']
+
+  # Default triggers applied to all applications unless overridden
+  defaultTriggers: |
+    - on-sync-failed
