@@ -1,0 +1,131 @@
+---
+# Dev NodePool — business-hours scale-to-zero
+# Karpenter v1 API (karpenter.sh/v1)
+#
+# This NodePool is ONLY for the dev environment.
+# It adds a disruption budget schedule that scales nodes to 0 outside
+# business hours (20:00–07:00 UTC Mon–Fri), saving ~55% in node costs.
+#
+# Pattern sourced from: infra/k8s/system/karpenter/nodepool-default.yaml
+# SYNC_ROADMAP: Phase 3.8 — Karpenter Business-Hours Scale-to-Zero (Dev)
+#
+# Cron syntax reference (Karpenter uses standard 5-field cron):
+#   "0 20 * * 1-5"  = At 20:00 UTC, Monday through Friday
+#   duration: 11h   = Window ends at 07:00 UTC next day
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: dev-general-purpose
+  labels:
+    environment: dev
+    purpose: general-workloads
+spec:
+  amiSelectorTerms:
+    - alias: al2023@latest
+
+  # IAM role created by Karpenter Terraform module
+  # Replace with actual role name: module.karpenter.node_iam_role_name
+  role: "REPLACE_WITH_KARPENTER_NODE_ROLE_NAME"
+
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "REPLACE_WITH_DEV_CLUSTER_NAME"
+
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "REPLACE_WITH_DEV_CLUSTER_NAME"
+
+  tags:
+    Name: karpenter-dev-node
+    Architecture: amd64
+    Environment: dev
+    ManagedBy: Karpenter
+    NodePool: dev-general-purpose
+
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        volumeSize: 50Gi
+        volumeType: gp3
+        encrypted: true
+        deleteOnTermination: true
+
+  metadataOptions:
+    httpEndpoint: enabled
+    httpProtocolIPv6: disabled
+    httpPutResponseHopLimit: 2
+    httpTokens: required
+
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: dev-general-purpose
+  labels:
+    environment: dev
+    architecture: amd64
+spec:
+  template:
+    metadata:
+      labels:
+        karpenter.sh/nodepool: dev-general-purpose
+        environment: dev
+        node-type: general-purpose
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: dev-general-purpose
+
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64", "arm64"]
+
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["m", "c", "r", "t"]
+
+        - key: karpenter.k8s.aws/instance-generation
+          operator: Gt
+          values: ["5"]
+
+        - key: karpenter.k8s.aws/instance-cpu
+          operator: In
+          values: ["2", "4", "8"]
+
+        # Allow both spot and on-demand for cost flexibility in dev
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot", "on-demand"]
+
+      # 30-day node TTL — nodes rotated regularly in dev
+      expireAfter: 720h
+
+  limits:
+    cpu: "200"
+    memory: 400Gi
+
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 30s
+
+    # Business-hours scale-to-zero budget (DEV ONLY).
+    # Nodes are allowed to be fully disrupted (nodes: "0") at 20:00 UTC Mon–Fri,
+    # for an 11-hour window ending at 07:00 UTC the following morning.
+    # Outside the window the normal 10% budget applies, allowing gradual consolidation.
+    #
+    # To disable temporarily: change the scale-to-zero budget nodes value to "100%"
+    budgets:
+      - nodes: "0"
+        # Scale to 0 at 20:00 UTC Monday through Friday
+        schedule: "0 20 * * 1-5"
+        duration: 11h
+      - nodes: "10%"
+        # Normal consolidation budget outside the scale-to-zero window
+
+  weight: 10

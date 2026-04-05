@@ -36,6 +36,30 @@ resource "aws_organizations_organizational_unit" "nested" {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
+# Suspended / Quarantine OU
+# ---------------------------------------------------------------------------------------------------------------------
+# Accounts under investigation, decommissioned, or compromised are moved here.
+# The deny-all-suspended SCP (in the scps module) is then attached to this OU.
+# Only OrganizationAccountAccessRole can operate within suspended accounts for:
+#   - Break-glass emergency operations
+#   - Log/audit data retrieval before account closure
+#   - Executing the offboarding runbook
+#
+# Usage: move an account here with:
+#   aws organizations move-account --account-id ACCOUNT_ID \
+#     --source-parent-id CURRENT_OU_ID --destination-parent-id SUSPENDED_OU_ID
+# ---------------------------------------------------------------------------------------------------------------------
+
+resource "aws_organizations_organizational_unit" "suspended" {
+  name      = "Suspended"
+  parent_id = aws_organizations_organization.this.roots[0].id
+
+  tags = merge(var.tags, {
+    Purpose = "quarantine"
+  })
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
 # Member Accounts
 # ---------------------------------------------------------------------------------------------------------------------
 

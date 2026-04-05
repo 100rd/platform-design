@@ -18,13 +18,23 @@ output "roots" {
   value       = aws_organizations_organization.this.roots
 }
 
+output "root_id" {
+  description = "The ID of the organization root — use this for root-level SCP attachments"
+  value       = aws_organizations_organization.this.roots[0].id
+}
+
 output "ou_ids" {
-  description = "Map of OU name to OU ID"
+  description = "Map of OU name to OU ID (includes Root, all top-level, and nested OUs)"
   value = merge(
     { "Root" = aws_organizations_organization.this.roots[0].id },
     { for k, v in aws_organizations_organizational_unit.top_level : k => v.id },
     { for k, v in aws_organizations_organizational_unit.nested : k => v.id },
   )
+}
+
+output "suspended_ou_id" {
+  description = "The ID of the Suspended/Quarantine OU — wire this into the scps module's suspended_ou_id input to attach the deny-all SCP"
+  value       = aws_organizations_organizational_unit.suspended.id
 }
 
 output "account_ids" {

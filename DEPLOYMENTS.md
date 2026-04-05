@@ -1,7 +1,7 @@
 # Deployment Inventory
 
 > Auto-generated deployment inventory for all environments.
-> Last updated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+> Last updated: 2026-04-05 00:00:00 UTC
 
 ## Overview
 
@@ -16,14 +16,15 @@ Applications deployed via ArgoCD from `apps/infra/`
 
 | Application | Chart Version | App Version | Description |
 |-------------|---------------|-------------|-------------|
-| aws-lb-controller | 3.0.0 | 3.0.0 | AWS Load Balancer Controller - manages ALB and NLB for Kuber |
-| cert-manager | 1.1.0 | 1.17.2 | cert-manager - Automatic TLS certificate management for Kube |
+| aws-lb-controller | 3.1.0 | 3.1.0 | AWS Load Balancer Controller - manages ALB and NLB for Kuber |
+| cert-manager | 1.2.0 | 1.20.1 | cert-manager - Automatic TLS certificate management for Kube |
 | cilium | 1.0.0 | 1.17.1 | Cilium CNI with Hubble observability for Kubernetes networki |
 | cluster-secret-store | 1.0.0 | 1.0.0 | ClusterSecretStore for AWS Secrets Manager — deployed per  |
 | external-dns | 1.0.0 | 0.15.1 | ExternalDNS - Synchronize Kubernetes resources with DNS prov |
 | external-secrets | 1.3.1 | v0.14.1 | Install the External Secrets Operator using the official cha |
 | gatekeeper | 3.18.2 | v3.18.2 | OPA Gatekeeper for Kubernetes policy enforcement |
 | kargo | 0.1.0 | 1.2.0 | Kargo progressive delivery controller |
+| karpenter | 1.10.0 | 1.10.0 | Karpenter node autoscaler (upgraded from 1.8.1) |
 | kyverno | 1.0.0 | 1.13.4 | Kyverno - Kubernetes Native Policy Management |
 | otel-operator | 0.1.0 |  | OpenTelemetry Operator with auto-instrumentation for Go appl |
 | rabbitmq-operator | 1.0.0 | 2.12.0 | RabbitMQ Cluster Operator - Kubernetes-native RabbitMQ lifec |
@@ -36,7 +37,7 @@ Applications deployed via ArgoCD from `apps/infra/`
 | grafana-dashboards | 1.0.0 | 1.0 | Unified Grafana dashboards for platform observability |
 | loki-stack | 1.0.0 | 3.0 | Production Loki + Fluent Bit logging stack for gaming platfo |
 | otel-collector | 1.0.0 | 0.143.0 | OpenTelemetry Collector - Central telemetry pipeline for gam |
-| prometheus-stack | 1.0.0 | v0.70.0 | Production-ready Prometheus + Thanos + Grafana stack for lar |
+| prometheus-stack | 1.1.0 | v0.70.0 | Production-ready Prometheus + Thanos + Grafana stack (kube-prometheus-stack 82.15.1) |
 | pyroscope | 1.0.0 | 1.18.0 | Grafana Pyroscope continuous profiling for production gaming |
 | tempo | 1.0.0 | 2.3.1 | Production-ready distributed tracing stack with Tempo and Op |
 

@@ -24,10 +24,10 @@ resource "kubernetes_secret" "clustermesh_remote" {
   }
 
   data = {
-    "${each.key}"       = each.value.endpoint
+    "${each.key}"                    = each.value.endpoint
     "${each.key}.etcd-client-ca.crt" = each.value.ca_cert
-    "tls.crt"           = each.value.tls_cert
-    "tls.key"           = each.value.tls_key
+    "tls.crt"                        = each.value.tls_cert
+    "tls.key"                        = each.value.tls_key
   }
 
   type = "Opaque"

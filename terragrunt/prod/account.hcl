@@ -4,6 +4,10 @@ locals {
   aws_account_id = "333333333333" # Alias for reference compatibility
   environment    = "prod"
 
+  # Cost allocation and audit tracing
+  owner       = "platform-team"
+  cost_center = "platform-prod"
+
   # Organization context
   org_account_type   = "workload"
   org_ou             = "Prod"
@@ -100,8 +104,8 @@ locals {
       consolidate_after    = "Never"
       weight               = 5
       labels = {
-        "node-type"      = "cde"
-        "pci-dss-scope"  = "true"
+        "node-type"     = "cde"
+        "pci-dss-scope" = "true"
       }
       taints = [
         { key = "pci-dss", value = "cde", effect = "NoSchedule" }

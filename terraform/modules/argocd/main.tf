@@ -7,8 +7,8 @@
 
 locals {
   # HA defaults: 2 replicas for controller/server/repo-server; non-HA: 1
-  effective_server_replicas     = coalesce(var.server_replicas, var.ha_enabled ? 2 : 1)
-  effective_controller_replicas = coalesce(var.controller_replicas, var.ha_enabled ? 2 : 1)
+  effective_server_replicas      = coalesce(var.server_replicas, var.ha_enabled ? 2 : 1)
+  effective_controller_replicas  = coalesce(var.controller_replicas, var.ha_enabled ? 2 : 1)
   effective_repo_server_replicas = coalesce(var.repo_server_replicas, var.ha_enabled ? 2 : 1)
 }
 
@@ -37,7 +37,7 @@ resource "helm_release" "argocd" {
 
         # Application controller
         controller = {
-          replicas = local.effective_controller_replicas
+          replicas  = local.effective_controller_replicas
           resources = var.controller_resources
 
           metrics = {

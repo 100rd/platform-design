@@ -19,7 +19,7 @@ data "aws_region" "current" {}
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "aws_securityhub_account" "this" {
-  auto_enable_controls    = true
+  auto_enable_controls     = true
   enable_default_standards = var.auto_enable_default_standards
 
   control_finding_generator = "SECURITY_CONTROL"

@@ -1,15 +1,15 @@
 apiVersion: v2
 name: aws-load-balancer-controller
 description: AWS Load Balancer Controller - manages ALB and NLB for Kubernetes
-version: 3.0.0
-appVersion: "3.0.0"
+version: 3.1.0
+appVersion: "3.1.0"
 type: application
 
 dependencies:
-  # Updated 2026-01-28 from 1.10.0 to 3.0.0
+  # Updated 2026-04-05 from 3.0.0 to 3.1.0 (mirrors infra versions.hcl)
   # Note: Starting v3.0.0, Helm chart and LBC versions are aligned
   - name: aws-load-balancer-controller
-    version: "3.0.0"
+    version: "3.1.0"
     repository: https://aws.github.io/eks-charts
     condition: aws-load-balancer-controller.enabled
 

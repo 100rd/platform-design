@@ -5,7 +5,7 @@
 # ---------------------------------------------------------------------------------------------------------------------
 
 variable "name_prefix" {
-  description = "Prefix for IAM resource names"
+  description = "Prefix for IAM resource names (e.g. 'platform-' to produce 'platform-EnforceMFA')"
   type        = string
   default     = ""
 }
@@ -69,11 +69,36 @@ variable "hard_expiry" {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
+# IAM Access Analyzer (CIS 1.20)
+# ---------------------------------------------------------------------------------------------------------------------
+
+variable "analyzer_type" {
+  description = "IAM Access Analyzer type. Use ORGANIZATION in the management account (requires Organizations), ACCOUNT in all others."
+  type        = string
+  default     = "ACCOUNT"
+
+  validation {
+    condition     = contains(["ORGANIZATION", "ACCOUNT"], var.analyzer_type)
+    error_message = "analyzer_type must be ORGANIZATION or ACCOUNT."
+  }
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# EBS Encryption (CIS 2.2.1)
+# ---------------------------------------------------------------------------------------------------------------------
+
+variable "ebs_kms_key_arn" {
+  description = "ARN of a KMS key to use as the default EBS encryption key. Leave empty to use the AWS-managed key."
+  type        = string
+  default     = ""
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
 # Common
 # ---------------------------------------------------------------------------------------------------------------------
 
 variable "tags" {
-  description = "Tags to apply to resources"
+  description = "Tags to apply to taggable resources in this module"
   type        = map(string)
   default     = {}
 }

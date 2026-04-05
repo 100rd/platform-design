@@ -74,7 +74,7 @@ resource "kubernetes_manifest" "ec2_node_class" {
               } : {}
             )
           }
-        ] : [
+          ] : [
           {
             deviceName = "/dev/xvda"
             ebs = merge(

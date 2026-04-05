@@ -25,10 +25,10 @@ locals {
 }
 
 inputs = {
-  recorder_name               = "default"
-  s3_bucket_name              = "aws-config-snapshots-${local.account_id}"
-  snapshot_delivery_frequency = "TwentyFour_Hours"
-  recording_all_resources     = true
+  recorder_name                 = "default"
+  s3_bucket_name                = "aws-config-snapshots-${local.account_id}"
+  snapshot_delivery_frequency   = "TwentyFour_Hours"
+  recording_all_resources       = true
   include_global_resource_types = true
 
   # Lifecycle: 1yr Glacier -> 7yr expire

@@ -13,10 +13,10 @@ locals {
   account_vars = read_terragrunt_config(find_in_parent_folders("account.hcl"))
   region_vars  = read_terragrunt_config(find_in_parent_folders("region.hcl"))
 
-  account_name         = local.account_vars.locals.account_name
-  aws_region           = local.region_vars.locals.aws_region
-  environment          = local.account_vars.locals.environment
-  gpu_analysis_config  = local.account_vars.locals.gpu_analysis_config
+  account_name        = local.account_vars.locals.account_name
+  aws_region          = local.region_vars.locals.aws_region
+  environment         = local.account_vars.locals.environment
+  gpu_analysis_config = local.account_vars.locals.gpu_analysis_config
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
