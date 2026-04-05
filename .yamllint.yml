@@ -20,6 +20,13 @@ ignore:
   # Helm templates contain Go template syntax that isn't valid YAML
   - "helm/**/templates/"
   - "apps/**/templates/"
+  # ArgoCD ApplicationSet files that use Go template syntax ({{- if ... }})
+  # yamllint cannot parse Go template blocks — these are valid ArgoCD configs
+  - "argocd/applicationset-workloads.yaml"
+  # Claude Code agent worktrees and system files (local only, never committed)
+  - ".claude/"
+  # Terraform module cache (local only, never committed)
+  - "**/.terraform/"
   # Generated / vendored
   - ".git/"
   - "node_modules/"
