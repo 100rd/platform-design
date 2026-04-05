@@ -29,7 +29,6 @@ module "terraform_role" {
 
   subjects = concat(
     ["repo:${var.repository}:ref:refs/heads/${var.branch}"],
-    ["repo:${var.repository}:pull_request"],
     ["repo:${var.repository}:environment:${var.account_name}"],
     var.extra_subjects,
   )

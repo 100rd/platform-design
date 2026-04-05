@@ -69,7 +69,6 @@ jobs:
       - name: Terraform validate
         working-directory: terraform/modules/${{ matrix.module }}
         run: terraform validate
-        continue-on-error: true
 
   # ---------------------------------------------------------------------------
   # TFLint — Terraform linter with AWS ruleset
