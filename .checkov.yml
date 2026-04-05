@@ -13,7 +13,7 @@ quiet: true
 directory:
   - terraform/modules
 
-skip-check:
+skip_check:
   # Skip checks that require runtime AWS access
   - CKV_AWS_144  # S3 cross-region replication (will enable later)
   - CKV_AWS_41   # IAM Access Analyzer (tracked in SYNC_ROADMAP Phase 1.2)
@@ -28,4 +28,4 @@ skip-check:
   - CKV_AWS_115  # Lambda reserved concurrency: unreserved (-1) is correct for low-frequency scheduler
   - CKV_AWS_272  # Lambda code signing: internal automation function, not a user-facing application
 
-soft-fail: false
+soft_fail: false
