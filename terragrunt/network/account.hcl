@@ -4,6 +4,10 @@ locals {
   aws_account_id = "555555555555"
   environment    = "network"
 
+  # Cost allocation and audit tracing
+  owner       = "platform-team"
+  cost_center = "platform-network"
+
   # Organization context
   org_account_type   = "network"
   org_ou             = "Infrastructure"

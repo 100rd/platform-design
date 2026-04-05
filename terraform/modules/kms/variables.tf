@@ -1,11 +1,11 @@
 variable "keys" {
   description = "Map of KMS key alias suffix to key configuration. Each entry creates one CMK with an alias."
   type = map(object({
-    description           = string
+    description             = string
     deletion_window_in_days = optional(number, 30)
-    key_usage             = optional(string, "ENCRYPT_DECRYPT")
-    admin_arns            = list(string)
-    user_arns             = list(string)
+    key_usage               = optional(string, "ENCRYPT_DECRYPT")
+    admin_arns              = list(string)
+    user_arns               = list(string)
   }))
 
   validation {

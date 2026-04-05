@@ -178,7 +178,7 @@ data "aws_iam_policy_document" "config_s3" {
       identifiers = ["*"]
     }
 
-    actions   = ["s3:*"]
+    actions = ["s3:*"]
     resources = [
       aws_s3_bucket.config.arn,
       "${aws_s3_bucket.config.arn}/*",
@@ -282,4 +282,154 @@ resource "aws_config_configuration_recorder_status" "this" {
   is_enabled = true
 
   depends_on = [aws_config_delivery_channel.this]
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# CIS AWS Foundations Benchmark v3.0 — Managed Config Rules
+# ---------------------------------------------------------------------------------------------------------------------
+# These rules detect but do not auto-remediate. They feed into the Config dashboard
+# and SecurityHub findings. Add aws_config_remediation_configuration resources
+# separately if auto-remediation is desired.
+#
+# CIS control references:
+#   1.5  — Root account MFA
+#   1.8–1.14 — IAM password policy
+#   1.10 — MFA for IAM console users
+#   1.14 — Access key rotation
+#   3.1  — CloudTrail enabled
+#   3.2  — CloudTrail log file validation
+#   3.5  — CloudTrail encryption
+#   3.7  — VPC flow logs
+#   2.1.2 — S3 bucket public read prohibited
+# ---------------------------------------------------------------------------------------------------------------------
+
+# CIS 1.5 — Ensure MFA is enabled for the root account
+resource "aws_config_config_rule" "root_mfa" {
+  name        = "root-account-mfa-enabled"
+  description = "CIS 1.5 - Ensure MFA is enabled for the root user account"
+
+  source {
+    owner             = "AWS"
+    source_identifier = "ROOT_ACCOUNT_MFA_ENABLED"
+  }
+
+  depends_on = [aws_config_configuration_recorder_status.this]
+}
+
+# CIS 1.8–1.14 — IAM password policy
+resource "aws_config_config_rule" "iam_password_policy" {
+  name        = "iam-password-policy"
+  description = "CIS 1.8-1.14 - Ensure IAM password policy meets CIS requirements (14-char min, 90-day rotation, 24 history)"
+
+  source {
+    owner             = "AWS"
+    source_identifier = "IAM_PASSWORD_POLICY"
+  }
+
+  input_parameters = jsonencode({
+    RequireUppercaseCharacters = "true"
+    RequireLowercaseCharacters = "true"
+    RequireSymbols             = "true"
+    RequireNumbers             = "true"
+    MinimumPasswordLength      = "14"
+    PasswordReusePrevention    = "24"
+    MaxPasswordAge             = "90"
+  })
+
+  depends_on = [aws_config_configuration_recorder_status.this]
+}
+
+# CIS 1.10 — MFA for IAM console access
+resource "aws_config_config_rule" "mfa_console_access" {
+  name        = "mfa-enabled-for-iam-console-access"
+  description = "CIS 1.10 - Ensure MFA is enabled for all IAM users that have console access"
+
+  source {
+    owner             = "AWS"
+    source_identifier = "MFA_ENABLED_FOR_IAM_CONSOLE_ACCESS"
+  }
+
+  depends_on = [aws_config_configuration_recorder_status.this]
+}
+
+# CIS 1.14 — Access keys rotated every 90 days
+resource "aws_config_config_rule" "access_keys_rotated" {
+  name        = "access-keys-rotated"
+  description = "CIS 1.14 - Ensure access keys are rotated every 90 days or less"
+
+  source {
+    owner             = "AWS"
+    source_identifier = "ACCESS_KEYS_ROTATED"
+  }
+
+  input_parameters = jsonencode({
+    maxAccessKeyAge = "90"
+  })
+
+  depends_on = [aws_config_configuration_recorder_status.this]
+}
+
+# CIS 3.1 — CloudTrail enabled in all regions
+resource "aws_config_config_rule" "cloudtrail_enabled" {
+  name        = "cloud-trail-enabled"
+  description = "CIS 3.1 - Ensure CloudTrail is enabled in all regions"
+
+  source {
+    owner             = "AWS"
+    source_identifier = "CLOUD_TRAIL_ENABLED"
+  }
+
+  depends_on = [aws_config_configuration_recorder_status.this]
+}
+
+# CIS 3.2 — CloudTrail log file validation enabled
+resource "aws_config_config_rule" "cloudtrail_log_validation" {
+  name        = "cloud-trail-log-file-validation-enabled"
+  description = "CIS 3.2 - Ensure CloudTrail log file validation is enabled"
+
+  source {
+    owner             = "AWS"
+    source_identifier = "CLOUD_TRAIL_LOG_FILE_VALIDATION_ENABLED"
+  }
+
+  depends_on = [aws_config_configuration_recorder_status.this]
+}
+
+# CIS 3.5 — CloudTrail logs encrypted at rest with KMS
+resource "aws_config_config_rule" "cloudtrail_encryption" {
+  name        = "cloud-trail-encryption-enabled"
+  description = "CIS 3.5 - Ensure CloudTrail logs are encrypted at rest using KMS CMKs"
+
+  source {
+    owner             = "AWS"
+    source_identifier = "CLOUD_TRAIL_ENCRYPTION_ENABLED"
+  }
+
+  depends_on = [aws_config_configuration_recorder_status.this]
+}
+
+# CIS 3.7 — VPC flow logs enabled in all VPCs
+resource "aws_config_config_rule" "vpc_flow_logs" {
+  name        = "vpc-flow-logs-enabled"
+  description = "CIS 3.7 - Ensure VPC flow logging is enabled in all VPCs"
+
+  source {
+    owner             = "AWS"
+    source_identifier = "VPC_FLOW_LOGS_ENABLED"
+  }
+
+  depends_on = [aws_config_configuration_recorder_status.this]
+}
+
+# CIS 1.14 (access key age) / CIS 2.1.2 — S3 bucket public read prohibited
+resource "aws_config_config_rule" "s3_bucket_public_read" {
+  name        = "s3-bucket-public-read-prohibited"
+  description = "CIS 2.1.2 - Ensure S3 bucket policies do not allow public read access"
+
+  source {
+    owner             = "AWS"
+    source_identifier = "S3_BUCKET_PUBLIC_READ_PROHIBITED"
+  }
+
+  depends_on = [aws_config_configuration_recorder_status.this]
 }

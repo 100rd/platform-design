@@ -3,8 +3,8 @@ variable "placement_groups" {
   type = map(object({
     name            = string
     strategy        = string           # "cluster" | "spread" | "partition"
-    partition_count = optional(number)  # Only for partition strategy (1-7)
-    spread_level    = optional(string)  # Only for spread strategy: "host" | "rack"
+    partition_count = optional(number) # Only for partition strategy (1-7)
+    spread_level    = optional(string) # Only for spread strategy: "host" | "rack"
   }))
 
   validation {

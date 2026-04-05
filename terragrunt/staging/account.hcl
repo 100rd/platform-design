@@ -4,6 +4,10 @@ locals {
   aws_account_id = "222222222222" # Alias for reference compatibility
   environment    = "staging"
 
+  # Cost allocation and audit tracing
+  owner       = "platform-team"
+  cost_center = "platform-staging"
+
   # Organization context
   org_account_type   = "workload"
   org_ou             = "NonProd"

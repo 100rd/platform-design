@@ -26,6 +26,10 @@ locals {
   account_id   = local.account_vars.locals.account_id
   aws_region   = local.region_vars.locals.aws_region
   environment  = local.account_vars.locals.environment
+
+  # Cost allocation and audit tracing tags — read from account.hcl with safe fallbacks
+  owner       = try(local.account_vars.locals.owner, "platform-team")
+  cost_center = try(local.account_vars.locals.cost_center, "platform")
 }
 
 # -----------------------------------------------------------------------------
@@ -85,10 +89,15 @@ generate "provider" {
 
       default_tags {
         tags = {
-          Environment = "${local.environment}"
-          ManagedBy   = "terragrunt"
-          Account     = "${local.account_name}"
-          Region      = "${local.aws_region}"
+          Environment    = "${local.environment}"
+          ManagedBy      = "terragrunt"
+          Account        = "${local.account_name}"
+          Region         = "${local.aws_region}"
+          Owner          = "${local.owner}"
+          CostCenter     = "${local.cost_center}"
+          TerragruntPath = "${path_relative_to_include()}"
+          Repository     = "100rd/platform-design"
+          Project        = "platform-design"
         }
       }
     }
@@ -136,10 +145,15 @@ inputs = merge(
   local.region_vars.locals,
   {
     tags = {
-      Environment = local.environment
-      ManagedBy   = "terragrunt"
-      Account     = local.account_name
-      Region      = local.aws_region
+      Environment    = local.environment
+      ManagedBy      = "terragrunt"
+      Account        = local.account_name
+      Region         = local.aws_region
+      Owner          = local.owner
+      CostCenter     = local.cost_center
+      TerragruntPath = path_relative_to_include()
+      Repository     = "100rd/platform-design"
+      Project        = "platform-design"
     }
   }
 )

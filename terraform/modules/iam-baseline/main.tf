@@ -9,6 +9,12 @@
 #   Req 8.2.5 — No reuse of last 4 passwords (24 implemented for defense in depth)
 #   Req 8.3.6 — First-time / reset passwords must be unique and changed immediately
 #
+# CIS AWS Foundations Benchmark:
+#   CIS 1.8-1.14 — IAM password policy
+#   CIS 1.20     — IAM Access Analyzer enabled
+#   CIS 2.1.5    — S3 account-level public access block
+#   CIS 2.2.1    — EBS encryption by default
+#
 # MFA Enforcement (Req 8.3):
 #   IAM Identity Center MFA is configured via the console — see notes below.
 #   For IAM users (break-glass only), MFA is enforced via the SCP deny-root-account
@@ -100,6 +106,57 @@ resource "aws_iam_policy" "enforce_mfa" {
   })
 
   tags = var.tags
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# IAM Access Analyzer — CIS 1.20
+# ---------------------------------------------------------------------------------------------------------------------
+# Deploy ORGANIZATION type in the management account, ACCOUNT in all others.
+# Controlled via var.analyzer_type.
+# ---------------------------------------------------------------------------------------------------------------------
+
+resource "aws_accessanalyzer_analyzer" "org" {
+  count = var.analyzer_type == "ORGANIZATION" ? 1 : 0
+
+  analyzer_name = "${var.name_prefix}org-access-analyzer"
+  type          = "ORGANIZATION"
+
+  tags = var.tags
+}
+
+resource "aws_accessanalyzer_analyzer" "account" {
+  count = var.analyzer_type == "ACCOUNT" ? 1 : 0
+
+  analyzer_name = "${var.name_prefix}account-access-analyzer"
+  type          = "ACCOUNT"
+
+  tags = var.tags
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# S3 Account-Level Public Access Block — CIS 2.1.5
+# ---------------------------------------------------------------------------------------------------------------------
+
+resource "aws_s3_account_public_access_block" "this" {
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# EBS Encryption by Default — CIS 2.2.1
+# ---------------------------------------------------------------------------------------------------------------------
+
+resource "aws_ebs_encryption_by_default" "this" {
+  enabled = true
+}
+
+# Optionally set a specific KMS key for default EBS encryption
+resource "aws_ebs_default_kms_key" "this" {
+  count = var.ebs_kms_key_arn != "" ? 1 : 0
+
+  key_arn = var.ebs_kms_key_arn
 }
 
 # ---------------------------------------------------------------------------------------------------------------------

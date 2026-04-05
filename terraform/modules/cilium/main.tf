@@ -27,7 +27,7 @@ resource "helm_release" "cilium" {
       eni = {
         enabled = true
         # Use the same subnets as the cluster
-        awsEnablePrefixDelegation = var.enable_prefix_delegation
+        awsEnablePrefixDelegation   = var.enable_prefix_delegation
         updateEC2AdapterLimitViaAPI = true
         # Required for Bottlerocket
         awsReleaseExcessIPs = true
@@ -126,10 +126,10 @@ resource "helm_release" "cilium" {
 
       # BPF settings
       bpf = {
-        masquerade    = true
-        clockProbe    = false
+        masquerade      = true
+        clockProbe      = false
         preallocateMaps = true
-        tproxy        = true
+        tproxy          = true
       }
 
       # Enable bandwidth manager for better network QoS
@@ -225,7 +225,7 @@ resource "kubernetes_manifest" "default_deny_policy" {
       name = "default-deny-all"
     }
     spec = {
-      description = "Default deny all traffic except explicitly allowed"
+      description      = "Default deny all traffic except explicitly allowed"
       endpointSelector = {}
       ingress = [
         {
