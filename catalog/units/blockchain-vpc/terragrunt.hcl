@@ -25,22 +25,22 @@ locals {
   # Separate /16 blocks in the 10.100+ range to avoid overlap with platform VPCs.
   # ---------------------------------------------------------------------------
   cidr_map = {
-    dev-eu-west-1           = "10.100.0.0/16"
-    dev-eu-west-2           = "10.101.0.0/16"
-    dev-eu-west-3           = "10.102.0.0/16"
-    dev-eu-central-1        = "10.103.0.0/16"
-    staging-eu-west-1       = "10.110.0.0/16"
-    staging-eu-west-2       = "10.111.0.0/16"
-    staging-eu-west-3       = "10.112.0.0/16"
-    staging-eu-central-1    = "10.113.0.0/16"
-    prod-eu-west-1          = "10.120.0.0/16"
-    prod-eu-west-2          = "10.121.0.0/16"
-    prod-eu-west-3          = "10.122.0.0/16"
-    prod-eu-central-1       = "10.123.0.0/16"
-    dr-eu-west-1            = "10.130.0.0/16"
-    dr-eu-west-2            = "10.131.0.0/16"
-    dr-eu-west-3            = "10.132.0.0/16"
-    dr-eu-central-1         = "10.133.0.0/16"
+    dev-eu-west-1        = "10.100.0.0/16"
+    dev-eu-west-2        = "10.101.0.0/16"
+    dev-eu-west-3        = "10.102.0.0/16"
+    dev-eu-central-1     = "10.103.0.0/16"
+    staging-eu-west-1    = "10.110.0.0/16"
+    staging-eu-west-2    = "10.111.0.0/16"
+    staging-eu-west-3    = "10.112.0.0/16"
+    staging-eu-central-1 = "10.113.0.0/16"
+    prod-eu-west-1       = "10.120.0.0/16"
+    prod-eu-west-2       = "10.121.0.0/16"
+    prod-eu-west-3       = "10.122.0.0/16"
+    prod-eu-central-1    = "10.123.0.0/16"
+    dr-eu-west-1         = "10.130.0.0/16"
+    dr-eu-west-2         = "10.131.0.0/16"
+    dr-eu-west-3         = "10.132.0.0/16"
+    dr-eu-central-1      = "10.133.0.0/16"
   }
 
   vpc_cidr     = local.cidr_map["${local.environment}-${local.aws_region}"]

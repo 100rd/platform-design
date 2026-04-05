@@ -67,8 +67,8 @@ inputs = {
 
   allowed_security_group_ids = [dependency.eks.outputs.node_security_group_id]
 
-  engine_version = try(local.video_pipeline_config.redis_engine_version, "7.1")
-  node_type      = try(local.video_pipeline_config.redis_node_type, "cache.t4g.micro")
+  engine_version     = try(local.video_pipeline_config.redis_engine_version, "7.1")
+  node_type          = try(local.video_pipeline_config.redis_node_type, "cache.t4g.micro")
   num_cache_clusters = try(local.video_pipeline_config.redis_num_nodes, 2)
 
   transit_encryption_enabled = true

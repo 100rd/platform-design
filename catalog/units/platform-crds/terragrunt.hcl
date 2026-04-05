@@ -87,13 +87,13 @@ generate "k8s_providers" {
 
 inputs = {
   # CRD versions — override from account.hcl or use module defaults
-  argocd_version                  = try(local.account_vars.locals.argocd_version, null)
-  cert_manager_version            = try(local.account_vars.locals.cert_manager_version, null)
-  external_secrets_version        = try(local.account_vars.locals.external_secrets_version, null)
+  argocd_version                   = try(local.account_vars.locals.argocd_version, null)
+  cert_manager_version             = try(local.account_vars.locals.cert_manager_version, null)
+  external_secrets_version         = try(local.account_vars.locals.external_secrets_version, null)
   prometheus_operator_crds_version = try(local.account_vars.locals.prometheus_operator_crds_version, null)
-  gatekeeper_version              = try(local.account_vars.locals.gatekeeper_version, null)
-  velero_version                  = try(local.account_vars.locals.velero_version, null)
-  kargo_version                   = try(local.account_vars.locals.kargo_version, null)
+  gatekeeper_version               = try(local.account_vars.locals.gatekeeper_version, null)
+  velero_version                   = try(local.account_vars.locals.velero_version, null)
+  kargo_version                    = try(local.account_vars.locals.kargo_version, null)
 
   tags = {
     Environment = local.environment

@@ -33,8 +33,8 @@ dependency "cilium_euw1" {
   config_path = "../../eu-west-1/platform/cilium"
 
   mock_outputs = {
-    cluster_mesh_name  = "staging-euw1"
-    cluster_mesh_id    = 1
+    cluster_mesh_name   = "staging-euw1"
+    cluster_mesh_id     = 1
     clustermesh_enabled = true
   }
 
@@ -46,8 +46,8 @@ dependency "cilium_euc1" {
   config_path = "../../eu-central-1/platform/cilium"
 
   mock_outputs = {
-    cluster_mesh_name  = "staging-euc1"
-    cluster_mesh_id    = 2
+    cluster_mesh_name   = "staging-euc1"
+    cluster_mesh_id     = 2
     clustermesh_enabled = true
   }
 
