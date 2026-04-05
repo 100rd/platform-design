@@ -1,0 +1,69 @@
+# Checkov configuration for CIS AWS Foundations Benchmark compliance
+# https://www.checkov.io/2.Basics/CLI%20Command%20Reference.html
+# Adapted from infra/.checkov.yml — paths adjusted for platform-design layout
+# (modules live under terraform/modules/ not root-level modules/)
+
+framework:
+  - terraform
+
+compact: true
+quiet: true
+
+# Directory to scan — platform-design uses terraform/modules/
+directory:
+  - terraform/modules
+
+# CIS AWS Foundations Benchmark checks
+check:
+  # S3
+  - CKV_AWS_18   # S3 bucket logging
+  - CKV_AWS_19   # S3 bucket encryption
+  - CKV_AWS_21   # S3 bucket versioning
+  - CKV_AWS_53   # S3 bucket block public ACLs
+  - CKV_AWS_54   # S3 bucket block public policy
+  - CKV_AWS_55   # S3 bucket ignore public ACLs
+  - CKV_AWS_56   # S3 bucket restrict public buckets
+  - CKV_AWS_145  # S3 bucket KMS encryption
+
+  # Encryption
+  - CKV_AWS_7    # KMS key rotation
+  - CKV_AWS_35   # CloudTrail encryption
+  - CKV_AWS_36   # CloudTrail log file validation
+
+  # Networking
+  - CKV_AWS_23   # Security groups restrict ingress
+  - CKV_AWS_24   # No 0.0.0.0/0 to port 22
+  - CKV_AWS_25   # No 0.0.0.0/0 to port 3389
+  - CKV_AWS_130  # VPC subnets no auto-assign public IP
+  - CKV_AWS_9    # NACLs allow ingress filtering
+
+  # Logging & Monitoring
+  - CKV_AWS_33   # KMS key policy not wildcard
+  - CKV_AWS_37   # CloudWatch log group encryption
+  - CKV_AWS_66   # CloudWatch log group retention
+
+  # IAM
+  - CKV_AWS_40   # IAM policies not attached to users
+  - CKV_AWS_49   # IAM policies no wildcard
+  - CKV_AWS_61   # IAM role policy no wildcard
+  - CKV_AWS_62   # IAM policy no wildcard
+
+  # EKS
+  - CKV_AWS_38   # EKS cluster encryption
+  - CKV_AWS_39   # EKS cluster endpoint public access
+  - CKV_AWS_58   # EKS cluster secrets encryption
+
+  # DynamoDB
+  - CKV_AWS_28   # DynamoDB PITR enabled
+  - CKV_AWS_119  # DynamoDB encryption
+
+  # VPC
+  - CKV_AWS_111  # VPC flow logs
+  - CKV_AWS_12   # Default security group restricts all traffic
+
+skip-check:
+  # Skip checks that require runtime AWS access
+  - CKV_AWS_144  # S3 cross-region replication (will enable later)
+  - CKV_AWS_41   # IAM Access Analyzer (tracked in SYNC_ROADMAP Phase 1.2)
+
+soft-fail: false

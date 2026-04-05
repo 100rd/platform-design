@@ -1,0 +1,188 @@
+name: Terragrunt Apply
+
+on:
+  # Trigger on merge to main (GitOps: infrastructure state follows main branch)
+  push:
+    branches: [main]
+    paths:
+      - "terragrunt/**"
+      - "catalog/**"
+      - "terraform/modules/**"
+  # Manual trigger with environment selection
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment (dev/staging/prod)"
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      module_path:
+        description: "Specific module path to apply (leave empty for all changed)"
+        required: false
+        type: string
+
+concurrency:
+  # Serialize all applies — never run two applies concurrently
+  group: terragrunt-apply
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TF_VERSION: "1.14.8"
+  TG_VERSION: "0.99.5"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Detect changed Terragrunt units (on push to main)
+  # ---------------------------------------------------------------------------
+  detect-changes:
+    name: Detect changed modules
+    runs-on: ubuntu-latest
+    outputs:
+      modules: ${{ steps.changes.outputs.modules }}
+      has_changes: ${{ steps.changes.outputs.has_changes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed Terragrunt directories
+        id: changes
+        run: |
+          if [ -n "${{ inputs.module_path }}" ]; then
+            # Manual dispatch with specific path
+            CHANGED_DIRS=$(echo "${{ inputs.module_path }}" | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual dispatch without specific path — find all units for environment
+            CHANGED_DIRS=$(find terragrunt/${{ inputs.environment }} catalog/units -name "terragrunt.hcl" \
+              | xargs -I{} dirname {} \
+              | sort -u \
+              | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          else
+            # Push to main — detect changed units vs previous commit
+            CHANGED_DIRS=$(git diff --name-only HEAD~1 HEAD \
+              | grep -E '\.(hcl|tf|tfvars)$' \
+              | xargs -I{} dirname {} \
+              | grep -E '^(terragrunt/(dev|staging|prod|management|log-archive|security|network|third-party)/|catalog/units/)' \
+              | sort -u \
+              | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          fi
+
+          echo "modules=${CHANGED_DIRS}" >> "$GITHUB_OUTPUT"
+
+          if [ "$CHANGED_DIRS" = "[]" ] || [ -z "$CHANGED_DIRS" ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Terragrunt Apply — sequential (max-parallel: 1) per changed unit
+  # Environment protection rules enforce approval gates for staging and prod.
+  # Configure GitHub environment protection rules:
+  #   Settings > Environments > staging/prod > Required reviewers
+  # ---------------------------------------------------------------------------
+  apply:
+    name: Apply ${{ matrix.module }}
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    # Map module path to GitHub environment for approval gates:
+    #   prod/*  → production environment (requires manual approval)
+    #   staging/* or terragrunt/staging/* → staging environment
+    #   all others → development (auto-approved)
+    environment: >-
+      ${{
+        contains(matrix.module, 'prod') && 'production' ||
+        contains(matrix.module, 'staging') && 'staging' ||
+        'development'
+      }}
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        module: ${{ fromJson(needs.detect-changes.outputs.modules) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Install Terragrunt
+        run: |
+          curl -sL "https://github.com/gruntwork-io/terragrunt/releases/download/v${TG_VERSION}/terragrunt_linux_amd64" \
+            -o /usr/local/bin/terragrunt
+          chmod +x /usr/local/bin/terragrunt
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.TERRAFORM_APPLY_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - name: Terragrunt Init
+        working-directory: ${{ matrix.module }}
+        run: terragrunt init --non-interactive
+
+      - name: Terragrunt Plan
+        working-directory: ${{ matrix.module }}
+        run: terragrunt plan -no-color -out=tfplan
+
+      - name: Terragrunt Apply
+        working-directory: ${{ matrix.module }}
+        run: terragrunt apply -no-color -auto-approve tfplan
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "Terragrunt Apply FAILED for `${{ matrix.module }}` in ${{ github.repository }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ":x: *Terragrunt Apply Failed*\n*Module:* `${{ matrix.module }}`\n*Repo:* ${{ github.repository }}\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View>"
+                  }
+                }
+              ]
+            }
+
+  # ---------------------------------------------------------------------------
+  # Notify on overall success
+  # ---------------------------------------------------------------------------
+  notify-success:
+    name: Notify Success
+    needs: apply
+    if: success()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Slack on success
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "Terragrunt Apply succeeded for ${{ github.repository }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": ":white_check_mark: *Terragrunt Apply Succeeded*\n*Repo:* ${{ github.repository }}\n*Commit:* `${{ github.sha }}`\n*Run:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View>"
+                  }
+                }
+              ]
+            }

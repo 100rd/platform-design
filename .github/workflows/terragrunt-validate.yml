@@ -13,6 +13,10 @@ on:
       - "catalog/**"
   workflow_dispatch:
 
+env:
+  # Pin to match root.hcl terragrunt_version_constraint = "= 0.99.5"
+  TG_VERSION: "0.99.5"
+
 jobs:
   hclfmt:
     name: HCL Format Check
@@ -21,13 +25,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Terragrunt
         run: |
-          TERRAGRUNT_VERSION="0.68.12"
-          curl -Lo /tmp/terragrunt -L "https://github.com/gruntwork-io/terragrunt/releases/download/v${TERRAGRUNT_VERSION}/terragrunt_linux_amd64"
+          curl -Lo /tmp/terragrunt -L "https://github.com/gruntwork-io/terragrunt/releases/download/v${TG_VERSION}/terragrunt_linux_amd64"
           chmod +x /tmp/terragrunt
           sudo mv /tmp/terragrunt /usr/local/bin/terragrunt
       - name: Check HCL formatting
         run: |
-          UNFORMATTED=$(terragrunt hclfmt --check --diff 2>&1) || true
+          UNFORMATTED=$(terragrunt hcl format --check --diff 2>&1) || true
           if [ -n "$UNFORMATTED" ]; then
             echo "::error::The following HCL files are not formatted:"
             echo "$UNFORMATTED"
