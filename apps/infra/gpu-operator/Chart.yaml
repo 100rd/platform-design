@@ -1,0 +1,33 @@
+apiVersion: v2
+name: gpu-operator
+description: NVIDIA GPU Operator - Automated GPU driver, toolkit, and device plugin management
+version: 1.0.0
+appVersion: "v26.3.0"
+type: application
+
+dependencies:
+  # NVIDIA GPU Operator — manages GPU drivers, container toolkit, device plugin, and DRA driver
+  # https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/
+  - name: gpu-operator
+    version: "v26.3.0"
+    repository: https://helm.ngc.nvidia.com/nvidia
+    condition: gpu-operator.enabled
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - gpu
+  - nvidia
+  - cuda
+  - h100
+  - dra
+  - device-plugin
+  - driver
+  - inference
+  - training
+
+annotations:
+  category: GPU
+  platform: Kubernetes

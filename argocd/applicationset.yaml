@@ -16,7 +16,14 @@ spec:
                 - path: apps/infra/*
                 - path: apps/infra/observability/*
           - clusters:
-              selector: {}
+              selector:
+                # Exclude gpu-inference clusters — they use applicationset-gpu-inference.yaml
+                # which provides gpu-specific values overrides and excludes observability/*
+                matchExpressions:
+                  - key: cluster-type
+                    operator: NotIn
+                    values:
+                      - gpu-inference
               values:
                 env: '{{ index .metadata.labels "env" }}'
                 cluster: '{{ index .metadata.labels "cluster" }}'

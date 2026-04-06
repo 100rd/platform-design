@@ -1,0 +1,96 @@
+---
+# ApplicationSet for GPU Inference Cluster infrastructure.
+#
+# Deploys infra charts to clusters labeled `cluster-type: gpu-inference`.
+# Uses a matrix generator combining git directories with cluster selection.
+#
+# Key differences from the standard `platform-infra` ApplicationSet:
+#   - Targets only gpu-inference clusters (via label selector)
+#   - Loads `values-gpu-inference.yaml` overrides on top of `values.yaml`
+#   - Excludes observability/* subdirectory (gpu-inference uses VictoriaMetrics)
+#   - Includes gpu-specific charts (gpu-operator, volcano, dcgm-exporter, victoriametrics)
+#
+# Charts deployed to gpu-inference cluster:
+#   Shared infra (from apps/infra/*):
+#     - cilium (with native routing + BGP + WireGuard overrides)
+#     - cert-manager, external-dns, external-secrets, cluster-secret-store
+#     - gatekeeper, kyverno, velero, otel-operator, kargo
+#     - aws-lb-controller, rabbitmq-operator
+#   GPU-specific (from apps/infra/*):
+#     - gpu-operator, victoriametrics, volcano, dcgm-exporter
+#   Excluded:
+#     - observability/* (prometheus-stack, loki-stack, grafana-dashboards, etc.)
+#
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: gpu-inference-infra
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - git:
+              repoURL: git@github.com:100rd/platform-design.git
+              revision: HEAD
+              directories:
+                - path: apps/infra/*
+                # Exclude observability subdirectory — gpu-inference uses VictoriaMetrics
+                - path: apps/infra/observability/*
+                  exclude: true
+          - clusters:
+              selector:
+                matchLabels:
+                  cluster-type: gpu-inference
+              values:
+                env: '{{ index .metadata.labels "env" }}'
+                cluster: '{{ index .metadata.labels "cluster" }}'
+                clusterType: gpu-inference
+  template:
+    metadata:
+      name: 'gpu-{{ .path.basename }}'
+      namespace: argocd
+      labels:
+        app.kubernetes.io/part-of: gpu-inference-infra
+        app.kubernetes.io/managed-by: applicationset
+        cluster-type: gpu-inference
+    spec:
+      project: default
+      source:
+        repoURL: git@github.com:100rd/platform-design.git
+        targetRevision: HEAD
+        path: '{{ .path.path }}'
+        helm:
+          ignoreMissingValueFiles: true
+          valueFiles:
+            # Base values (all clusters)
+            - values.yaml
+            # GPU inference cluster overrides (only present for charts that need them)
+            - values-gpu-inference.yaml
+            # Environment-specific values (if any)
+            - '../../../envs/{{ .values.env }}/values/infra/{{ .path.basename }}.yaml'
+          values: |
+            environment: "{{ .values.env }}"
+            cluster: "{{ .values.cluster }}"
+            clusterType: "gpu-inference"
+      destination:
+        server: '{{ .server }}'
+        namespace: '{{ .path.basename }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - RespectIgnoreDifferences=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+  syncPolicy:
+    preserveResourcesOnDeletion: true

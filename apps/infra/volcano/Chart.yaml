@@ -1,0 +1,33 @@
+apiVersion: v2
+name: volcano
+description: Volcano - Kubernetes-native batch and GPU-aware scheduler
+version: 1.0.0
+appVersion: "1.8.0"
+type: application
+
+dependencies:
+  # Volcano — batch scheduling with gang scheduling, DRA integration, fair-share queues
+  # https://volcano.sh/en/docs/
+  - name: volcano
+    version: "1.8.0"
+    repository: https://volcano-sh.github.io/helm-charts
+    condition: volcano.enabled
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - scheduler
+  - batch
+  - gang-scheduling
+  - gpu
+  - volcano
+  - dra
+  - inference
+  - training
+  - queue
+
+annotations:
+  category: Scheduling
+  platform: Kubernetes

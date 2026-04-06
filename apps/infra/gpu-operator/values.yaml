@@ -1,0 +1,168 @@
+---
+# NVIDIA GPU Operator Configuration for GPU Inference Cluster
+# Manages: GPU drivers, container toolkit, device plugin, DRA driver, MIG manager
+#
+# Target hardware: p5.48xlarge (8x H100 SXM5, NVSwitch, 80GB HBM3 per GPU)
+# EKS version: 1.35
+# DRA (Dynamic Resource Allocation): enabled for fine-grained GPU scheduling
+
+gpu-operator:
+  enabled: true
+
+  # --------------------------------------------------------------------------
+  # Operator Configuration
+  # --------------------------------------------------------------------------
+  operator:
+    defaultRuntime: containerd
+
+    # Resource limits for the operator pod
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    # Run operator on system nodes, not GPU nodes
+    nodeSelector:
+      node-role.kubernetes.io/system: ""
+    tolerations:
+      - key: node-role.kubernetes.io/system
+        operator: Exists
+        effect: NoSchedule
+
+  # --------------------------------------------------------------------------
+  # GPU Driver (pre-installed on Bottlerocket/AL2023 AMI — skip install)
+  # --------------------------------------------------------------------------
+  driver:
+    enabled: false  # Using EKS-optimized AMI with pre-installed NVIDIA drivers
+    # Set to true if using custom AMI without drivers
+
+  # --------------------------------------------------------------------------
+  # Container Toolkit
+  # --------------------------------------------------------------------------
+  toolkit:
+    enabled: true
+    version: "v1.17.5-ubuntu22.04"
+
+  # --------------------------------------------------------------------------
+  # Device Plugin
+  # --------------------------------------------------------------------------
+  devicePlugin:
+    enabled: true
+
+    # Resource limits
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+    # MIG strategy: mixed allows both MIG and full GPU modes on same node
+    config:
+      name: device-plugin-config
+      default: "h100-full"
+      data:
+        h100-full: |
+          version: v1
+          flags:
+            migStrategy: none
+          sharing:
+            timeSlicing:
+              renameByDefault: false
+              failRequestsGreaterThanOne: true
+              resources:
+                - name: nvidia.com/gpu
+                  replicas: 1
+
+  # --------------------------------------------------------------------------
+  # DRA Driver (Dynamic Resource Allocation)
+  # Enables fine-grained GPU allocation via Kubernetes ResourceClaims
+  # --------------------------------------------------------------------------
+  draDriver:
+    enabled: true
+
+    # Resource limits
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 300m
+        memory: 512Mi
+
+  # --------------------------------------------------------------------------
+  # DCGM (Data Center GPU Manager) — embedded instance
+  # Separate dcgm-exporter chart handles metrics export
+  # --------------------------------------------------------------------------
+  dcgm:
+    enabled: true
+
+  dcgmExporter:
+    enabled: false  # Using standalone dcgm-exporter chart instead
+
+  # --------------------------------------------------------------------------
+  # MIG Manager (Multi-Instance GPU)
+  # --------------------------------------------------------------------------
+  migManager:
+    enabled: true
+    config:
+      name: mig-parted-config
+      default: "all-disabled"
+      data:
+        all-disabled: |
+          version: v1
+          mig-configs:
+            all-disabled:
+              - devices: all
+                mig-enabled: false
+        # Example: enable 7 MIG slices per GPU for multi-tenant inference
+        # all-1g.10gb: |
+        #   version: v1
+        #   mig-configs:
+        #     all-1g.10gb:
+        #       - devices: all
+        #         mig-enabled: true
+        #         mig-devices:
+        #           "1g.10gb": 7
+
+  # --------------------------------------------------------------------------
+  # Node Feature Discovery
+  # --------------------------------------------------------------------------
+  nfd:
+    enabled: true
+
+  # --------------------------------------------------------------------------
+  # GPU Feature Discovery
+  # --------------------------------------------------------------------------
+  gfd:
+    enabled: true
+
+  # --------------------------------------------------------------------------
+  # Scheduling
+  # --------------------------------------------------------------------------
+  # Tolerate GPU node taints
+  daemonsets:
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/gpu
+        operator: Exists
+        effect: NoSchedule
+
+    # Priority class for GPU system components
+    priorityClassName: system-node-critical
+
+  # --------------------------------------------------------------------------
+  # Monitoring
+  # --------------------------------------------------------------------------
+  # ServiceMonitor for VictoriaMetrics (not Prometheus)
+  serviceMonitor:
+    enabled: true
+    additionalLabels:
+      prometheus.io/scrape: "true"
+    interval: 30s

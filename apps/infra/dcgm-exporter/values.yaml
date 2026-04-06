@@ -1,0 +1,154 @@
+---
+# NVIDIA DCGM Exporter Configuration for GPU Inference Cluster
+# Exports GPU health and performance metrics in Prometheus format
+#
+# Metric families exported (7 total):
+#   1. GPU utilization (DCGM_FI_DEV_GPU_UTIL)
+#   2. Memory utilization (DCGM_FI_DEV_FB_USED, DCGM_FI_DEV_FB_FREE)
+#   3. Temperature (DCGM_FI_DEV_GPU_TEMP, DCGM_FI_DEV_MEMORY_TEMP)
+#   4. Power (DCGM_FI_DEV_POWER_USAGE, DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION)
+#   5. NVLink bandwidth (DCGM_FI_DEV_NVLINK_BANDWIDTH_TOTAL)
+#   6. PCIe throughput (DCGM_FI_DEV_PCIE_TX_THROUGHPUT, DCGM_FI_DEV_PCIE_RX_THROUGHPUT)
+#   7. ECC errors (DCGM_FI_DEV_ECC_SBE_VOL_TOTAL, DCGM_FI_DEV_ECC_DBE_VOL_TOTAL)
+#
+# Reference: docs/gpu-inference-dod.md (observability criteria)
+
+dcgm-exporter:
+  enabled: true
+
+  # --------------------------------------------------------------------------
+  # Exporter Configuration
+  # --------------------------------------------------------------------------
+  image:
+    repository: nvcr.io/nvidia/k8s/dcgm-exporter
+    tag: "4.5.0-4.3.3-ubuntu22.04"
+
+  # Run as DaemonSet on all GPU nodes
+  nodeSelector:
+    nvidia.com/gpu.present: "true"
+
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/gpu
+      operator: Exists
+      effect: NoSchedule
+
+  # Resource limits — DCGM exporter is lightweight
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  # Priority class for monitoring components
+  priorityClassName: system-node-critical
+
+  # --------------------------------------------------------------------------
+  # Metrics Configuration
+  # --------------------------------------------------------------------------
+  # Custom metrics CSV — export all 7 DCGM metric families
+  # Default counters file covers standard metrics; extend for NVLink and ECC
+  arguments:
+    - "-f"
+    - "/etc/dcgm-exporter/dcp-metrics-included.csv"
+    - "--collect-interval"
+    - "10000"  # 10 seconds collection interval
+    - "--kubernetes-gpu-id-type"
+    - "device-name"
+
+  # ConfigMap with custom metrics to export
+  extraConfigMapVolumes:
+    - name: dcgm-metrics-config
+      configMap:
+        name: dcgm-exporter-metrics
+
+  # Custom metrics CSV (all 7 families)
+  customMetrics: |
+    # Format: DCGM_FIELD_ID, Prometheus metric type, help string
+    # GPU Utilization
+    DCGM_FI_DEV_GPU_UTIL,       gauge, GPU utilization percentage
+    DCGM_FI_DEV_MEM_COPY_UTIL,  gauge, Memory copy utilization percentage
+    DCGM_FI_DEV_ENC_UTIL,       gauge, Encoder utilization percentage
+    DCGM_FI_DEV_DEC_UTIL,       gauge, Decoder utilization percentage
+    # Memory
+    DCGM_FI_DEV_FB_FREE,        gauge, Free framebuffer memory (MiB)
+    DCGM_FI_DEV_FB_USED,        gauge, Used framebuffer memory (MiB)
+    DCGM_FI_DEV_FB_TOTAL,       gauge, Total framebuffer memory (MiB)
+    # Temperature
+    DCGM_FI_DEV_GPU_TEMP,       gauge, GPU temperature (C)
+    DCGM_FI_DEV_MEMORY_TEMP,    gauge, HBM memory temperature (C)
+    # Power
+    DCGM_FI_DEV_POWER_USAGE,             gauge, Power usage (W)
+    DCGM_FI_DEV_TOTAL_ENERGY_CONSUMPTION, counter, Total energy consumption (mJ)
+    DCGM_FI_DEV_POWER_VIOLATION,          counter, Throttle duration due to power (us)
+    DCGM_FI_DEV_THERMAL_VIOLATION,        counter, Throttle duration due to thermal (us)
+    # NVLink
+    DCGM_FI_DEV_NVLINK_BANDWIDTH_TOTAL, counter, Total NVLink bandwidth (bytes)
+    # PCIe
+    DCGM_FI_DEV_PCIE_TX_THROUGHPUT,     counter, PCIe TX throughput (bytes)
+    DCGM_FI_DEV_PCIE_RX_THROUGHPUT,     counter, PCIe RX throughput (bytes)
+    # ECC Errors
+    DCGM_FI_DEV_ECC_SBE_VOL_TOTAL,     counter, Single-bit ECC errors (volatile)
+    DCGM_FI_DEV_ECC_DBE_VOL_TOTAL,     counter, Double-bit ECC errors (volatile)
+    DCGM_FI_DEV_ECC_SBE_AGG_TOTAL,     counter, Single-bit ECC errors (aggregate)
+    DCGM_FI_DEV_ECC_DBE_AGG_TOTAL,     counter, Double-bit ECC errors (aggregate)
+    # Clock speeds
+    DCGM_FI_DEV_SM_CLOCK,              gauge, SM clock frequency (MHz)
+    DCGM_FI_DEV_MEM_CLOCK,             gauge, Memory clock frequency (MHz)
+    # XID errors
+    DCGM_FI_DEV_XID_ERRORS,            gauge, Last XID error code
+
+  # --------------------------------------------------------------------------
+  # Service & ServiceMonitor
+  # --------------------------------------------------------------------------
+  service:
+    type: ClusterIP
+    port: 9400
+
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
+    interval: 30s
+    additionalLabels:
+      prometheus.io/scrape: "true"
+    # Relabeling to add cluster and node labels
+    relabelings:
+      - sourceLabels: [__meta_kubernetes_node_name]
+        targetLabel: node
+      - sourceLabels: [__meta_kubernetes_node_label_topology_kubernetes_io_zone]
+        targetLabel: availability_zone
+
+  # --------------------------------------------------------------------------
+  # GPU Health Auto-Taint (via sidecar)
+  # --------------------------------------------------------------------------
+  # The auto-taint feature cordons/taints nodes with unhealthy GPUs.
+  # Starts in warn-only mode to avoid false positives during initial rollout.
+  #
+  # Configuration is applied via a separate ConfigMap or controller.
+  # The DCGM exporter itself only exports metrics; the taint logic
+  # is handled by a node-problem-detector rule or custom controller
+  # watching DCGM_FI_DEV_XID_ERRORS and DCGM_FI_DEV_ECC_DBE_VOL_TOTAL.
+  #
+  # Thresholds (applied externally):
+  #   - XID error > 0         -> taint node (NoSchedule)
+  #   - Double-bit ECC > 0    -> taint node (NoSchedule)
+  #   - GPU temp > 90C        -> warn only (initial rollout)
+  #   - GPU utilization stuck at 0% for 5m while pods scheduled -> warn
+
+  # --------------------------------------------------------------------------
+  # Security
+  # --------------------------------------------------------------------------
+  securityContext:
+    runAsNonRoot: false  # DCGM requires root for GPU device access
+    runAsUser: 0
+    capabilities:
+      add:
+        - SYS_ADMIN  # Required for DCGM device access
+    readOnlyRootFilesystem: true
+
+  podSecurityContext:
+    fsGroup: 0

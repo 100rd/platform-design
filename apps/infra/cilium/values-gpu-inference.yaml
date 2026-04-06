@@ -1,0 +1,109 @@
+# Cilium CNI Overrides for GPU Inference Cluster
+# Layered on top of values.yaml — only contains deltas from the base configuration.
+#
+# Key differences from standard (ENI mode) clusters:
+#   - Native routing instead of ENI (no VPC IP consumption per pod)
+#   - BGP Control Plane for advertising pod CIDRs to the fabric
+#   - WireGuard transparent encryption for all node-to-node traffic
+#   - Tuned for high-bandwidth NCCL collective operations
+#
+# Reference: docs/gpu-inference-dod.md (network criteria)
+
+cilium:
+
+  # ---------------------------------------------------------------------------
+  # Disable ENI mode — use native routing for GPU clusters
+  # ---------------------------------------------------------------------------
+  eni:
+    enabled: false
+    awsEnablePrefixDelegation: false
+    updateEC2AdapterLimitViaAPI: false
+    awsReleaseExcessIPs: false
+
+  ipam:
+    mode: kubernetes
+    operator:
+      clusterPoolIPv4PodCIDRList:
+        - "10.244.0.0/16"
+      clusterPoolIPv4MaskSize: "24"
+
+  routingMode: native
+  ipv4NativeRoutingCIDR: "10.244.0.0/16"
+  autoDirectNodeRoutes: true
+
+  # ---------------------------------------------------------------------------
+  # BGP Control Plane
+  # Advertises pod CIDRs to upstream routers for direct routing
+  # ---------------------------------------------------------------------------
+  bgpControlPlane:
+    enabled: true
+
+  # ---------------------------------------------------------------------------
+  # WireGuard Transparent Encryption
+  # All node-to-node traffic encrypted — mandatory for GDPR/SOC2 compliance
+  # DoD threshold: < 10 us additional latency over plaintext baseline
+  # ---------------------------------------------------------------------------
+  encryption:
+    enabled: true
+    type: wireguard
+    wireguard:
+      # Use userspace WireGuard if kernel module unavailable (Bottlerocket has it)
+      userspaceFallback: false
+
+  # ---------------------------------------------------------------------------
+  # kube-proxy Replacement — enabled for GPU clusters
+  # Reduces latency for east-west service traffic between inference pods
+  # ---------------------------------------------------------------------------
+  kubeProxyReplacement: true
+
+  # ---------------------------------------------------------------------------
+  # BPF Tuning for High-Bandwidth Workloads
+  # ---------------------------------------------------------------------------
+  bpf:
+    masquerade: true
+    clockProbe: false
+    preallocateMaps: true
+    tproxy: true
+    # Larger LB map for GPU service endpoints
+    lbMapMax: 65536
+
+  # Bandwidth manager with BBR for optimal throughput on 100 Gbps+ links
+  bandwidthManager:
+    enabled: true
+    bbr: true
+
+  # ---------------------------------------------------------------------------
+  # Hubble — override metrics labels for VictoriaMetrics compatibility
+  # ---------------------------------------------------------------------------
+  hubble:
+    metrics:
+      serviceMonitor:
+        enabled: true
+        namespace: monitoring
+        labels:
+          # VictoriaMetrics VMAgent discovers via this label
+          prometheus.io/scrape: "true"
+
+  # ---------------------------------------------------------------------------
+  # Prometheus Metrics — relabel for VictoriaMetrics
+  # ---------------------------------------------------------------------------
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      namespace: monitoring
+      labels:
+        prometheus.io/scrape: "true"
+      trustCRDsExist: true
+
+  # ---------------------------------------------------------------------------
+  # Node Selector — GPU cluster system nodes run Cilium operator
+  # GPU nodes also run the Cilium agent (via tolerations in base values)
+  # ---------------------------------------------------------------------------
+  operator:
+    nodeSelector:
+      node-role.kubernetes.io/system: ""
+    tolerations:
+      - key: node-role.kubernetes.io/system
+        operator: Exists
+        effect: NoSchedule
