@@ -15,3 +15,8 @@ unit "gpu-inference-eks" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-eks"
   path   = "gpu-inference-eks"
 }
+
+unit "gpu-inference-node-tuning" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-node-tuning"
+  path   = "gpu-inference-node-tuning"
+}
