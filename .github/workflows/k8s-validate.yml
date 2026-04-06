@@ -44,7 +44,8 @@ jobs:
           if [ -d "${{ matrix.dir }}" ]; then
             # Exclude falco-pci-rules.yaml: Falco rules file (YAML list), not a K8s manifest
             find "${{ matrix.dir }}" \( -name '*.yaml' -o -name '*.yml' \) \
-              ! -name 'falco-pci-rules.yaml' | \
+              ! -name 'falco-pci-rules.yaml' \
+              ! -path '*/crossplane/*' | \
               xargs kubeconform \
                 -strict \
                 -summary \

@@ -30,14 +30,13 @@ overhead:
     memory: 160Mi
 scheduling:
   # Tolerate GPU and Kata CC node taints so the scheduler allows placement
-  nodeClassification:
-    tolerated:
-      - key: nvidia.com/gpu
-        operator: Exists
-        effect: NoSchedule
-      - key: kata-cc
-        operator: Exists
-        effect: NoSchedule
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+    - key: kata-cc
+      operator: Exists
+      effect: NoSchedule
   # Only schedule on CC-capable nodes (labelled by the NVIDIA GPU Operator CC mode)
   nodeSelector:
     nvidia.com/cc.enabled: "true"

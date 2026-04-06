@@ -147,14 +147,12 @@ spec:
             requests:
               cpu: "16"
               memory: "128Gi"
-              # DRA GPU resource allocation via ResourceClaim
             limits:
               cpu: "32"
               memory: "256Gi"
-          # Reference the DRA claim defined above
-          resourceClaimNames:
-            - claimName: gpu-claim
-              resourceClaimName: gpu-claim
+            # Reference the DRA ResourceClaim defined at pod spec level
+            claims:
+              - name: gpu-claim
           volumeMounts:
             - name: vllm-config
               mountPath: /etc/vllm
