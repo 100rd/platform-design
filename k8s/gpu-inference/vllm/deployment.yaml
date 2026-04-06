@@ -55,6 +55,7 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
+        scheduling.volcano.sh/queue-name: gpu-inference-default
     spec:
       schedulerName: volcano
       priorityClassName: gpu-inference-medium
@@ -184,6 +185,3 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 10
             failureThreshold: 30
-      # Volcano queue annotation
-      annotations:
-        scheduling.volcano.sh/queue-name: gpu-inference-default
