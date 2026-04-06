@@ -1,0 +1,47 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xgpunodegroups.inference.platform.io
+spec:
+  group: inference.platform.io
+  names:
+    kind: XGPUNodeGroup
+    plural: xgpunodegroups
+  claimNames:
+    kind: GPUNodeGroup
+    plural: gpunodegroups
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                instanceType:
+                  type: string
+                  description: "EC2 instance type (e.g., p5.48xlarge)"
+                  enum: ["p5.48xlarge", "p4d.24xlarge"]
+                gpuType:
+                  type: string
+                  description: "GPU model identifier"
+                  enum: ["H100-SXM5", "A100-80GB"]
+                nodeCount:
+                  type: integer
+                  minimum: 0
+                  maximum: 500
+                  description: "Number of GPU nodes in the group"
+                availabilityZone:
+                  type: string
+                  description: "Target availability zone"
+                placementGroupName:
+                  type: string
+                  description: "EC2 placement group name for co-location"
+              required:
+                - instanceType
+                - gpuType
+                - nodeCount
+                - availabilityZone

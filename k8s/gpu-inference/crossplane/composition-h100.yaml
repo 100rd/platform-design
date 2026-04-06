@@ -1,0 +1,37 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: gpu-nodegroup-h100
+  labels:
+    gpu-type: H100-SXM5
+spec:
+  compositeTypeRef:
+    apiVersion: inference.platform.io/v1alpha1
+    kind: XGPUNodeGroup
+  patchSets:
+    - name: common-tags
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.labels
+          toFieldPath: spec.forProvider.tags
+  resources:
+    - name: launch-template
+      base:
+        apiVersion: ec2.aws.upbound.io/v1beta1
+        kind: LaunchTemplate
+        spec:
+          forProvider:
+            region: eu-west-1
+            instanceType: p5.48xlarge
+            imageId: ""  # AMI set via patch
+            placement:
+              - groupName: ""  # Placement group set via patch
+            tagSpecifications:
+              - resourceType: instance
+                tags:
+                  nvidia.com/gpu.product: H100-SXM5
+                  node-role: gpu-inference
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.placementGroupName
+          toFieldPath: spec.forProvider.placement[0].groupName
