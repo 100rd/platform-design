@@ -4,6 +4,7 @@
 # Deploys the gpu-inference cluster infrastructure for prod eu-west-1.
 # Phase 1: VPC + EKS cluster foundation.
 # Phase 2: Cilium v1.19 native routing + BGP Control Plane peering via TGW Connect.
+# Phase 3: Cilium WireGuard transparent encryption + high-scale tuning for 5000 nodes.
 # Additional units will be added as subsequent issues are implemented.
 # ---------------------------------------------------------------------------------------------------------------------
 
@@ -25,4 +26,9 @@ unit "gpu-inference-node-tuning" {
 unit "gpu-inference-cilium" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-cilium"
   path   = "gpu-inference-cilium"
+}
+
+unit "gpu-inference-cilium-encryption" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-cilium-encryption"
+  path   = "gpu-inference-cilium-encryption"
 }
