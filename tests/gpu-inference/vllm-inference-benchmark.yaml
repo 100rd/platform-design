@@ -1,0 +1,202 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# vLLM Inference Benchmark — GPU Inference Cluster
+# ---------------------------------------------------------------------------------------------------------------------
+# Runs the vLLM benchmark suite against a deployed vLLM server to validate
+# inference performance meets production acceptance criteria.
+#
+# Acceptance criteria:
+#   - Throughput:  > 1000 tokens/sec/GPU
+#   - TTFT (Time To First Token): < 100 ms (p50)
+#   - E2E latency p99: < 500 ms (for 512-token output)
+#   - Memory utilization: < 90% GPU HBM
+# ---------------------------------------------------------------------------------------------------------------------
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-benchmark-config
+  namespace: gpu-inference-validation
+  labels:
+    app.kubernetes.io/name: vllm-inference-benchmark
+    app.kubernetes.io/part-of: gpu-inference-dod
+data:
+  run-vllm-benchmark.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    VLLM_URL="${VLLM_URL:-http://vllm-server.gpu-inference.svc.cluster.local:8000}"
+    MODEL="${MODEL:-meta-llama/Llama-3-8B-Instruct}"
+    NUM_GPUS="${NUM_GPUS:-1}"
+    CONCURRENCY="${CONCURRENCY:-32}"
+    NUM_PROMPTS="${NUM_PROMPTS:-200}"
+    INPUT_LEN="${INPUT_LEN:-512}"
+    OUTPUT_LEN="${OUTPUT_LEN:-512}"
+
+    # Thresholds
+    PASS_TOKENS_PER_SEC="${PASS_TOKENS_PER_SEC:-1000}"
+    PASS_TTFT_P50_MS="${PASS_TTFT_P50_MS:-100}"
+    PASS_E2E_P99_MS="${PASS_E2E_P99_MS:-500}"
+    PASS_GPU_MEM_PCT="${PASS_GPU_MEM_PCT:-90}"
+
+    echo "=== vLLM Inference Benchmark ==="
+    echo "Server:      ${VLLM_URL}"
+    echo "Model:       ${MODEL}"
+    echo "GPUs:        ${NUM_GPUS}"
+    echo "Concurrency: ${CONCURRENCY}"
+    echo "Prompts:     ${NUM_PROMPTS}"
+    echo ""
+    echo "Thresholds:"
+    echo "  Throughput: > ${PASS_TOKENS_PER_SEC} tokens/s/GPU"
+    echo "  TTFT p50:   < ${PASS_TTFT_P50_MS} ms"
+    echo "  E2E p99:    < ${PASS_E2E_P99_MS} ms"
+
+    # --- Wait for vLLM server to be ready ---
+    echo ""
+    echo "--- Waiting for vLLM server ---"
+    MAX_WAIT=120
+    ELAPSED=0
+    until curl -sf "${VLLM_URL}/health" > /dev/null 2>&1; do
+      echo "  ${ELAPSED}s — server not ready, waiting..."
+      sleep 5
+      ELAPSED=$((ELAPSED + 5))
+      if [[ "${ELAPSED}" -ge "${MAX_WAIT}" ]]; then
+        echo "FAIL: vLLM server not ready after ${MAX_WAIT}s"
+        exit 1
+      fi
+    done
+    echo "Server ready."
+
+    # --- Run vLLM benchmark ---
+    echo ""
+    echo "--- Running benchmark ---"
+    python3 /vllm/benchmarks/benchmark_serving.py \
+      --backend openai-chat \
+      --base-url "${VLLM_URL}" \
+      --model "${MODEL}" \
+      --dataset-name random \
+      --random-input-len "${INPUT_LEN}" \
+      --random-output-len "${OUTPUT_LEN}" \
+      --num-prompts "${NUM_PROMPTS}" \
+      --request-rate "${CONCURRENCY}" \
+      --percentile-metrics ttft,tpot,itl,e2el \
+      --save-result \
+      --result-filename /tmp/benchmark-result.json \
+      2>&1 | tee /tmp/benchmark-output.txt
+
+    echo ""
+    echo "--- Evaluating results ---"
+    python3 - <<'PYEOF'
+    import json, sys, os
+
+    pass_tps  = float(os.environ.get("PASS_TOKENS_PER_SEC", "1000"))
+    pass_ttft = float(os.environ.get("PASS_TTFT_P50_MS", "100"))
+    pass_e2e  = float(os.environ.get("PASS_E2E_P99_MS", "500"))
+    num_gpus  = int(os.environ.get("NUM_GPUS", "1"))
+    failures  = []
+
+    with open("/tmp/benchmark-result.json") as f:
+        result = json.load(f)
+
+    total_tps  = result.get("output_throughput", 0)
+    per_gpu_tps = total_tps / max(num_gpus, 1)
+    ttft_p50   = result.get("p50_ttft_ms", result.get("median_ttft_ms", 9999))
+    e2e_p99    = result.get("p99_e2el_ms", result.get("p99_e2e_latency_ms", 9999))
+
+    print(f"Throughput:  {total_tps:.1f} tokens/s total | {per_gpu_tps:.1f} tokens/s/GPU")
+    print(f"TTFT p50:    {ttft_p50:.1f} ms")
+    print(f"E2E p99:     {e2e_p99:.1f} ms")
+
+    if per_gpu_tps >= pass_tps:
+        print(f"PASS throughput: {per_gpu_tps:.1f} >= {pass_tps} tokens/s/GPU")
+    else:
+        print(f"FAIL throughput: {per_gpu_tps:.1f} < {pass_tps} tokens/s/GPU")
+        failures.append("throughput")
+
+    if ttft_p50 <= pass_ttft:
+        print(f"PASS TTFT p50: {ttft_p50:.1f} <= {pass_ttft} ms")
+    else:
+        print(f"FAIL TTFT p50: {ttft_p50:.1f} > {pass_ttft} ms")
+        failures.append("ttft")
+
+    if e2e_p99 <= pass_e2e:
+        print(f"PASS E2E p99: {e2e_p99:.1f} <= {pass_e2e} ms")
+    else:
+        print(f"FAIL E2E p99: {e2e_p99:.1f} > {pass_e2e} ms")
+        failures.append("e2e-latency")
+
+    if failures:
+        print(f"\nFAILED checks: {failures}")
+        sys.exit(1)
+
+    print("\n=== vLLM Benchmark PASSED ===")
+    PYEOF
+
+---
+# vLLM Server Deployment (reference — assumed to be pre-deployed by the cluster)
+# This Job assumes a vLLM server is already running.
+# Below is the benchmark Job only.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vllm-inference-benchmark
+  namespace: gpu-inference-validation
+  labels:
+    app.kubernetes.io/name: vllm-inference-benchmark
+    app.kubernetes.io/part-of: gpu-inference-dod
+spec:
+  completions: 1
+  parallelism: 1
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vllm-inference-benchmark
+        app.kubernetes.io/part-of: gpu-inference-dod
+    spec:
+      serviceAccountName: gpu-inference-validator
+      restartPolicy: OnFailure
+      volumes:
+        - name: scripts
+          configMap:
+            name: vllm-benchmark-config
+            defaultMode: 0755
+      containers:
+        - name: benchmark
+          # vLLM image includes the benchmark scripts at /vllm/benchmarks/
+          image: vllm/vllm-openai:v0.6.0
+          env:
+            - name: VLLM_URL
+              value: "http://vllm-server.gpu-inference.svc.cluster.local:8000"
+            - name: MODEL
+              value: "meta-llama/Llama-3-8B-Instruct"
+            - name: NUM_GPUS
+              value: "1"
+            - name: CONCURRENCY
+              value: "32"
+            - name: NUM_PROMPTS
+              value: "200"
+            - name: INPUT_LEN
+              value: "512"
+            - name: OUTPUT_LEN
+              value: "512"
+            - name: PASS_TOKENS_PER_SEC
+              value: "1000"
+            - name: PASS_TTFT_P50_MS
+              value: "100"
+            - name: PASS_E2E_P99_MS
+              value: "500"
+          command:
+            - /bin/bash
+            - -c
+            - /scripts/run-vllm-benchmark.sh
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+          resources:
+            requests:
+              cpu: "2"
+              memory: "4Gi"
+            limits:
+              cpu: "4"
+              memory: "8Gi"

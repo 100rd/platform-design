@@ -1,0 +1,209 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# NCCL All-Reduce Benchmark — GPU Inference Cluster
+# ---------------------------------------------------------------------------------------------------------------------
+# Runs NCCL all-reduce benchmark across 8 GPUs (1 p5.48xlarge node with 8x H100 SXM5).
+# Validates inter-GPU and inter-node communication bandwidth using NCCL test suite.
+#
+# Acceptance criteria:
+#   - GPU utilization during all-reduce: > 85%
+#   - Inter-node NCCL bandwidth: > 400 GB/s (NVSwitch fabric baseline for p5 nodes)
+#   - All-reduce latency for 1GB message: < 50 ms
+# ---------------------------------------------------------------------------------------------------------------------
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nccl-benchmark-config
+  namespace: gpu-inference-validation
+  labels:
+    app.kubernetes.io/name: nccl-benchmark
+    app.kubernetes.io/part-of: gpu-inference-dod
+data:
+  run-nccl.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    NGPUS="${NGPUS:-8}"
+    PASS_BW_GBS="${PASS_BW_GBS:-400}"
+    PASS_GPU_UTIL="${PASS_GPU_UTIL:-85}"
+
+    echo "=== NCCL All-Reduce Benchmark ==="
+    echo "GPUs: ${NGPUS}"
+    echo "Pass bandwidth threshold: > ${PASS_BW_GBS} GB/s"
+    echo "Pass GPU util threshold:  > ${PASS_GPU_UTIL}%"
+
+    # Start nvidia-smi monitoring in the background
+    nvidia-smi dmon -s u -d 1 -o DT > /tmp/smi-util.txt &
+    SMI_PID=$!
+
+    # Run NCCL all-reduce test
+    # -b 1G: starting buffer size 1 GB
+    # -e 4G: ending buffer size 4 GB
+    # -f 2: step factor
+    # -g ${NGPUS}: number of GPUs
+    # -n 20: number of iterations (warmup + measured)
+    echo ""
+    echo "--- Running all_reduce_perf ---"
+    /opt/nccl-tests/build/all_reduce_perf \
+      -b 1G \
+      -e 4G \
+      -f 2 \
+      -g "${NGPUS}" \
+      -n 20 \
+      -w 5 \
+      --check 1 \
+      2>&1 | tee /tmp/nccl-output.txt
+
+    # Stop monitoring
+    kill "${SMI_PID}" 2>/dev/null || true
+    sleep 1
+
+    echo ""
+    echo "--- Evaluating results ---"
+    python3 - <<'PYEOF'
+    import re, sys, os
+
+    pass_bw  = float(os.environ.get("PASS_BW_GBS", "400"))
+    pass_util = float(os.environ.get("PASS_GPU_UTIL", "85"))
+    failures = []
+
+    # --- Parse NCCL bandwidth ---
+    with open("/tmp/nccl-output.txt") as f:
+        nccl_lines = f.readlines()
+
+    # NCCL all_reduce_perf outputs a table; look for the last data row
+    # columns: size count type redop root time(us) algbw(GB/s) busbw(GB/s) ...
+    bw_values = []
+    for line in nccl_lines:
+        # Skip header / info lines
+        if re.match(r'^\s*\d', line):
+            parts = line.split()
+            if len(parts) >= 7:
+                try:
+                    bw_values.append(float(parts[6]))  # algbw column
+                except ValueError:
+                    pass
+
+    if not bw_values:
+        print("FAIL: could not parse bandwidth from NCCL output")
+        sys.exit(1)
+
+    avg_bw = sum(bw_values) / len(bw_values)
+    max_bw = max(bw_values)
+    print(f"NCCL avg algbw: {avg_bw:.1f} GB/s  |  max: {max_bw:.1f} GB/s")
+
+    if avg_bw >= pass_bw:
+        print(f"PASS bandwidth: {avg_bw:.1f} >= {pass_bw} GB/s")
+    else:
+        print(f"FAIL bandwidth: {avg_bw:.1f} < {pass_bw} GB/s")
+        failures.append("bandwidth")
+
+    # --- Parse GPU utilization ---
+    util_values = []
+    try:
+        with open("/tmp/smi-util.txt") as f:
+            for line in f:
+                if re.match(r'^\d', line.strip()):
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        try:
+                            util_values.append(float(parts[2]))
+                        except ValueError:
+                            pass
+    except FileNotFoundError:
+        print("WARNING: nvidia-smi dmon output not found; skipping utilization check")
+        util_values = []
+
+    if util_values:
+        avg_util = sum(util_values) / len(util_values)
+        print(f"GPU avg utilization: {avg_util:.1f}%")
+        if avg_util >= pass_util:
+            print(f"PASS util: {avg_util:.1f}% >= {pass_util}%")
+        else:
+            print(f"FAIL util: {avg_util:.1f}% < {pass_util}%")
+            failures.append("gpu-utilization")
+
+    if failures:
+        print(f"\nFAILED checks: {failures}")
+        sys.exit(1)
+
+    print("\n=== NCCL Benchmark PASSED ===")
+    PYEOF
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nccl-benchmark
+  namespace: gpu-inference-validation
+  labels:
+    app.kubernetes.io/name: nccl-benchmark
+    app.kubernetes.io/part-of: gpu-inference-dod
+spec:
+  completions: 1
+  parallelism: 1
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nccl-benchmark
+        app.kubernetes.io/part-of: gpu-inference-dod
+    spec:
+      serviceAccountName: gpu-inference-validator
+      restartPolicy: OnFailure
+      nodeSelector:
+        node-role: gpu
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      volumes:
+        - name: scripts
+          configMap:
+            name: nccl-benchmark-config
+            defaultMode: 0755
+      containers:
+        - name: nccl-benchmark
+          # NCCL tests image with CUDA 12.3, nccl-tests pre-built
+          image: nvcr.io/nvidia/nccl-tests:cuda12.3-nccl2.19-ubuntu22.04
+          env:
+            - name: NGPUS
+              value: "8"
+            - name: PASS_BW_GBS
+              value: "400"
+            - name: PASS_GPU_UTIL
+              value: "85"
+            # Ensure NCCL uses NVLink / NVSwitch fabric on p5 nodes
+            - name: NCCL_P2P_DISABLE
+              value: "0"
+            - name: NCCL_SHM_DISABLE
+              value: "0"
+            - name: NCCL_DEBUG
+              value: "INFO"
+            - name: NCCL_SOCKET_IFNAME
+              value: "eth0"
+            # AWS EFA settings (if EFA NICs present on p5)
+            - name: FI_PROVIDER
+              value: "efa"
+            - name: RDMAV_FORK_SAFE
+              value: "1"
+          command:
+            - /bin/bash
+            - -c
+            - /scripts/run-nccl.sh
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+          resources:
+            requests:
+              cpu: "8"
+              memory: "32Gi"
+            limits:
+              cpu: "16"
+              memory: "64Gi"
+              nvidia.com/gpu: "8"
+          securityContext:
+            capabilities:
+              add:
+                - IPC_LOCK

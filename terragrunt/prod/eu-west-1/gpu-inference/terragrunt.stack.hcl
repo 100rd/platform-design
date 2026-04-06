@@ -86,3 +86,8 @@ unit "gpu-inference-hpa" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-hpa"
   path   = "gpu-inference-hpa"
 }
+
+unit "gpu-inference-validation" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-validation"
+  path   = "gpu-inference-validation"
+}
