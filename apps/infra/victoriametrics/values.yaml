@@ -1,0 +1,229 @@
+---
+# VictoriaMetrics Operator Configuration for GPU Inference Cluster
+# Replaces kube-prometheus-stack — optimized for high-cardinality GPU metrics
+#
+# Architecture:
+#   VMAgent (scrape) -> VMCluster (vminsert -> vmstorage -> vmselect) -> Grafana
+#   VMAlert (rules) -> VMCluster (query) -> Alertmanager
+#
+# Why VictoriaMetrics over Prometheus for GPU clusters:
+#   - 10x lower memory usage per time series
+#   - Native clustering (no Thanos sidecar needed)
+#   - Better compression for high-cardinality DCGM metrics
+#   - MetricsQL superset of PromQL (backward compatible)
+
+victoria-metrics-operator:
+  enabled: true
+
+  # --------------------------------------------------------------------------
+  # Operator Settings
+  # --------------------------------------------------------------------------
+  operator:
+    # Enable conversion of Prometheus CRDs (ServiceMonitor, PrometheusRule)
+    # to VictoriaMetrics equivalents automatically
+    enable_converter_ownership: true
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 300m
+        memory: 256Mi
+
+    # Run operator on system nodes
+    nodeSelector:
+      node-role.kubernetes.io/system: ""
+    tolerations:
+      - key: node-role.kubernetes.io/system
+        operator: Exists
+        effect: NoSchedule
+
+  # --------------------------------------------------------------------------
+  # VMCluster — distributed time-series database
+  # --------------------------------------------------------------------------
+  vmcluster:
+    enabled: true
+    spec:
+      retentionPeriod: "30d"
+      replicationFactor: 2
+
+      # VMSelect — query layer
+      vmselect:
+        replicaCount: 2
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        extraArgs:
+          search.maxConcurrentRequests: "16"
+          search.maxUniqueTimeseries: "1000000"
+        affinity:
+          podAntiAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  labelSelector:
+                    matchLabels:
+                      app: vmselect
+                  topologyKey: kubernetes.io/hostname
+        nodeSelector:
+          node-role.kubernetes.io/system: ""
+        tolerations:
+          - key: node-role.kubernetes.io/system
+            operator: Exists
+            effect: NoSchedule
+
+      # VMInsert — ingestion layer
+      vminsert:
+        replicaCount: 2
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        extraArgs:
+          maxLabelsPerTimeseries: "60"
+        affinity:
+          podAntiAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  labelSelector:
+                    matchLabels:
+                      app: vminsert
+                  topologyKey: kubernetes.io/hostname
+        nodeSelector:
+          node-role.kubernetes.io/system: ""
+        tolerations:
+          - key: node-role.kubernetes.io/system
+            operator: Exists
+            effect: NoSchedule
+
+      # VMStorage — storage layer
+      vmstorage:
+        replicaCount: 2
+        resources:
+          requests:
+            cpu: 1000m
+            memory: 4Gi
+          limits:
+            cpu: 4000m
+            memory: 8Gi
+        storageDataPath: /vm-data
+        storage:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: gp3
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 100Gi
+        extraArgs:
+          dedup.minScrapeInterval: "30s"
+          retentionTimezoneOffset: "0h"
+        affinity:
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchLabels:
+                    app: vmstorage
+                topologyKey: kubernetes.io/hostname
+        nodeSelector:
+          node-role.kubernetes.io/system: ""
+        tolerations:
+          - key: node-role.kubernetes.io/system
+            operator: Exists
+            effect: NoSchedule
+
+  # --------------------------------------------------------------------------
+  # VMAgent — scrape agent (replaces Prometheus scraper)
+  # --------------------------------------------------------------------------
+  vmagent:
+    enabled: true
+    spec:
+      replicaCount: 2
+      resources:
+        requests:
+          cpu: 500m
+          memory: 512Mi
+        limits:
+          cpu: 2000m
+          memory: 2Gi
+      # Discover ServiceMonitors and PodMonitors (including Prometheus CRDs)
+      selectAllByDefault: true
+      scrapeInterval: "30s"
+      extraArgs:
+        promscrape.maxScrapeSize: "64MB"
+        promscrape.streamParse: "true"
+      nodeSelector:
+        node-role.kubernetes.io/system: ""
+      tolerations:
+        - key: node-role.kubernetes.io/system
+          operator: Exists
+          effect: NoSchedule
+
+  # --------------------------------------------------------------------------
+  # VMAlert — alerting (replaces Prometheus alerting + rules)
+  # --------------------------------------------------------------------------
+  vmalert:
+    enabled: true
+    spec:
+      replicaCount: 2
+      # Reads PrometheusRule CRDs via operator converter
+      selectAllByDefault: true
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      evaluationInterval: "30s"
+      nodeSelector:
+        node-role.kubernetes.io/system: ""
+      tolerations:
+        - key: node-role.kubernetes.io/system
+          operator: Exists
+          effect: NoSchedule
+
+  # --------------------------------------------------------------------------
+  # Alertmanager (reuse existing Alertmanager config)
+  # --------------------------------------------------------------------------
+  alertmanager:
+    enabled: true
+    spec:
+      replicaCount: 2
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+      nodeSelector:
+        node-role.kubernetes.io/system: ""
+      tolerations:
+        - key: node-role.kubernetes.io/system
+          operator: Exists
+          effect: NoSchedule
+
+  # --------------------------------------------------------------------------
+  # Grafana datasource (configure Grafana to query VMSelect)
+  # --------------------------------------------------------------------------
+  # Note: Grafana is deployed separately. Configure this datasource:
+  #   URL: http://vmselect-vmcluster.monitoring:8481/select/0/prometheus/
+  #   Type: prometheus (VictoriaMetrics is PromQL-compatible)
+
+  # --------------------------------------------------------------------------
+  # ServiceMonitor for self-monitoring
+  # --------------------------------------------------------------------------
+  serviceMonitor:
+    enabled: true
+    additionalLabels:
+      prometheus.io/scrape: "true"

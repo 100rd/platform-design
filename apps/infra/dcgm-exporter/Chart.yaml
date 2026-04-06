@@ -1,0 +1,32 @@
+apiVersion: v2
+name: dcgm-exporter
+description: NVIDIA DCGM Exporter - GPU health metrics and auto-taint for Kubernetes
+version: 1.0.0
+appVersion: "4.5.0"
+type: application
+
+dependencies:
+  # NVIDIA DCGM Exporter — exports GPU health metrics in Prometheus format
+  # https://github.com/NVIDIA/dcgm-exporter
+  - name: dcgm-exporter
+    version: "4.5.0"
+    repository: https://nvidia.github.io/dcgm-exporter/helm-charts
+    condition: dcgm-exporter.enabled
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - gpu
+  - nvidia
+  - dcgm
+  - metrics
+  - health
+  - monitoring
+  - exporter
+  - prometheus
+
+annotations:
+  category: Observability
+  platform: Kubernetes

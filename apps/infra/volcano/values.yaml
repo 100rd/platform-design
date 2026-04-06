@@ -1,0 +1,156 @@
+---
+# Volcano Scheduler Configuration for GPU Inference Cluster
+# Provides gang scheduling for distributed inference and training jobs
+#
+# Key features:
+#   - Gang scheduling: all-or-nothing pod placement for multi-GPU jobs
+#   - DRA integration: Dynamic Resource Allocation for fine-grained GPU scheduling
+#   - Fair-share queues: prevent GPU starvation across teams
+#   - Preemption: lower-priority jobs yield to higher-priority inference
+#
+# Reference: docs/gpu-inference-dod.md (scheduling criteria)
+
+volcano:
+  enabled: true
+
+  # --------------------------------------------------------------------------
+  # Scheduler Configuration
+  # --------------------------------------------------------------------------
+  scheduler:
+    replicas: 2
+
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+
+    # Scheduler plugins — order matters
+    plugins:
+      # Gang: all-or-nothing scheduling for distributed jobs
+      - name: gang
+        enablePreemptable: true
+      # DRA: Dynamic Resource Allocation for GPU ResourceClaims
+      - name: dra
+      # Predicates: standard Kubernetes scheduling predicates
+      - name: predicates
+      # Proportion: fair-share queue scheduling
+      - name: proportion
+      # Priority: respect PriorityClass
+      - name: priority
+      # NodeOrder: optimize node selection
+      - name: nodeorder
+      # Binpack: pack pods onto fewer nodes for GPU efficiency
+      - name: binpack
+        arguments:
+          binpack.weight: 10
+          binpack.cpu: 1
+          binpack.memory: 1
+          binpack.resources: "nvidia.com/gpu"
+          binpack.resources.nvidia.com/gpu: 10
+
+    # Run scheduler on system nodes
+    nodeSelector:
+      node-role.kubernetes.io/system: ""
+    tolerations:
+      - key: node-role.kubernetes.io/system
+        operator: Exists
+        effect: NoSchedule
+
+    # HA anti-affinity
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: volcano-scheduler
+              topologyKey: kubernetes.io/hostname
+
+  # --------------------------------------------------------------------------
+  # Controller Manager
+  # --------------------------------------------------------------------------
+  controller:
+    replicas: 2
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+    nodeSelector:
+      node-role.kubernetes.io/system: ""
+    tolerations:
+      - key: node-role.kubernetes.io/system
+        operator: Exists
+        effect: NoSchedule
+
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: volcano-controller
+              topologyKey: kubernetes.io/hostname
+
+  # --------------------------------------------------------------------------
+  # Admission Webhook
+  # --------------------------------------------------------------------------
+  admission:
+    replicas: 2
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+    nodeSelector:
+      node-role.kubernetes.io/system: ""
+    tolerations:
+      - key: node-role.kubernetes.io/system
+        operator: Exists
+        effect: NoSchedule
+
+  # --------------------------------------------------------------------------
+  # Queue Definitions
+  # --------------------------------------------------------------------------
+  # Queues are created as Volcano Queue CRDs after chart deployment.
+  # Define them here for documentation; actual CRDs are in templates/ or
+  # applied via ArgoCD Application overlay.
+  #
+  # gpu-inference queue:
+  #   weight: 10
+  #   capability:
+  #     nvidia.com/gpu: 64   # 8 nodes x 8 GPUs
+  #   reclaimable: true
+  #
+  # gpu-training queue:
+  #   weight: 5
+  #   capability:
+  #     nvidia.com/gpu: 32
+  #   reclaimable: true
+  #
+  # default queue:
+  #   weight: 1
+  #   reclaimable: true
+
+  # --------------------------------------------------------------------------
+  # Monitoring
+  # --------------------------------------------------------------------------
+  serviceMonitor:
+    enabled: true
+    additionalLabels:
+      prometheus.io/scrape: "true"
+    interval: 30s
+    namespace: monitoring

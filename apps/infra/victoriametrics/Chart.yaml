@@ -1,0 +1,32 @@
+apiVersion: v2
+name: victoriametrics
+description: VictoriaMetrics Operator - High-performance monitoring for GPU inference clusters
+version: 1.0.0
+appVersion: "0.68.0"
+type: application
+
+dependencies:
+  # VictoriaMetrics Operator — manages VMCluster, VMAgent, VMAlert, VMAuth CRDs
+  # Replaces kube-prometheus-stack on gpu-inference clusters for better performance
+  # https://docs.victoriametrics.com/operator/
+  - name: victoria-metrics-operator
+    version: "0.68.0"
+    repository: https://victoriametrics.github.io/helm-charts
+    condition: victoria-metrics-operator.enabled
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - monitoring
+  - metrics
+  - victoriametrics
+  - prometheus
+  - gpu
+  - observability
+  - tsdb
+
+annotations:
+  category: Observability
+  platform: Kubernetes

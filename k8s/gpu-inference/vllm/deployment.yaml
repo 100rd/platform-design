@@ -55,6 +55,7 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
+        scheduling.volcano.sh/queue-name: gpu-inference-default
     spec:
       schedulerName: volcano
       priorityClassName: gpu-inference-medium
@@ -147,14 +148,12 @@ spec:
             requests:
               cpu: "16"
               memory: "128Gi"
-              # DRA GPU resource allocation via ResourceClaim
             limits:
               cpu: "32"
               memory: "256Gi"
-          # Reference the DRA claim defined above
-          resourceClaimNames:
-            - claimName: gpu-claim
-              resourceClaimName: gpu-claim
+            # Reference the DRA ResourceClaim defined at pod spec level
+            claims:
+              - name: gpu-claim
           volumeMounts:
             - name: vllm-config
               mountPath: /etc/vllm
@@ -186,6 +185,3 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 10
             failureThreshold: 30
-      # Volcano queue annotation
-      annotations:
-        scheduling.volcano.sh/queue-name: gpu-inference-default
