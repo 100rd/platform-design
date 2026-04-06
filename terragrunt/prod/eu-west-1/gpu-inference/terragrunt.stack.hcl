@@ -71,3 +71,8 @@ unit "gpu-inference-scheduling-policies" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-scheduling-policies"
   path   = "gpu-inference-scheduling-policies"
 }
+
+unit "gpu-inference-dcgm" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-dcgm"
+  path   = "gpu-inference-dcgm"
+}
