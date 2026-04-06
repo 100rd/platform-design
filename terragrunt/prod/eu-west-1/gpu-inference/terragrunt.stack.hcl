@@ -56,3 +56,8 @@ unit "gpu-inference-volcano" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-volcano"
   path   = "gpu-inference-volcano"
 }
+
+unit "gpu-inference-victoriametrics" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-victoriametrics"
+  path   = "gpu-inference-victoriametrics"
+}
