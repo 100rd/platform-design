@@ -32,3 +32,7 @@ unit "gpu-inference-cilium-encryption" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-cilium-encryption"
   path   = "gpu-inference-cilium-encryption"
 }
+unit "gpu-inference-gpu-operator" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-gpu-operator"
+  path   = "gpu-inference-gpu-operator"
+}
