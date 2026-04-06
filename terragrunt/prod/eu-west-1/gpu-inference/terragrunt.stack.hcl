@@ -3,6 +3,7 @@
 # ---------------------------------------------------------------------------------------------------------------------
 # Deploys the gpu-inference cluster infrastructure for prod eu-west-1.
 # Phase 1: VPC + EKS cluster foundation.
+# Phase 2: Cilium v1.19 native routing + BGP Control Plane peering via TGW Connect.
 # Additional units will be added as subsequent issues are implemented.
 # ---------------------------------------------------------------------------------------------------------------------
 
@@ -19,4 +20,9 @@ unit "gpu-inference-eks" {
 unit "gpu-inference-node-tuning" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-node-tuning"
   path   = "gpu-inference-node-tuning"
+}
+
+unit "gpu-inference-cilium" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-cilium"
+  path   = "gpu-inference-cilium"
 }

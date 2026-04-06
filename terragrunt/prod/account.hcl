@@ -133,5 +133,9 @@ locals {
     reserved_system_cpus = "0-3"
     isolated_cpus        = "4-191"
     hugepages_count      = 1536
+    # Cilium BGP peering
+    enable_bgp_peering = false # Enable after TGW Connect peers configured
+    bgp_local_asn      = 65100
+    bgp_peers          = [] # Populate with TGW Connect peer IPs after deployment
   }
 }
