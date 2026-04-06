@@ -1,0 +1,113 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-sre-alerting-rules
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/name: ai-sre-alerting-rules
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: ai-sre
+data:
+  ai-sre-rules.yaml: |
+    groups:
+      - name: ai-sre-system-health
+        interval: 60s
+        rules:
+          - alert: AISRESystemDown
+            expr: up{job="ai-sre-orchestrator"} == 0
+            for: 5m
+            labels:
+              severity: critical
+              team: platform
+            annotations:
+              summary: "AI SRE orchestrator is down"
+              description: "The AI SRE system has been unreachable for 5 minutes. Alerts are not being processed by the AI SRE system."
+
+          - alert: AISREHighErrorRate
+            expr: |
+              rate(ai_sre_errors_total[5m]) /
+              rate(ai_sre_investigation_total[5m]) > 0.3
+            for: 5m
+            labels:
+              severity: warning
+              team: platform
+            annotations:
+              summary: "AI SRE error rate above 30%"
+              description: "Agent error rate is {{ $value | humanizePercentage }} over the last 5 minutes. Circuit breaker may trip."
+
+          - alert: AISRECircuitBreakerOpen
+            expr: ai_sre_circuit_breaker_state == 2
+            for: 1m
+            labels:
+              severity: critical
+              team: platform
+            annotations:
+              summary: "AI SRE circuit breaker is OPEN"
+              description: "Agent invocations are blocked due to high error rate. Manual investigation required."
+
+          - alert: AISREHighLatency
+            expr: |
+              histogram_quantile(0.95,
+                rate(ai_sre_investigation_duration_seconds_bucket[30m])
+              ) > 120
+            for: 15m
+            labels:
+              severity: warning
+              team: platform
+            annotations:
+              summary: "AI SRE p95 investigation latency above 2 minutes"
+              description: "p95 investigation latency is {{ $value }}s, exceeding the 120s SLO target."
+
+          - alert: AISREDailyCostHigh
+            expr: ai_sre_daily_cost_usd > 80
+            for: 1m
+            labels:
+              severity: warning
+              team: platform
+            annotations:
+              summary: "AI SRE daily API cost approaching budget"
+              description: "Daily Anthropic API cost is ${{ $value }}, approaching the $100 budget cap."
+
+          - alert: AISREDailyCostExceeded
+            expr: ai_sre_daily_cost_usd > 100
+            for: 1m
+            labels:
+              severity: critical
+              team: platform
+            annotations:
+              summary: "AI SRE daily API cost exceeded budget"
+              description: "Daily Anthropic API cost is ${{ $value }}, exceeding the $100 budget. New investigations may be blocked."
+
+          - alert: AISRELowAccuracy
+            expr: ai_sre_accuracy_ratio < 0.6
+            for: 24h
+            labels:
+              severity: warning
+              team: platform
+            annotations:
+              summary: "AI SRE advisory accuracy below 60%"
+              description: "Agent {{ $labels.agent_role }} has {{ $value | humanizePercentage }} accuracy over the past week."
+
+          - alert: AISRESlackAppDown
+            expr: up{job="ai-sre-slack-app"} == 0
+            for: 5m
+            labels:
+              severity: warning
+              team: platform
+            annotations:
+              summary: "AI SRE Slack app is down"
+              description: "The Slack integration is unreachable. Advisories cannot be delivered to Slack channels."
+
+      - name: ai-sre-error-budget
+        interval: 300s
+        rules:
+          - record: ai_sre:availability:ratio_30d
+            expr: |
+              sum(rate(ai_sre_investigation_total{outcome="success"}[30d])) /
+              sum(rate(ai_sre_investigation_total[30d]))
+
+          - record: ai_sre:latency_p95:seconds_30d
+            expr: |
+              histogram_quantile(0.95,
+                rate(ai_sre_investigation_duration_seconds_bucket[30d])
+              )
