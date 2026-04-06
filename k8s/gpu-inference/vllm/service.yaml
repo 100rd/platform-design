@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vllm
+  namespace: gpu-inference
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: inference-server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm
+  namespace: gpu-inference
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: inference-server
+    app.kubernetes.io/version: "0.19.0"
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: inference-server
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+  sessionAffinity: None

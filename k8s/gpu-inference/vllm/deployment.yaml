@@ -1,0 +1,191 @@
+apiVersion: resource.k8s.io/v1beta1
+kind: ResourceClaimTemplate
+metadata:
+  name: single-gpu-inference
+  namespace: gpu-inference
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: dra-claim-template
+spec:
+  spec:
+    devices:
+      requests:
+        - name: gpu
+          deviceClassName: gpu.nvidia.com
+          count: 8
+      config:
+        - requests: [gpu]
+          opaque:
+            driver: gpu.nvidia.com
+            parameters:
+              apiVersion: gpu.nvidia.com/v1alpha1
+              kind: GpuClaimParameters
+              sharing:
+                strategy: None
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  namespace: gpu-inference
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: inference-server
+    app.kubernetes.io/version: "0.19.0"
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+      app.kubernetes.io/component: inference-server
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vllm
+        app.kubernetes.io/component: inference-server
+        app.kubernetes.io/version: "0.19.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      schedulerName: volcano
+      priorityClassName: gpu-inference-medium
+      serviceAccountName: vllm
+      terminationGracePeriodSeconds: 120
+      # Node affinity: target GPU nodes
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: gpu-inference
+                    operator: In
+                    values: ["true"]
+                  - key: nvidia.com/gpu.product
+                    operator: In
+                    values: ["H100-SXM5"]
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: vllm
+                topologyKey: kubernetes.io/hostname
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      # DRA ResourceClaim per pod (one claim template = one claim per replica)
+      resourceClaims:
+        - name: gpu-claim
+          resourceClaimTemplateName: single-gpu-inference
+      volumes:
+        - name: vllm-config
+          configMap:
+            name: vllm-config
+        - name: model-storage
+          emptyDir: {}
+        - name: lora-adapters
+          emptyDir: {}
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Gi
+      initContainers:
+        - name: model-loader
+          image: busybox:1.36
+          command: ["/bin/sh", "-c", "echo 'Model loading placeholder — replace with actual model pull init container'"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.19.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - python3
+            - -m
+            - vllm.entrypoints.openai.api_server
+            - --config
+            - /etc/vllm/vllm-config.yaml
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: VLLM_WORKER_MULTIPROC_METHOD
+              value: spawn
+            - name: NCCL_DEBUG
+              value: WARN
+            - name: NCCL_IB_DISABLE
+              value: "0"
+            - name: NCCL_NET_GDR_LEVEL
+              value: "5"
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vllm-secrets
+                  key: hf-token
+                  optional: true
+          resources:
+            requests:
+              cpu: "16"
+              memory: "128Gi"
+              # DRA GPU resource allocation via ResourceClaim
+            limits:
+              cpu: "32"
+              memory: "256Gi"
+          # Reference the DRA claim defined above
+          resourceClaimNames:
+            - claimName: gpu-claim
+              resourceClaimName: gpu-claim
+          volumeMounts:
+            - name: vllm-config
+              mountPath: /etc/vllm
+              readOnly: true
+            - name: model-storage
+              mountPath: /models
+            - name: lora-adapters
+              mountPath: /lora-adapters
+            - name: shm
+              mountPath: /dev/shm
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 30
+      # Volcano queue annotation
+      annotations:
+        scheduling.volcano.sh/queue-name: gpu-inference-default

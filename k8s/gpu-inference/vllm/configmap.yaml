@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-config
+  namespace: gpu-inference
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: inference-server
+    app.kubernetes.io/version: "0.19.0"
+data:
+  model-path: "/models/meta-llama/Llama-3-70B-Instruct"
+  tensor-parallel-size: "8"
+  max-model-len: "131072"
+  enable-lora: "true"
+  max-loras: "8"
+  lora-modules: |
+    - name: finance-adapter
+      path: /lora-adapters/finance-v1
+    - name: code-adapter
+      path: /lora-adapters/code-v2
+    - name: summarization-adapter
+      path: /lora-adapters/summarization-v1
+  vllm-config.yaml: |
+    # vLLM v0.19 server configuration
+    model: /models/meta-llama/Llama-3-70B-Instruct
+    tensor-parallel-size: 8
+    max-model-len: 131072
+    enable-lora: true
+    max-loras: 8
+    lora-extra-vocab-size: 256
+    max-cpu-loras: 32
+    gpu-memory-utilization: 0.92
+    dtype: bfloat16
+    disable-log-requests: false
+    uvicorn-log-level: warning
+    port: 8000
+    host: "0.0.0.0"
+    served-model-name: "llama-3-70b-instruct"
+    lora-modules:
+      - name: finance-adapter
+        path: /lora-adapters/finance-v1
+      - name: code-adapter
+        path: /lora-adapters/code-v2
+      - name: summarization-adapter
+        path: /lora-adapters/summarization-v1

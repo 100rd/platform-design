@@ -76,3 +76,8 @@ unit "gpu-inference-dcgm" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-dcgm"
   path   = "gpu-inference-dcgm"
 }
+
+unit "gpu-inference-vllm" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-vllm"
+  path   = "gpu-inference-vllm"
+}
