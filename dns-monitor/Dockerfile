@@ -5,7 +5,7 @@ COPY . .
 RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -o dns-monitor .
 
-FROM alpine:3.21
+FROM alpine:3.23
 RUN apk --no-cache add ca-certificates
 RUN adduser -D -u 65534 nonroot
 WORKDIR /app
