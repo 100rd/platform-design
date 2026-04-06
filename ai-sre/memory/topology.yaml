@@ -1,0 +1,86 @@
+clusters:
+  - name: platform
+    type: hub
+    region: us-east-1
+    k8s_version: "1.32"
+    critical_services:
+      - name: argocd
+        namespace: argocd
+        replicas: 3
+        is_stateful: false
+        slo_defined: true
+      - name: crossplane
+        namespace: crossplane-system
+        replicas: 2
+        is_stateful: false
+        slo_defined: false
+      - name: ai-sre-system
+        namespace: ai-sre-system
+        replicas: 2
+        is_stateful: false
+        slo_defined: true
+      - name: external-secrets
+        namespace: external-secrets
+        replicas: 2
+        is_stateful: false
+        slo_defined: false
+    dependencies: []
+
+  - name: gpu-inference
+    type: spoke
+    region: us-east-1
+    k8s_version: "1.32"
+    critical_services:
+      - name: vllm-inference
+        namespace: gpu-inference
+        replicas: 4
+        is_stateful: false
+        slo_defined: true
+      - name: volcano-scheduler
+        namespace: volcano-system
+        replicas: 2
+        is_stateful: false
+        slo_defined: false
+      - name: gpu-operator
+        namespace: gpu-operator
+        replicas: 1
+        is_stateful: false
+        slo_defined: false
+      - name: karpenter
+        namespace: kube-system
+        replicas: 2
+        is_stateful: false
+        slo_defined: false
+    dependencies:
+      - platform
+
+  - name: blockchain
+    type: spoke
+    region: us-east-1
+    k8s_version: "1.32"
+    critical_services:
+      - name: ethereum-node
+        namespace: blockchain
+        replicas: 3
+        is_stateful: true
+        slo_defined: true
+      - name: bitcoin-node
+        namespace: blockchain
+        replicas: 2
+        is_stateful: true
+        slo_defined: false
+    dependencies:
+      - platform
+
+  - name: gpu-analysis
+    type: spoke
+    region: us-east-1
+    k8s_version: "1.32"
+    critical_services:
+      - name: video-processing
+        namespace: analysis
+        replicas: 2
+        is_stateful: false
+        slo_defined: false
+    dependencies:
+      - platform

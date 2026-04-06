@@ -1,0 +1,70 @@
+slos:
+  - service: vllm-inference
+    cluster: gpu-inference
+    namespace: gpu-inference
+    owner_team: ml-platform
+    escalation_channel: "#ml-platform-oncall"
+    objectives:
+      - name: availability
+        target: 99.9
+        window_days: 30
+        metric: "100 * (1 - (sum(rate(vllm_request_errors_total[5m])) / sum(rate(vllm_requests_total[5m]))))"
+        description: "Inference API availability"
+      - name: latency_p99
+        target: 99.0
+        window_days: 30
+        target_ms: 500
+        metric: "histogram_quantile(0.99, rate(vllm_request_duration_seconds_bucket[5m])) * 1000"
+        description: "P99 latency under 500ms"
+
+  - service: argocd
+    cluster: platform
+    namespace: argocd
+    owner_team: platform-team
+    escalation_channel: "#platform-oncall"
+    objectives:
+      - name: sync_success_rate
+        target: 99.5
+        window_days: 30
+        metric: "100 * (1 - (sum(rate(argocd_app_sync_failed_total[5m])) / sum(rate(argocd_app_sync_total[5m]))))"
+        description: "ArgoCD sync success rate"
+      - name: api_availability
+        target: 99.9
+        window_days: 30
+        metric: "100 * (1 - (sum(rate(argocd_server_requests_total{code=~'5..'}[5m])) / sum(rate(argocd_server_requests_total[5m]))))"
+        description: "ArgoCD API server availability"
+
+  - service: ethereum-node
+    cluster: blockchain
+    namespace: blockchain
+    owner_team: blockchain-team
+    escalation_channel: "#blockchain-oncall"
+    objectives:
+      - name: block_sync
+        target: 99.0
+        window_days: 30
+        metric: "100 * (ethereum_sync_head_block / ethereum_network_head_block)"
+        description: "Block sync within 99% of network head"
+      - name: rpc_availability
+        target: 99.5
+        window_days: 30
+        metric: "100 * (1 - (sum(rate(ethereum_rpc_errors_total[5m])) / sum(rate(ethereum_rpc_requests_total[5m]))))"
+        description: "Ethereum JSON-RPC availability"
+
+  - service: ai-sre-system
+    cluster: platform
+    namespace: ai-sre-system
+    owner_team: platform-team
+    escalation_channel: "#platform-oncall"
+    objectives:
+      - name: alert_processing
+        target: 99.0
+        window_days: 30
+        metric: "100 * (1 - (sum(rate(ai_sre_webhook_requests_total{status='rate_limited'}[5m])) / sum(rate(ai_sre_webhook_requests_total[5m]))))"
+        description: "Alert processing success rate"
+      - name: advisory_latency_p95
+        target: 95.0
+        window_days: 30
+        target_ms: 60000
+        metric: "histogram_quantile(0.95, rate(ai_sre_agent_investigation_duration_seconds_bucket[5m])) * 1000"
+        description: "P95 advisory generation under 60s"
