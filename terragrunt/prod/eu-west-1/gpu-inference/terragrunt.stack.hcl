@@ -41,3 +41,8 @@ unit "gpu-inference-kata-cc" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-kata-cc"
   path   = "gpu-inference-kata-cc"
 }
+
+unit "gpu-inference-tgw-connect" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-tgw-connect"
+  path   = "gpu-inference-tgw-connect"
+}

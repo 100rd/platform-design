@@ -137,5 +137,7 @@ locals {
     enable_bgp_peering = false # Enable after TGW Connect peers configured
     bgp_local_asn      = 65100
     bgp_peers          = [] # Populate with TGW Connect peer IPs after deployment
+    # TGW Connect BGP peers (populate after TGW Connect deployment)
+    tgw_bgp_peers = {}
   }
 }
