@@ -61,3 +61,8 @@ unit "gpu-inference-victoriametrics" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-victoriametrics"
   path   = "gpu-inference-victoriametrics"
 }
+
+unit "gpu-inference-logging" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-logging"
+  path   = "gpu-inference-logging"
+}
