@@ -128,5 +128,10 @@ locals {
     gpu_max_size        = 100
     gpu_desired_size    = 0
     gpu_placement_group = ""
+
+    # Node tuning (p5.48xlarge: 192 vCPUs, 2TB RAM)
+    reserved_system_cpus = "0-3"
+    isolated_cpus        = "4-191"
+    hugepages_count      = 1536
   }
 }
