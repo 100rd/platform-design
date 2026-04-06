@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-sre-service-monitors
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/name: ai-sre-service-monitors
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: ai-sre
+data:
+  scrape-config.yaml: |
+    # VMServiceScrape equivalent configuration for VictoriaMetrics Operator
+    # These define Prometheus scrape targets for all AI SRE components
+    scrape_configs:
+      - job_name: ai-sre-orchestrator
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [ai-sre-system]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            regex: ai-sre-orchestrator
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            regex: metrics
+            action: keep
+
+      - job_name: ai-sre-ingestion
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [ai-sre-system]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            regex: ai-sre-ingestion
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            regex: metrics
+            action: keep
+
+      - job_name: ai-sre-slack-app
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [ai-sre-system]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            regex: ai-sre-slack-app
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            regex: metrics
+            action: keep
+
+      - job_name: ai-sre-metrics-mcp
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [ai-sre-system]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            regex: ai-sre-metrics-mcp
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            regex: metrics
+            action: keep
