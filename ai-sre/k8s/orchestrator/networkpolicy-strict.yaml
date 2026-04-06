@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ai-sre-default-deny
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/part-of: ai-sre
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: ai-sre
+  policyTypes:
+    - Ingress
+    - Egress
+  # Default deny all — each component defines its own allow rules
+  ingress: []
+  egress:
+    # DNS is allowed for all pods
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
