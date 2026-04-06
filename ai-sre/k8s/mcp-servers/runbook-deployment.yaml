@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runbook-mcp
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/name: runbook-mcp
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: ai-sre
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: runbook-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: runbook-mcp
+        app.kubernetes.io/component: mcp-server
+        app.kubernetes.io/part-of: ai-sre
+    spec:
+      serviceAccountName: ai-sre-orchestrator
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: runbook-mcp
+          image: ai-sre-runbook-mcp:latest
+          ports:
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+          env:
+            - name: RUNBOOK_DIR
+              value: /etc/ai-sre/runbooks
+            - name: APPROVAL_CALLBACK_URL
+              value: http://slack-app.ai-sre-system.svc.cluster.local:3000/approval
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: runbooks
+              mountPath: /etc/ai-sre/runbooks
+              readOnly: true
+      volumes:
+        - name: runbooks
+          configMap:
+            name: ai-sre-runbooks
