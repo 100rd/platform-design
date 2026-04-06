@@ -109,4 +109,20 @@ locals {
       expire_after = "720h"
     }
   }
+
+  # --- GPU Inference Cluster Config ---
+  gpu_inference_config = {
+    # System node group (cluster-critical: CoreDNS, Cilium, Karpenter)
+    system_instance_type = "m6i.xlarge"
+    system_min_size      = 3
+    system_max_size      = 6
+    system_desired_size  = 3
+
+    # GPU node group (H100 SXM5 for inference)
+    gpu_instance_type   = "p5.48xlarge"
+    gpu_min_size        = 0
+    gpu_max_size        = 100
+    gpu_desired_size    = 0
+    gpu_placement_group = ""
+  }
 }
