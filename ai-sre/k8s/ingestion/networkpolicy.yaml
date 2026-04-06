@@ -1,0 +1,66 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ai-sre-ingestion
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/name: ai-sre-ingestion
+    app.kubernetes.io/component: ingestion
+    app.kubernetes.io/part-of: ai-sre
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ai-sre-ingestion
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Accept webhooks from monitoring namespace (Alertmanager)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8001
+          protocol: TCP
+    # Metrics scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 9091
+          protocol: TCP
+  egress:
+    # VictoriaMetrics for enrichment
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8481
+          protocol: TCP
+    # ClickHouse for alert history
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8123
+          protocol: TCP
+    # Orchestrator service
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ai-sre-orchestrator
+      ports:
+        - port: 8000
+          protocol: TCP
+    # DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP

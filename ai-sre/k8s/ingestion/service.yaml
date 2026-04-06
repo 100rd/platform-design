@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-sre-ingestion
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/name: ai-sre-ingestion
+    app.kubernetes.io/component: ingestion
+    app.kubernetes.io/part-of: ai-sre
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8001
+      targetPort: http
+      protocol: TCP
+    - name: metrics
+      port: 9091
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: ai-sre-ingestion
