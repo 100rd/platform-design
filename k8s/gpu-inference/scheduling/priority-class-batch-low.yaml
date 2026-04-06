@@ -1,0 +1,17 @@
+# PriorityClass: gpu-batch-low
+# Value: 10,000 — for offline / batch scoring jobs.
+# These workloads are preemptible by all higher-priority classes.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: gpu-batch-low
+  annotations:
+    gpu-inference/managed-by: terraform
+    gpu-inference/tier: batch
+value: 10000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: >
+  Low-priority class for offline batch scoring and evaluation jobs.
+  Preemptible by training-high, inference-medium, and system-critical.
+  Best-effort scheduling; may be evicted under resource pressure.

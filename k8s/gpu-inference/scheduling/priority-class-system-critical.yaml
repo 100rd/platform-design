@@ -1,0 +1,16 @@
+# PriorityClass: gpu-system-critical
+# Value: 1,000,000 — reserved for GPU operators, device plugins, and drivers.
+# Do NOT assign to user workloads; preempts everything else.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: gpu-system-critical
+  annotations:
+    gpu-inference/managed-by: terraform
+    gpu-inference/tier: system
+value: 1000000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: >
+  Reserved for GPU system components (operators, device plugins, NVIDIA drivers).
+  Preempts all lower-priority workloads. Do not assign to user workloads.

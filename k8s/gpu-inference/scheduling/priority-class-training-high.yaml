@@ -1,0 +1,16 @@
+# PriorityClass: gpu-training-high
+# Value: 100,000 — for distributed training jobs (Volcano PodGroups, PyTorch DDP, DeepSpeed).
+# Preempts inference and batch workloads when cluster resources are constrained.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: gpu-training-high
+  annotations:
+    gpu-inference/managed-by: terraform
+    gpu-inference/tier: training
+value: 100000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: >
+  High-priority class for distributed GPU training jobs managed by Volcano.
+  Assigns to PodGroups in the gpu-training namespace. Preempts inference and batch.
