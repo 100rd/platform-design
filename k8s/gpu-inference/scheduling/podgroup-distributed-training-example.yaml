@@ -1,0 +1,44 @@
+# Volcano PodGroup — distributed-training-example
+#
+# Gang scheduling guarantee: all 8 pods must be simultaneously schedulable before
+# any pod is allowed to start. This prevents partial allocation where some workers
+# start but others cannot be placed, wasting GPU resources on idle processes.
+#
+# Usage:
+#   Add `scheduling.volcano.sh/group-name: distributed-training-example` to
+#   your training pod annotations. Volcano will hold all pods until the full
+#   gang (minMember=8) can be co-scheduled.
+#
+# Binpack optimization:
+#   The `gpu-training-queue` Volcano Queue should be configured with
+#   `binpack` action to pack pods onto the fewest nodes, maximising NVLink
+#   bandwidth utilisation and minimising cross-node NCCL traffic.
+#
+# Prerequisites:
+#   - Volcano scheduler installed in the cluster
+#   - Namespace `gpu-training` exists
+#   - PriorityClass `gpu-training-high` exists
+apiVersion: scheduling.volcano.sh/v1beta1
+kind: PodGroup
+metadata:
+  name: distributed-training-example
+  namespace: gpu-training
+  annotations:
+    gpu-inference/managed-by: terraform
+    gpu-inference/description: "Example 8-pod gang-scheduled PodGroup for distributed training"
+spec:
+  # Hard gang constraint — no pod starts until all 8 can be placed
+  minMember: 8
+
+  # Volcano queue with binpack scheduling policy
+  queue: gpu-training-queue
+
+  # Inherit training high-priority to preempt inference/batch under pressure
+  priorityClassName: gpu-training-high
+
+  # Minimum aggregate resources the scheduler must reserve before gang starts.
+  # 8x p5.48xlarge = 8x 8 H100 = 64 GPUs; 8x 192 vCPU; 8x 768Gi RAM (headroom).
+  minResources:
+    nvidia.com/gpu: "8"
+    cpu: "64"
+    memory: "512Gi"

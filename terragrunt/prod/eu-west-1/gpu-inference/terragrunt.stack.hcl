@@ -66,3 +66,8 @@ unit "gpu-inference-logging" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-logging"
   path   = "gpu-inference-logging"
 }
+
+unit "gpu-inference-scheduling-policies" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-scheduling-policies"
+  path   = "gpu-inference-scheduling-policies"
+}

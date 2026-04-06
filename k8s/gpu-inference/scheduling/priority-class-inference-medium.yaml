@@ -1,0 +1,17 @@
+# PriorityClass: gpu-inference-medium
+# Value: 50,000 — default for real-time inference workloads (vLLM, Triton).
+# Set as globalDefault so inference pods automatically inherit this class.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: gpu-inference-medium
+  annotations:
+    gpu-inference/managed-by: terraform
+    gpu-inference/tier: inference
+value: 50000
+globalDefault: true
+preemptionPolicy: PreemptLowerPriority
+description: >
+  Default priority for real-time GPU inference workloads (vLLM, Triton Inference Server).
+  globalDefault=true ensures pods without an explicit priorityClassName inherit this class.
+  Preempts batch workloads; preempted by training-high and system-critical.
