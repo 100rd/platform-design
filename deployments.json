@@ -1,4 +1,4 @@
-{"generated_at": "2026-04-05T19:02:53Z", "applications": [
+{"generated_at": "2026-04-06T15:13:44Z", "applications": [
 {
   "name": "aws-lb-controller",
   "chartVersion": "3.1.0",
@@ -32,6 +32,14 @@
 }
 ,
 {
+  "name": "dcgm-exporter",
+  "chartVersion": "1.0.0",
+  "appVersion": "4.5.0",
+  "description": "NVIDIA DCGM Exporter - GPU health metrics and auto-taint for Kubernetes",
+  "path": "apps/infra/dcgm-exporter"
+}
+,
+{
   "name": "external-dns",
   "chartVersion": "1.0.0",
   "appVersion": "0.15.1",
@@ -53,6 +61,14 @@
   "appVersion": "v3.18.2",
   "description": "OPA Gatekeeper for Kubernetes policy enforcement",
   "path": "apps/infra/gatekeeper"
+}
+,
+{
+  "name": "gpu-operator",
+  "chartVersion": "1.0.0",
+  "appVersion": "v26.3.0",
+  "description": "NVIDIA GPU Operator - Automated GPU driver, toolkit, and device plugin management",
+  "path": "apps/infra/gpu-operator"
 }
 ,
 {
@@ -141,5 +157,21 @@
   "appVersion": "1.15.0",
   "description": "Velero - Kubernetes backup and disaster recovery",
   "path": "apps/infra/velero"
+}
+,
+{
+  "name": "victoriametrics",
+  "chartVersion": "1.0.0",
+  "appVersion": "0.68.0",
+  "description": "VictoriaMetrics Operator - High-performance monitoring for GPU inference clusters",
+  "path": "apps/infra/victoriametrics"
+}
+,
+{
+  "name": "volcano",
+  "chartVersion": "1.0.0",
+  "appVersion": "1.8.0",
+  "description": "Volcano - Kubernetes-native batch and GPU-aware scheduler",
+  "path": "apps/infra/volcano"
 }
 ]}
