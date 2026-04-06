@@ -73,3 +73,13 @@ unit "monitoring" {
   source = "${get_repo_root()}/catalog/units/monitoring"
   path   = "monitoring"
 }
+
+unit "gpu-inference-crossplane" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-crossplane"
+  path   = "gpu-inference-crossplane"
+}
+
+unit "gpu-inference-argocd" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-argocd"
+  path   = "gpu-inference-argocd"
+}

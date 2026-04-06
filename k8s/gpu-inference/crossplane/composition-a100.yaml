@@ -1,0 +1,31 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: gpu-nodegroup-a100
+  labels:
+    gpu-type: A100-80GB
+spec:
+  compositeTypeRef:
+    apiVersion: inference.platform.io/v1alpha1
+    kind: XGPUNodeGroup
+  resources:
+    - name: launch-template
+      base:
+        apiVersion: ec2.aws.upbound.io/v1beta1
+        kind: LaunchTemplate
+        spec:
+          forProvider:
+            region: eu-west-1
+            instanceType: p4d.24xlarge
+            imageId: ""
+            placement:
+              - groupName: ""
+            tagSpecifications:
+              - resourceType: instance
+                tags:
+                  nvidia.com/gpu.product: A100-80GB
+                  node-role: gpu-inference
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.placementGroupName
+          toFieldPath: spec.forProvider.placement[0].groupName
