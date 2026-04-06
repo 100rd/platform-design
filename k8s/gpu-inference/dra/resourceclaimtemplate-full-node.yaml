@@ -1,0 +1,15 @@
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: full-node-training
+  labels:
+    workload-type: training
+    managed-by: gpu-inference
+spec:
+  spec:
+    devices:
+      requests:
+        - name: gpus
+          deviceClassName: nvidia-h100-sxm5
+          count: 8
+          allocationMode: ExactCount

@@ -1,0 +1,11 @@
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: nvidia-h100-sxm5
+  labels:
+    gpu-type: H100-SXM5
+    managed-by: gpu-inference
+spec:
+  selectors:
+    - cel:
+        expression: "device.driver == 'gpu.nvidia.com' && device.attributes['gpu.nvidia.com'].productName == 'H100-SXM5'"

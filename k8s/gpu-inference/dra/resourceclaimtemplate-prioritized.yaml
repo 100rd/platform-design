@@ -1,0 +1,15 @@
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: prioritized-gpu-inference
+  labels:
+    workload-type: inference
+    managed-by: gpu-inference
+spec:
+  spec:
+    devices:
+      requests:
+        - name: gpu
+          firstAvailable:
+            - deviceClassName: nvidia-h100-sxm5
+            - deviceClassName: nvidia-a100-80gb
