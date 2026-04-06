@@ -1,0 +1,32 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# Prometheus Adapter Custom Metric Rules — vLLM
+# ---------------------------------------------------------------------------------------------------------------------
+# Documents the three vLLM metric rules configured in the Prometheus Adapter Helm release.
+# The adapter queries VictoriaMetrics vmselect and exposes these metrics on
+# the custom.metrics.k8s.io API for consumption by the HPA.
+#
+# Verify with:
+#   kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1" | jq '.resources[].name'
+#   kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1/namespaces/gpu-inference/pods/*/vllm_requests_waiting"
+# ---------------------------------------------------------------------------------------------------------------------
+#
+# Rules are managed via the Helm release (terraform/modules/gpu-inference-hpa/main.tf).
+# This file serves as the human-readable reference.
+#
+# Metric: vllm_requests_waiting
+#   seriesQuery : vllm:num_requests_waiting{namespace!="",pod!=""}
+#   metricsQuery: sum(vllm:num_requests_waiting{<<.LabelMatchers>>}) by (<<.GroupBy>>)
+#   description : Total queued inference requests per pod.  High values indicate the model
+#                 cannot keep up with demand — primary scale-out signal.
+#
+# Metric: vllm_avg_generation_throughput
+#   seriesQuery : vllm:avg_generation_throughput_toks_per_s{namespace!="",pod!=""}
+#   metricsQuery: avg(vllm:avg_generation_throughput_toks_per_s{<<.LabelMatchers>>}) by (<<.GroupBy>>)
+#   description : Average token generation rate (tokens/second) per pod.  Useful for
+#                 capacity planning dashboards; not directly used by the HPA.
+#
+# Metric: vllm_gpu_cache_usage_perc
+#   seriesQuery : vllm:gpu_cache_usage_perc{namespace!="",pod!=""}
+#   metricsQuery: avg(vllm:gpu_cache_usage_perc{<<.LabelMatchers>>}) by (<<.GroupBy>>)
+#   description : KV-cache utilisation percentage (0-100) per pod.  When this approaches
+#                 100 % new requests are rejected.  HPA scales out at 80 %.

@@ -81,3 +81,8 @@ unit "gpu-inference-vllm" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-vllm"
   path   = "gpu-inference-vllm"
 }
+
+unit "gpu-inference-hpa" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-hpa"
+  path   = "gpu-inference-hpa"
+}
