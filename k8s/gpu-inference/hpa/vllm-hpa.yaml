@@ -1,0 +1,67 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# vLLM HorizontalPodAutoscaler — Custom Metrics via Prometheus Adapter
+# ---------------------------------------------------------------------------------------------------------------------
+# Scales the vLLM Deployment on two custom metrics exposed by the Prometheus Adapter:
+#
+#   vllm_requests_waiting    — average number of queued requests per pod (target: 5)
+#   vllm_gpu_cache_usage_perc — average KV-cache utilisation per pod (target: 80 %)
+#
+# The Prometheus Adapter fetches these from the VictoriaMetrics vmselect endpoint and
+# re-exposes them via the Kubernetes custom.metrics.k8s.io API.
+#
+# NOTE: This manifest is the declarative reference.  The live object is managed by the
+#       gpu-inference-hpa Terraform module (terraform/modules/gpu-inference-hpa/main.tf).
+# ---------------------------------------------------------------------------------------------------------------------
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: vllm-hpa
+  namespace: gpu-inference
+  labels:
+    app.kubernetes.io/managed-by: terraform
+    platform.sh/component: gpu-inference-hpa
+  annotations:
+    platform.sh/issue: "79"
+    platform.sh/scaler-type: prometheus-adapter
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: vllm
+  minReplicas: 2
+  maxReplicas: 50
+  metrics:
+    # Primary: request queue depth — scale up when requests pile up faster than pods can drain them.
+    - type: Pods
+      pods:
+        metric:
+          name: vllm_requests_waiting
+        target:
+          type: AverageValue
+          averageValue: "5"
+    # Secondary: GPU KV-cache pressure — scale up before cache fills and new requests are rejected.
+    - type: Pods
+      pods:
+        metric:
+          name: vllm_gpu_cache_usage_perc
+        target:
+          type: AverageValue
+          averageValue: "80"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      selectPolicy: Max
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+        - type: Pods
+          value: 4
+          periodSeconds: 30
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      selectPolicy: Min
+      policies:
+        - type: Percent
+          value: 20
+          periodSeconds: 60
