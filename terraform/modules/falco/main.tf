@@ -43,13 +43,13 @@ resource "helm_release" "falco" {
         grpc_output = {
           enabled = true
         }
-        json_output          = true
+        json_output                  = true
         json_include_output_property = true
-        log_stderr           = true
-        log_syslog           = false
-        log_level            = var.log_level
-        priority             = var.minimum_priority
-        buffered_outputs     = false
+        log_stderr                   = true
+        log_syslog                   = false
+        log_level                    = var.log_level
+        priority                     = var.minimum_priority
+        buffered_outputs             = false
         http_output = {
           enabled = var.enable_sidekick
           url     = var.enable_sidekick ? "http://falco-falcosidekick:2801" : ""

@@ -178,7 +178,7 @@ data "aws_iam_policy_document" "config_s3" {
       identifiers = ["*"]
     }
 
-    actions   = ["s3:*"]
+    actions = ["s3:*"]
     resources = [
       aws_s3_bucket.config.arn,
       "${aws_s3_bucket.config.arn}/*",
