@@ -36,3 +36,8 @@ unit "gpu-inference-gpu-operator" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-gpu-operator"
   path   = "gpu-inference-gpu-operator"
 }
+
+unit "gpu-inference-kata-cc" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-kata-cc"
+  path   = "gpu-inference-kata-cc"
+}

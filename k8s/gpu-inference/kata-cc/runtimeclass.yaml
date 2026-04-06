@@ -1,0 +1,43 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# Kata Containers v3.22 — GPU Confidential Computing RuntimeClass
+# ---------------------------------------------------------------------------------------------------------------------
+# RuntimeClass for GPU workloads requiring hardware attestation (TDX / SEV-SNP).
+# Pods using runtimeClassName: kata-cc-gpu are scheduled exclusively onto nodes
+# labelled nvidia.com/cc.enabled=true and isolated inside Kata micro-VMs.
+#
+# Pod overhead accounts for the Kata agent and guest kernel memory, in addition
+# to the workload container's own resource requests.
+#
+# Usage:
+#   spec:
+#     runtimeClassName: kata-cc-gpu
+# ---------------------------------------------------------------------------------------------------------------------
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: kata-cc-gpu
+  annotations:
+    kata-containers.io/version: "3.22.0"
+    confidential-computing/tee: "tdx"
+    confidential-computing/vendor: "nvidia"
+# kata-cc is the handler registered by the Kata shim (containerd-shim-kata-v2)
+# in /etc/containerd/config.toml on each CC-capable node.
+handler: kata-cc
+# overhead added to every pod using this RuntimeClass on top of container requests/limits
+overhead:
+  podFixed:
+    cpu: 250m
+    memory: 160Mi
+scheduling:
+  # Tolerate GPU and Kata CC node taints so the scheduler allows placement
+  nodeClassification:
+    tolerated:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      - key: kata-cc
+        operator: Exists
+        effect: NoSchedule
+  # Only schedule on CC-capable nodes (labelled by the NVIDIA GPU Operator CC mode)
+  nodeSelector:
+    nvidia.com/cc.enabled: "true"
