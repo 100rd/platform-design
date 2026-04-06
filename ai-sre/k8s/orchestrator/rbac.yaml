@@ -1,0 +1,28 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ai-sre-readonly
+  labels:
+    app.kubernetes.io/part-of: ai-sre
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ai-sre-readonly-binding
+  labels:
+    app.kubernetes.io/part-of: ai-sre
+subjects:
+  - kind: ServiceAccount
+    name: ai-sre-orchestrator
+    namespace: ai-sre-system
+roleRef:
+  kind: ClusterRole
+  name: ai-sre-readonly
+  apiGroup: rbac.authorization.k8s.io
