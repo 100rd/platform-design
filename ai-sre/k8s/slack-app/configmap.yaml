@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-sre-slack-channels
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/name: ai-sre-slack-app
+    app.kubernetes.io/component: slack
+    app.kubernetes.io/part-of: ai-sre
+data:
+  channel_alerts: ""
+  channel_incidents: ""
+  channel_cost: ""
+  channel_capacity: ""
+  channel_gpu_health: ""
+  channel_chaos: ""

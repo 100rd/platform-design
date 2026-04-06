@@ -1,0 +1,49 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ai-sre-slack-app
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/name: ai-sre-slack-app
+    app.kubernetes.io/component: slack
+    app.kubernetes.io/part-of: ai-sre
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ai-sre-slack-app
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Prometheus scraping metrics
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 9092
+          protocol: TCP
+  egress:
+    # Slack API (wss:// for Socket Mode + https:// for API calls)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - port: 443
+          protocol: TCP
+    # Orchestrator API within namespace
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ai-sre-orchestrator
+      ports:
+        - port: 8000
+          protocol: TCP
+    # DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
