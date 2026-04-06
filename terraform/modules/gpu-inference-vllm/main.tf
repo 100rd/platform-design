@@ -12,10 +12,10 @@
 locals {
   common_labels = merge(
     {
-      "app.kubernetes.io/name"      = "vllm"
-      "app.kubernetes.io/component" = "inference-server"
-      "app.kubernetes.io/version"   = var.vllm_version
-      "app.kubernetes.io/part-of"   = "gpu-inference"
+      "app.kubernetes.io/name"       = "vllm"
+      "app.kubernetes.io/component"  = "inference-server"
+      "app.kubernetes.io/version"    = var.vllm_version
+      "app.kubernetes.io/part-of"    = "gpu-inference"
       "app.kubernetes.io/managed-by" = "terraform"
     },
     var.tags
@@ -137,21 +137,21 @@ resource "kubernetes_manifest" "configmap" {
       "enable-lora"          = tostring(var.enable_lora)
       "max-loras"            = tostring(var.max_loras)
       "vllm-config.yaml" = yamlencode({
-        model                    = local.model_path
-        tensor-parallel-size     = var.tensor_parallel_size
-        max-model-len            = var.max_model_len
-        enable-lora              = var.enable_lora
-        max-loras                = var.max_loras
-        lora-extra-vocab-size    = 256
-        max-cpu-loras            = 32
-        gpu-memory-utilization   = var.gpu_memory_utilization
-        dtype                    = "bfloat16"
-        disable-log-requests     = false
-        uvicorn-log-level        = "warning"
-        port                     = 8000
-        host                     = "0.0.0.0"
-        served-model-name        = local.served_model_name
-        lora-modules             = var.lora_modules
+        model                  = local.model_path
+        tensor-parallel-size   = var.tensor_parallel_size
+        max-model-len          = var.max_model_len
+        enable-lora            = var.enable_lora
+        max-loras              = var.max_loras
+        lora-extra-vocab-size  = 256
+        max-cpu-loras          = 32
+        gpu-memory-utilization = var.gpu_memory_utilization
+        dtype                  = "bfloat16"
+        disable-log-requests   = false
+        uvicorn-log-level      = "warning"
+        port                   = 8000
+        host                   = "0.0.0.0"
+        served-model-name      = local.served_model_name
+        lora-modules           = var.lora_modules
       })
     }
   }
@@ -202,9 +202,9 @@ resource "kubernetes_manifest" "deployment" {
           }
         }
         spec = {
-          schedulerName              = var.scheduler_name
-          priorityClassName          = var.priority_class_name
-          serviceAccountName         = "vllm"
+          schedulerName                 = var.scheduler_name
+          priorityClassName             = var.priority_class_name
+          serviceAccountName            = "vllm"
           terminationGracePeriodSeconds = 120
 
           affinity = {
@@ -339,19 +339,19 @@ resource "kubernetes_manifest" "deployment" {
                 { name = "shm", mountPath = "/dev/shm" }
               ]
               livenessProbe = {
-                httpGet            = { path = "/health", port = "http" }
+                httpGet             = { path = "/health", port = "http" }
                 initialDelaySeconds = 120
                 periodSeconds       = 30
                 failureThreshold    = 5
               }
               readinessProbe = {
-                httpGet            = { path = "/health", port = "http" }
+                httpGet             = { path = "/health", port = "http" }
                 initialDelaySeconds = 90
                 periodSeconds       = 15
                 failureThreshold    = 3
               }
               startupProbe = {
-                httpGet            = { path = "/health", port = "http" }
+                httpGet             = { path = "/health", port = "http" }
                 initialDelaySeconds = 60
                 periodSeconds       = 10
                 failureThreshold    = 30

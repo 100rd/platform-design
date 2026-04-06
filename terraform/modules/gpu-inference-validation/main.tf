@@ -164,12 +164,12 @@ resource "kubernetes_config_map_v1" "test_manifests" {
     # The paths are relative to the repository root (tests/gpu-inference/).
     # When test_manifests_path is set, file() reads from disk.
     # Otherwise a placeholder is stored (update the ConfigMap out-of-band).
-    "network-latency-test.yaml" = var.test_manifests_path != "" ? file("${var.test_manifests_path}/network-latency-test.yaml") : "# placeholder — apply via kubectl or set test_manifests_path"
-    "nccl-benchmark.yaml"       = var.test_manifests_path != "" ? file("${var.test_manifests_path}/nccl-benchmark.yaml") : "# placeholder — apply via kubectl or set test_manifests_path"
-    "gang-recovery-test.yaml"   = var.test_manifests_path != "" ? file("${var.test_manifests_path}/gang-recovery-test.yaml") : "# placeholder — apply via kubectl or set test_manifests_path"
-    "dra-scheduling-test.yaml"  = var.test_manifests_path != "" ? file("${var.test_manifests_path}/dra-scheduling-test.yaml") : "# placeholder — apply via kubectl or set test_manifests_path"
-    "observability-check.yaml"  = var.test_manifests_path != "" ? file("${var.test_manifests_path}/observability-check.yaml") : "# placeholder — apply via kubectl or set test_manifests_path"
-    "security-audit.yaml"       = var.test_manifests_path != "" ? file("${var.test_manifests_path}/security-audit.yaml") : "# placeholder — apply via kubectl or set test_manifests_path"
+    "network-latency-test.yaml"     = var.test_manifests_path != "" ? file("${var.test_manifests_path}/network-latency-test.yaml") : "# placeholder — apply via kubectl or set test_manifests_path"
+    "nccl-benchmark.yaml"           = var.test_manifests_path != "" ? file("${var.test_manifests_path}/nccl-benchmark.yaml") : "# placeholder — apply via kubectl or set test_manifests_path"
+    "gang-recovery-test.yaml"       = var.test_manifests_path != "" ? file("${var.test_manifests_path}/gang-recovery-test.yaml") : "# placeholder — apply via kubectl or set test_manifests_path"
+    "dra-scheduling-test.yaml"      = var.test_manifests_path != "" ? file("${var.test_manifests_path}/dra-scheduling-test.yaml") : "# placeholder — apply via kubectl or set test_manifests_path"
+    "observability-check.yaml"      = var.test_manifests_path != "" ? file("${var.test_manifests_path}/observability-check.yaml") : "# placeholder — apply via kubectl or set test_manifests_path"
+    "security-audit.yaml"           = var.test_manifests_path != "" ? file("${var.test_manifests_path}/security-audit.yaml") : "# placeholder — apply via kubectl or set test_manifests_path"
     "vllm-inference-benchmark.yaml" = var.test_manifests_path != "" ? file("${var.test_manifests_path}/vllm-inference-benchmark.yaml") : "# placeholder — apply via kubectl or set test_manifests_path"
 
     # Runner script: iterates over all manifests and applies them in sequence,
