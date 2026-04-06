@@ -50,6 +50,164 @@ Dedicated EKS cluster for large-scale GPU inference workloads. Designed for up t
 | `gpu-inference-hpa` | Inference | Custom HPA via Prometheus Adapter scaling on vLLM queue depth and GPU cache utilization |
 | `gpu-inference-validation` | Validation | Automated test suite: NCCL benchmarks, network latency, DRA scheduling, security audit, inference throughput |
 
+## Architecture
+
+### Platform Stack
+
+```mermaid
+graph TD
+    subgraph "Platform VPC"
+        VPC[VPC<br/>Public / Private / Intra subnets<br/>Flow Logs 365d]
+        TGW[TGW Attachment<br/>Cross-account connectivity]
+        RDS[(RDS PostgreSQL<br/>db.r6g.xlarge Multi-AZ)]
+    end
+
+    subgraph "Platform EKS 1.32"
+        EKS[EKS Control Plane<br/>KMS encryption, Bottlerocket]
+
+        subgraph "CNI & Service Mesh"
+            CILIUM[Cilium<br/>ENI prefix delegation<br/>WireGuard + Hubble + ClusterMesh]
+        end
+
+        subgraph "Autoscaling"
+            KARP[Karpenter<br/>IAM + Controller + NodePools]
+            KEDA[KEDA<br/>Event-driven autoscaling]
+            HPA[HPA Defaults]
+        end
+
+        subgraph "Node Pools"
+            X86[x86 pool<br/>m6i/m6a/m5 — 70% spot]
+            ARM[arm64 pool<br/>m6g/m7g/c6g — 70% spot]
+            CDE[PCI-DSS CDE pool<br/>On-demand only, tainted]
+        end
+
+        MON[Monitoring<br/>3 replicas]
+        SEC[Secrets<br/>KMS + Secrets Manager]
+    end
+
+    subgraph "GPU Inference GitOps"
+        XP[Crossplane v2.2<br/>Hub-and-Spoke GPU node lifecycle]
+        ARGO[ArgoCD<br/>GPU inference ApplicationSet]
+    end
+
+    VPC --> EKS
+    VPC --> TGW
+    VPC --> RDS
+    EKS --> CILIUM
+    EKS --> KARP
+    KARP --> X86
+    KARP --> ARM
+    KARP --> CDE
+    EKS --> KEDA
+    EKS --> HPA
+    EKS --> MON
+    EKS --> SEC
+    EKS --> XP
+    EKS --> ARGO
+
+    style CDE fill:#f9e0e0,stroke:#c0392b
+    style CILIUM fill:#e0f0e0,stroke:#27ae60
+    style EKS fill:#e0e8f0,stroke:#2980b9
+```
+
+### GPU Inference Stack
+
+```mermaid
+graph TD
+    subgraph "Phase 1 — Foundation"
+        GVPC[GPU VPC<br/>10.180.0.0/16<br/>BGP-ready subnets]
+        GEKS[EKS 1.35<br/>DRA enabled<br/>Self-managed GPU nodes]
+        TUNE[Node Tuning<br/>CPU pinning 4-191<br/>1536x HugePages<br/>NUMA topology]
+    end
+
+    subgraph "Phase 2 — Network"
+        GCIL[Cilium v1.19<br/>Native routing<br/>Cluster-pool IPAM 100.64.0.0/10<br/>BGP Control Plane]
+        WG[WireGuard Encryption<br/>Pod-to-pod<br/>NCCL exclusion]
+        TGWC[TGW Connect<br/>GRE + BGP peers<br/>ASN 65100]
+    end
+
+    subgraph "Phase 3 — GPU & DRA"
+        GPUOP[GPU Operator v26.3<br/>DRA driver + CDI<br/>GFD + NFD]
+        DRA[DRA DeviceClass<br/>H100-SXM5 / A100-80GB<br/>ResourceClaimTemplates]
+        KATA[Kata CC v3.22<br/>Confidential Computing<br/>GPU attestation]
+    end
+
+    subgraph "Phase 4 — Scheduling"
+        VOLC[Volcano v1.8<br/>Gang scheduling<br/>Bin-packing DRA plugin]
+        SCHED[Scheduling Policies<br/>PriorityClasses<br/>GPU quotas per namespace]
+    end
+
+    subgraph "Phase 5 — Observability"
+        VM[VictoriaMetrics<br/>Cluster mode<br/>High-cardinality GPU metrics]
+        DCGM[DCGM Exporter v4.5<br/>XID errors + temp alerts<br/>Auto-taint unhealthy GPUs]
+        LOG[Vector v0.54 + ClickHouse v26.3<br/>GPU log pipeline]
+    end
+
+    subgraph "Phase 6 — Inference"
+        VLLM[vLLM v0.19<br/>8x H100 tensor parallel<br/>Multi-LoRA + DRA claims]
+        GHPA[Custom HPA<br/>Prometheus Adapter<br/>Queue depth + cache usage]
+        VAL[Validation Suite<br/>NCCL / latency / DRA<br/>security / throughput]
+    end
+
+    GVPC --> GEKS
+    GEKS --> TUNE
+    GEKS --> GCIL
+    GCIL --> WG
+    GCIL --> TGWC
+    GEKS --> GPUOP
+    GPUOP --> DRA
+    GPUOP --> KATA
+    GEKS --> VOLC
+    VOLC --> SCHED
+    GEKS --> VM
+    VM --> DCGM
+    GEKS --> LOG
+    DRA --> VLLM
+    VOLC --> VLLM
+    VLLM --> GHPA
+    VM --> GHPA
+    VLLM --> VAL
+    DCGM --> VAL
+    GCIL --> VAL
+
+    style GEKS fill:#e0e8f0,stroke:#2980b9
+    style GCIL fill:#e0f0e0,stroke:#27ae60
+    style GPUOP fill:#f0e8e0,stroke:#e67e22
+    style VLLM fill:#f0e0f0,stroke:#8e44ad
+    style VM fill:#e8e0f0,stroke:#6c3483
+    style WG fill:#e0f0e0,stroke:#27ae60
+    style DRA fill:#f0e8e0,stroke:#e67e22
+    style VOLC fill:#f9f0e0,stroke:#f39c12
+```
+
+### Cross-Stack Connectivity
+
+```mermaid
+graph LR
+    subgraph "Platform Stack"
+        PEKS[Platform EKS 1.32]
+        PXP[Crossplane v2.2]
+        PARGO[ArgoCD]
+    end
+
+    subgraph "GPU Inference Stack"
+        GEKS2[GPU EKS 1.35]
+        GVLLM[vLLM Inference]
+    end
+
+    subgraph "Network"
+        TGW2[Transit Gateway]
+    end
+
+    PXP -->|manages GPU node lifecycle| GEKS2
+    PARGO -->|GitOps sync| GEKS2
+    PEKS ---|TGW Connect + BGP| TGW2
+    GEKS2 ---|TGW Connect + BGP<br/>Pod CIDR 100.64.0.0/10| TGW2
+
+    style TGW2 fill:#fdf2e9,stroke:#e67e22
+    style GVLLM fill:#f0e0f0,stroke:#8e44ad
+```
+
 ## Configuration
 
 Environment-specific sizing and feature flags are defined in [`../account.hcl`](../account.hcl). Region-specific values (AZs, region shortcode) are in [`region.hcl`](region.hcl).
