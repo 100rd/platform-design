@@ -1,0 +1,11 @@
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: nvidia-a100-80gb
+  labels:
+    gpu-type: A100-80GB
+    managed-by: gpu-inference
+spec:
+  selectors:
+    - cel:
+        expression: "device.driver == 'gpu.nvidia.com' && device.attributes['gpu.nvidia.com'].productName == 'A100-SXM4-80GB'"

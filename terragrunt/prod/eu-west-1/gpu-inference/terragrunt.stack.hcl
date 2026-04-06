@@ -46,3 +46,8 @@ unit "gpu-inference-tgw-connect" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-tgw-connect"
   path   = "gpu-inference-tgw-connect"
 }
+
+unit "gpu-inference-dra" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-dra"
+  path   = "gpu-inference-dra"
+}
