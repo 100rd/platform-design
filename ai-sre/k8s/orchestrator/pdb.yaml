@@ -1,0 +1,14 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ai-sre-orchestrator
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/name: ai-sre-orchestrator
+    app.kubernetes.io/component: orchestrator
+    app.kubernetes.io/part-of: ai-sre
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-sre-orchestrator

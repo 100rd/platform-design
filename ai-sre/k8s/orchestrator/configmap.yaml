@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-sre-agent-config
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/name: ai-sre-orchestrator
+    app.kubernetes.io/component: orchestrator
+    app.kubernetes.io/part-of: ai-sre
+data:
+  agents.yaml: |
+    orchestrator:
+      model: claude-opus-4-20250514
+      max_tokens: 4096
+      temperature: 0.0
+    workers:
+      default_model: claude-sonnet-4-20250514
+      max_tokens: 4096
+      temperature: 0.0
+    mcp_servers:
+      kubernetes-mcp:
+        transport: stdio
+        command: kubernetes-mcp-server
+        read_only: true
+        env:
+          KUBERNETES_MCP_READ_ONLY: "true"
+          KUBERNETES_MCP_REDACT_SECRETS: "true"
+      aws-mcp:
+        transport: stdio
+        command: awslabs-mcp
+        args: ["eks"]
+        read_only: true
+      metrics-mcp:
+        transport: streamable-http
+        url: http://metrics-mcp.ai-sre-system.svc.cluster.local:8080
+        read_only: true
+      runbook-mcp:
+        transport: streamable-http
+        url: http://runbook-mcp.ai-sre-system.svc.cluster.local:8081
+        read_only: false
+      git-mcp:
+        transport: stdio
+        command: git-mcp-server
+        read_only: true
+      slack-mcp:
+        transport: stdio
+        command: slack-mcp-server
+        read_only: false
+    routing:
+      gpu_prefixes: ["gpu_", "dcgm_"]
+      incident_prefixes: ["kube_pod_", "container_", "cilium_", "network_"]
+      capacity_prefixes: ["node_", "kubelet_"]
+      scaling_prefixes: ["vllm_"]
+      cost_prefixes: ["cost_"]
+    guardrails:
+      advisory_only: true
+      require_approval_for_writes: true
+      max_concurrent_investigations: 10
+      alert_rate_limit_per_minute: 100
+  clusters.yaml: |
+    clusters:
+      - name: platform
+        type: hub
+        region: us-east-1
+        context: arn:aws:eks:us-east-1:ACCOUNT:cluster/platform
+      - name: gpu-inference
+        type: spoke
+        region: us-east-1
+        context: arn:aws:eks:us-east-1:ACCOUNT:cluster/gpu-inference
+      - name: blockchain
+        type: spoke
+        region: us-east-1
+        context: arn:aws:eks:us-east-1:ACCOUNT:cluster/blockchain
+      - name: gpu-analysis
+        type: spoke
+        region: us-east-1
+        context: arn:aws:eks:us-east-1:ACCOUNT:cluster/gpu-analysis

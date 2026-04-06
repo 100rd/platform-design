@@ -1,0 +1,73 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ai-sre-orchestrator
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/name: ai-sre-orchestrator
+    app.kubernetes.io/component: orchestrator
+    app.kubernetes.io/part-of: ai-sre
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ai-sre-orchestrator
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: ai-sre
+      ports:
+        - port: 8000
+          protocol: TCP
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 9090
+          protocol: TCP
+  egress:
+    # Kubernetes API server
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - port: 443
+          protocol: TCP
+    # VictoriaMetrics vmselect
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8481
+          protocol: TCP
+    # ClickHouse HTTP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8123
+          protocol: TCP
+    # MCP servers within namespace
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: ai-sre
+      ports:
+        - port: 8080
+          protocol: TCP
+        - port: 8081
+          protocol: TCP
+    # DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
