@@ -11,9 +11,9 @@ locals {
   network_account    = "555555555555"
 
   # Transit Gateway connectivity (shared via RAM from network account)
-  enable_tgw_attachment = true  # Enabled for multi-region connectivity
-  transit_gateway_id    = ""    # Populate after network account deployment
-  tgw_route_table_id    = ""    # nonprod route table ID from network account
+  enable_tgw_attachment = true # Enabled for multi-region connectivity
+  transit_gateway_id    = ""   # Populate after network account deployment
+  tgw_route_table_id    = ""   # nonprod route table ID from network account
 
   single_nat_gateway    = false
   eks_public_access     = false
@@ -43,8 +43,8 @@ locals {
   clustermesh_cluster_ids = {
     "eu-west-1"    = 1
     "eu-central-1" = 2
-    "eu-west-2"    = 3  # Reserved for future
-    "eu-west-3"    = 4  # Reserved for future
+    "eu-west-2"    = 3 # Reserved for future
+    "eu-west-3"    = 4 # Reserved for future
   }
   clustermesh_apiserver_replicas = 2
   peer_vpc_cidrs = {
@@ -61,9 +61,9 @@ locals {
   # Each replica is encrypted with the region-specific KMS CMK for secrets-manager.
   # replica_kms_key_arns: populate with actual KMS key ARNs after deploying KMS in each region.
   secrets_config = {
-    primary_region = "eu-central-1"
+    primary_region  = "eu-central-1"
     replica_regions = ["eu-west-1", "eu-west-2", "eu-west-3"]
-    rotation_days  = 90
+    rotation_days   = 90
     replica_kms_key_arns = {
       "eu-west-1" = "" # TODO: Set to KMS secrets-manager key ARN from eu-west-1 after deployment
       "eu-west-2" = "" # TODO: Set to KMS secrets-manager key ARN from eu-west-2 after deployment
@@ -250,9 +250,9 @@ locals {
         enabled           = true
         cpu_limit         = 32
         memory_limit      = 128
-        spot_percentage   = 0          # On-demand — chain sync takes 5-7 days
+        spot_percentage   = 0                      # On-demand — chain sync takes 5-7 days
         instance_families = ["r6i", "r7i", "r6a"]  # Memory-optimized for UTXO set
-        instance_sizes    = ["2xlarge", "4xlarge"]  # 8-16 vCPU, 64-128GB RAM
+        instance_sizes    = ["2xlarge", "4xlarge"] # 8-16 vCPU, 64-128GB RAM
         architectures     = ["amd64"]
 
         # No placement group — Bitcoin P2P is global, no latency benefit
@@ -271,7 +271,7 @@ locals {
         consolidation_policy = "WhenEmpty"
         consolidate_after    = "Never"
         disruption_budgets = [
-          { nodes = "0" }  # Zero disruption
+          { nodes = "0" } # Zero disruption
         ]
 
         labels = {
@@ -329,8 +329,8 @@ locals {
         enabled           = true
         cpu_limit         = 100
         memory_limit      = 400
-        spot_percentage   = 0          # On-demand — real-time SLA
-        instance_families = ["g5"]     # NVIDIA A10G (24GB VRAM)
+        spot_percentage   = 0      # On-demand — real-time SLA
+        instance_families = ["g5"] # NVIDIA A10G (24GB VRAM)
         instance_sizes    = ["xlarge", "2xlarge", "4xlarge"]
         architectures     = ["amd64"]
 
@@ -364,7 +364,7 @@ locals {
           { key = "nvidia.com/gpu", value = "true", effect = "NoSchedule" }
         ]
 
-        expire_after = "1440h"  # 60 days
+        expire_after = "1440h" # 60 days
         weight       = 10
       }
 
@@ -376,8 +376,8 @@ locals {
         enabled           = true
         cpu_limit         = 100
         memory_limit      = 400
-        spot_percentage   = 70         # Cost optimization for batch work
-        instance_families = ["g4dn"]   # NVIDIA T4 (16GB VRAM)
+        spot_percentage   = 70       # Cost optimization for batch work
+        instance_families = ["g4dn"] # NVIDIA T4 (16GB VRAM)
         instance_sizes    = ["xlarge", "2xlarge", "4xlarge"]
         architectures     = ["amd64"]
 
@@ -407,7 +407,7 @@ locals {
           { key = "nvidia.com/gpu", value = "true", effect = "NoSchedule" }
         ]
 
-        expire_after = "720h"   # 30 days
+        expire_after = "720h" # 30 days
         weight       = 20
       }
 
@@ -432,7 +432,7 @@ locals {
           "workload.io/type" = "coordination"
         }
 
-        expire_after = "720h"   # 30 days
+        expire_after = "720h" # 30 days
         weight       = 30
       }
     }
@@ -447,11 +447,11 @@ locals {
   video_pipeline_config = {
     # --- ElastiCache Redis ---
     redis_engine_version = "7.1"
-    redis_node_type      = "cache.t4g.micro"   # Small for staging
-    redis_num_nodes      = 2                     # Multi-AZ
+    redis_node_type      = "cache.t4g.micro" # Small for staging
+    redis_num_nodes      = 2                 # Multi-AZ
 
     # --- CloudFront ---
-    cloudfront_price_class    = "PriceClass_100"  # EU + NA only
+    cloudfront_price_class       = "PriceClass_100" # EU + NA only
     cloudfront_allowed_countries = ["FR", "DE", "GB", "ES", "IT", "NL", "BE", "AT", "CH", "PT"]
   }
 

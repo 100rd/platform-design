@@ -100,8 +100,8 @@ locals {
       consolidate_after    = "Never"
       weight               = 5
       labels = {
-        "node-type"      = "cde"
-        "pci-dss-scope"  = "true"
+        "node-type"     = "cde"
+        "pci-dss-scope" = "true"
       }
       taints = [
         { key = "pci-dss", value = "cde", effect = "NoSchedule" }

@@ -18,13 +18,13 @@ terraform {
 }
 
 inputs = {
-  enable_s3_protection           = true
+  enable_s3_protection            = true
   enable_eks_audit_log_monitoring = true
-  enable_eks_runtime_monitoring  = true
-  enable_malware_protection      = true
-  enable_rds_protection          = true
-  enable_lambda_protection       = true
-  auto_enable_org_members        = true
+  enable_eks_runtime_monitoring   = true
+  enable_malware_protection       = true
+  enable_rds_protection           = true
+  enable_lambda_protection        = true
+  auto_enable_org_members         = true
 
   tags = {
     Environment = "management"
