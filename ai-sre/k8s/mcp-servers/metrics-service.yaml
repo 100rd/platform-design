@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: metrics-mcp
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/name: metrics-mcp
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: ai-sre
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: metrics-mcp
