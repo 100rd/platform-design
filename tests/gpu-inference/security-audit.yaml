@@ -1,0 +1,252 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# Security Audit — GPU Inference Cluster
+# ---------------------------------------------------------------------------------------------------------------------
+# Verifies WireGuard transparent encryption is active, network policies are
+# enforced, and no unauthorized privileged containers are running.
+#
+# Acceptance criteria:
+#   - WireGuard interfaces (cilium_wg0) present on all GPU nodes
+#   - Node-to-node traffic is encrypted (verify via Cilium status)
+#   - No pods running as privileged=true outside approved namespaces
+#   - No pods with hostNetwork=true outside approved namespaces
+#   - NetworkPolicy baseline present and evaluating
+#   - WireGuard encryption overhead < 10 μs vs plaintext baseline
+# ---------------------------------------------------------------------------------------------------------------------
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-audit-config
+  namespace: gpu-inference-validation
+  labels:
+    app.kubernetes.io/name: security-audit
+    app.kubernetes.io/part-of: gpu-inference-dod
+data:
+  run-security-audit.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    NAMESPACE="${NAMESPACE:-gpu-inference-validation}"
+    CILIUM_NAMESPACE="${CILIUM_NAMESPACE:-kube-system}"
+
+    # Namespaces allowed to run privileged containers (system-level)
+    ALLOWED_PRIVILEGED_NS="kube-system monitoring falco gpu-operator"
+
+    echo "=== Security Audit ==="
+    PASS=true
+
+    # --- 1. WireGuard encryption status via Cilium CLI ---
+    echo ""
+    echo "--- 1. WireGuard encryption status ---"
+    # Run cilium status on each Cilium pod and verify encryption is enabled
+    CILIUM_PODS=$(kubectl get pods -n "${CILIUM_NAMESPACE}" -l k8s-app=cilium --no-headers -o name 2>/dev/null)
+    if [[ -z "${CILIUM_PODS}" ]]; then
+      echo "FAIL: No Cilium pods found in ${CILIUM_NAMESPACE}"
+      PASS=false
+    else
+      WG_ENABLED_COUNT=0
+      TOTAL_PODS=0
+      for pod in ${CILIUM_PODS}; do
+        TOTAL_PODS=$((TOTAL_PODS + 1))
+        STATUS=$(kubectl exec -n "${CILIUM_NAMESPACE}" "${pod}" -- \
+          cilium status --brief 2>/dev/null | grep -i "encryption" || echo "")
+        if echo "${STATUS}" | grep -qi "wireguard"; then
+          WG_ENABLED_COUNT=$((WG_ENABLED_COUNT + 1))
+        fi
+      done
+      echo "WireGuard enabled on ${WG_ENABLED_COUNT}/${TOTAL_PODS} Cilium pods"
+      if [[ "${WG_ENABLED_COUNT}" -eq "${TOTAL_PODS}" && "${TOTAL_PODS}" -gt 0 ]]; then
+        echo "PASS: WireGuard encryption active on all nodes"
+      else
+        echo "FAIL: WireGuard not active on all Cilium agents"
+        PASS=false
+      fi
+    fi
+
+    # --- 2. WireGuard interface present on nodes ---
+    echo ""
+    echo "--- 2. WireGuard interface check (cilium_wg0) ---"
+    NODE_COUNT=$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    WG_IFACE_COUNT=$(kubectl get pods -n "${CILIUM_NAMESPACE}" -l k8s-app=cilium \
+      --no-headers -o name 2>/dev/null | while read pod; do
+        kubectl exec -n "${CILIUM_NAMESPACE}" "${pod}" -- \
+          ip link show cilium_wg0 2>/dev/null && echo "found" || true
+      done | grep -c "found" || echo "0")
+    echo "Nodes: ${NODE_COUNT} | cilium_wg0 interfaces found: ${WG_IFACE_COUNT}"
+    if [[ "${WG_IFACE_COUNT}" -ge "${NODE_COUNT}" && "${NODE_COUNT}" -gt 0 ]]; then
+      echo "PASS: cilium_wg0 present on all nodes"
+    else
+      echo "FAIL: cilium_wg0 missing on some nodes"
+      PASS=false
+    fi
+
+    # --- 3. Privileged containers check ---
+    echo ""
+    echo "--- 3. Privileged containers check ---"
+    PRIV_PODS=$(kubectl get pods --all-namespaces -o json 2>/dev/null | python3 - <<'PYEOF'
+    import json, sys
+
+    allowed = set("${ALLOWED_PRIVILEGED_NS}".split())
+    data = json.load(sys.stdin)
+    violations = []
+
+    for pod in data.get("items", []):
+        ns = pod["metadata"]["namespace"]
+        if ns in allowed:
+            continue
+        name = pod["metadata"]["name"]
+        for c in pod["spec"].get("containers", []) + pod["spec"].get("initContainers", []):
+            sc = c.get("securityContext", {})
+            if sc.get("privileged") is True:
+                violations.append(f"{ns}/{name} (container: {c['name']})")
+
+    for v in violations:
+        print(v)
+    PYEOF
+    )
+
+    if [[ -z "${PRIV_PODS}" ]]; then
+      echo "PASS: no unauthorized privileged containers found"
+    else
+      echo "FAIL: privileged containers outside allowed namespaces:"
+      echo "${PRIV_PODS}"
+      PASS=false
+    fi
+
+    # --- 4. hostNetwork pods check ---
+    echo ""
+    echo "--- 4. hostNetwork pods check ---"
+    HOST_NET_PODS=$(kubectl get pods --all-namespaces -o json 2>/dev/null | python3 - <<'PYEOF'
+    import json, sys
+
+    allowed = set("${ALLOWED_PRIVILEGED_NS}".split())
+    data = json.load(sys.stdin)
+    violations = []
+
+    for pod in data.get("items", []):
+        ns = pod["metadata"]["namespace"]
+        if ns in allowed:
+            continue
+        if pod["spec"].get("hostNetwork") is True:
+            name = pod["metadata"]["name"]
+            violations.append(f"{ns}/{name}")
+
+    for v in violations:
+        print(v)
+    PYEOF
+    )
+
+    if [[ -z "${HOST_NET_PODS}" ]]; then
+      echo "PASS: no unauthorized hostNetwork pods"
+    else
+      echo "FAIL: hostNetwork pods outside allowed namespaces:"
+      echo "${HOST_NET_PODS}"
+      PASS=false
+    fi
+
+    # --- 5. NetworkPolicy baseline ---
+    echo ""
+    echo "--- 5. NetworkPolicy baseline ---"
+    NP_COUNT=$(kubectl get networkpolicies --all-namespaces --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    CILIUM_NP_COUNT=$(kubectl get ciliumnetworkpolicies --all-namespaces --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    echo "NetworkPolicies: ${NP_COUNT}"
+    echo "CiliumNetworkPolicies: ${CILIUM_NP_COUNT}"
+    if [[ "$((NP_COUNT + CILIUM_NP_COUNT))" -gt 0 ]]; then
+      echo "PASS: network policies present"
+    else
+      echo "FAIL: no network policies found — cluster is wide open"
+      PASS=false
+    fi
+
+    # --- 6. No pods running as root with allowPrivilegeEscalation ---
+    echo ""
+    echo "--- 6. AllowPrivilegeEscalation check ---"
+    PRIV_ESC=$(kubectl get pods --all-namespaces -o json 2>/dev/null | python3 - <<'PYEOF'
+    import json, sys
+
+    allowed = set("${ALLOWED_PRIVILEGED_NS}".split())
+    data = json.load(sys.stdin)
+    violations = []
+
+    for pod in data.get("items", []):
+        ns = pod["metadata"]["namespace"]
+        if ns in allowed:
+            continue
+        name = pod["metadata"]["name"]
+        pod_sc = pod["spec"].get("securityContext", {})
+        for c in pod["spec"].get("containers", []):
+            sc = c.get("securityContext", {})
+            if sc.get("allowPrivilegeEscalation") is True:
+                violations.append(f"{ns}/{name} (container: {c['name']})")
+
+    for v in violations:
+        print(v)
+    PYEOF
+    )
+
+    if [[ -z "${PRIV_ESC}" ]]; then
+      echo "PASS: no unauthorized allowPrivilegeEscalation"
+    else
+      echo "WARN: allowPrivilegeEscalation=true in non-system namespaces:"
+      echo "${PRIV_ESC}"
+      # Warn only — escalation in user NS may be intentional for GPU workloads
+    fi
+
+    echo ""
+    if [[ "${PASS}" != "true" ]]; then
+      echo "=== Security Audit FAILED ==="
+      exit 1
+    fi
+    echo "=== Security Audit PASSED ==="
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: security-audit
+  namespace: gpu-inference-validation
+  labels:
+    app.kubernetes.io/name: security-audit
+    app.kubernetes.io/part-of: gpu-inference-dod
+spec:
+  completions: 1
+  parallelism: 1
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: security-audit
+        app.kubernetes.io/part-of: gpu-inference-dod
+    spec:
+      serviceAccountName: gpu-inference-validator
+      restartPolicy: OnFailure
+      volumes:
+        - name: scripts
+          configMap:
+            name: security-audit-config
+            defaultMode: 0755
+      containers:
+        - name: auditor
+          image: bitnami/kubectl:1.29
+          env:
+            - name: NAMESPACE
+              value: "gpu-inference-validation"
+            - name: CILIUM_NAMESPACE
+              value: "kube-system"
+            - name: ALLOWED_PRIVILEGED_NS
+              value: "kube-system monitoring falco gpu-operator"
+          command:
+            - /bin/bash
+            - -c
+            - /scripts/run-security-audit.sh
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"

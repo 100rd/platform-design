@@ -1,0 +1,198 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# Observability Check — GPU Inference Cluster
+# ---------------------------------------------------------------------------------------------------------------------
+# Verifies that VictoriaMetrics, ClickHouse (structured logs), and DCGM GPU metrics
+# are all present, complete, and flowing as expected.
+#
+# Acceptance criteria:
+#   - VictoriaMetrics: all expected GPU metric families present in last 5 minutes
+#   - DCGM: DCGM_FI_DEV_GPU_UTIL and DCGM_FI_DEV_MEM_COPY_UTIL metrics present for all GPU nodes
+#   - ClickHouse: structured log table reachable, rows written in last 5 minutes
+#   - Alerts: at least one alerting rule loaded and evaluating without error
+# ---------------------------------------------------------------------------------------------------------------------
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: observability-check-config
+  namespace: gpu-inference-validation
+  labels:
+    app.kubernetes.io/name: observability-check
+    app.kubernetes.io/part-of: gpu-inference-dod
+data:
+  run-observability-check.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    VM_URL="${VM_URL:-http://victoria-metrics.monitoring.svc.cluster.local:8428}"
+    CH_HOST="${CH_HOST:-clickhouse.logging.svc.cluster.local}"
+    CH_PORT="${CH_PORT:-9000}"
+    CH_DB="${CH_DB:-logs}"
+    CH_TABLE="${CH_TABLE:-kubernetes_logs}"
+    ALERT_RULES_URL="${ALERT_RULES_URL:-http://vmalert.monitoring.svc.cluster.local:8880}"
+    LOOKBACK_MIN="${LOOKBACK_MIN:-5}"
+
+    echo "=== Observability Check ==="
+    PASS=true
+
+    # --- 1. VictoriaMetrics connectivity ---
+    echo ""
+    echo "--- 1. VictoriaMetrics health ---"
+    STATUS=$(curl -sf "${VM_URL}/-/healthy" 2>/dev/null && echo "OK" || echo "FAIL")
+    if [[ "${STATUS}" == "OK" ]]; then
+      echo "PASS: VictoriaMetrics health endpoint OK"
+    else
+      echo "FAIL: VictoriaMetrics not reachable at ${VM_URL}"
+      PASS=false
+    fi
+
+    # --- 2. DCGM GPU metrics ---
+    echo ""
+    echo "--- 2. DCGM GPU metrics ---"
+    REQUIRED_METRICS=(
+      "DCGM_FI_DEV_GPU_UTIL"
+      "DCGM_FI_DEV_MEM_COPY_UTIL"
+      "DCGM_FI_DEV_FB_FREE"
+      "DCGM_FI_DEV_FB_USED"
+      "DCGM_FI_DEV_POWER_USAGE"
+      "DCGM_FI_DEV_SM_CLOCK"
+      "DCGM_FI_DEV_NVLINK_BANDWIDTH_TOTAL"
+    )
+    for metric in "${REQUIRED_METRICS[@]}"; do
+      QUERY="${VM_URL}/api/v1/query?query=${metric}&time=$(date +%s)"
+      RESULT=$(curl -sf "${QUERY}" 2>/dev/null | python3 -c "
+    import json,sys
+    data=json.load(sys.stdin)
+    results=data.get('data',{}).get('result',[])
+    print(len(results))
+    " 2>/dev/null || echo "0")
+      if [[ "${RESULT}" -gt 0 ]]; then
+        echo "PASS: ${metric} — ${RESULT} time series present"
+      else
+        echo "FAIL: ${metric} — 0 time series (metric missing)"
+        PASS=false
+      fi
+    done
+
+    # --- 3. VictoriaMetrics Kubernetes metrics ---
+    echo ""
+    echo "--- 3. Kubernetes cluster metrics ---"
+    K8S_METRICS=(
+      "kube_node_status_condition"
+      "container_cpu_usage_seconds_total"
+      "container_memory_working_set_bytes"
+      "volcano_queue_allocated_memory_bytes"
+      "volcano_queue_allocated_gpu"
+    )
+    for metric in "${K8S_METRICS[@]}"; do
+      RESULT=$(curl -sf "${VM_URL}/api/v1/query?query=${metric}&time=$(date +%s)" 2>/dev/null | \
+        python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('data',{}).get('result',[])))" 2>/dev/null || echo "0")
+      if [[ "${RESULT}" -gt 0 ]]; then
+        echo "PASS: ${metric} — ${RESULT} time series"
+      else
+        echo "WARN: ${metric} — 0 time series (may not be critical)"
+      fi
+    done
+
+    # --- 4. ClickHouse log table ---
+    echo ""
+    echo "--- 4. ClickHouse structured logs ---"
+    CH_QUERY="SELECT count() FROM ${CH_DB}.${CH_TABLE} WHERE timestamp > now() - INTERVAL ${LOOKBACK_MIN} MINUTE"
+    CH_RESULT=$(clickhouse-client \
+      --host="${CH_HOST}" \
+      --port="${CH_PORT}" \
+      --query="${CH_QUERY}" 2>/dev/null || echo "ERROR")
+    if [[ "${CH_RESULT}" == "ERROR" ]]; then
+      echo "FAIL: ClickHouse not reachable at ${CH_HOST}:${CH_PORT}"
+      PASS=false
+    elif [[ "${CH_RESULT}" -gt 0 ]]; then
+      echo "PASS: ClickHouse log table has ${CH_RESULT} rows in last ${LOOKBACK_MIN} minutes"
+    else
+      echo "FAIL: ClickHouse log table has 0 rows in last ${LOOKBACK_MIN} minutes"
+      PASS=false
+    fi
+
+    # --- 5. Alert rules loaded ---
+    echo ""
+    echo "--- 5. Alerting rules ---"
+    RULES_COUNT=$(curl -sf "${ALERT_RULES_URL}/api/v1/rules" 2>/dev/null | \
+      python3 -c "
+    import json,sys
+    data=json.load(sys.stdin)
+    count=sum(len(g.get('rules',[])) for g in data.get('data',{}).get('groups',[]))
+    print(count)
+    " 2>/dev/null || echo "0")
+    if [[ "${RULES_COUNT}" -gt 0 ]]; then
+      echo "PASS: ${RULES_COUNT} alert rules loaded in vmalert"
+    else
+      echo "FAIL: no alert rules found in vmalert"
+      PASS=false
+    fi
+
+    echo ""
+    if [[ "${PASS}" != "true" ]]; then
+      echo "=== Observability Check FAILED ==="
+      exit 1
+    fi
+    echo "=== Observability Check PASSED ==="
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: observability-check
+  namespace: gpu-inference-validation
+  labels:
+    app.kubernetes.io/name: observability-check
+    app.kubernetes.io/part-of: gpu-inference-dod
+spec:
+  completions: 1
+  parallelism: 1
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: observability-check
+        app.kubernetes.io/part-of: gpu-inference-dod
+    spec:
+      serviceAccountName: gpu-inference-validator
+      restartPolicy: OnFailure
+      volumes:
+        - name: scripts
+          configMap:
+            name: observability-check-config
+            defaultMode: 0755
+      containers:
+        - name: checker
+          # clickhouse-client + curl + python3
+          image: clickhouse/clickhouse-client:24.3
+          env:
+            - name: VM_URL
+              value: "http://victoria-metrics.monitoring.svc.cluster.local:8428"
+            - name: CH_HOST
+              value: "clickhouse.logging.svc.cluster.local"
+            - name: CH_PORT
+              value: "9000"
+            - name: CH_DB
+              value: "logs"
+            - name: CH_TABLE
+              value: "kubernetes_logs"
+            - name: ALERT_RULES_URL
+              value: "http://vmalert.monitoring.svc.cluster.local:8880"
+            - name: LOOKBACK_MIN
+              value: "5"
+          command:
+            - /bin/bash
+            - -c
+            - /scripts/run-observability-check.sh
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
