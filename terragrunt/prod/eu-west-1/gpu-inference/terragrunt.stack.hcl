@@ -51,3 +51,8 @@ unit "gpu-inference-dra" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-dra"
   path   = "gpu-inference-dra"
 }
+
+unit "gpu-inference-volcano" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-volcano"
+  path   = "gpu-inference-volcano"
+}
