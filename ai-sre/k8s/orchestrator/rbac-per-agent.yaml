@@ -78,6 +78,16 @@ metadata:
     app.kubernetes.io/component: agent
     app.kubernetes.io/part-of: ai-sre
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ai-sre-aws-cloud
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/name: ai-sre-aws-cloud
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: ai-sre
+---
 # Read-only ClusterRole shared by all agents
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -212,4 +222,19 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: ai-sre-runbook
+    namespace: ai-sre-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ai-sre-readonly-aws-cloud
+  labels:
+    app.kubernetes.io/part-of: ai-sre
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ai-sre-readonly
+subjects:
+  - kind: ServiceAccount
+    name: ai-sre-aws-cloud
     namespace: ai-sre-system
