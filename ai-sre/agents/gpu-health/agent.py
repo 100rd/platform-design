@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from ..cloud.correlation import AWSNodeContext, CrossLayerCorrelator
+
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are a GPU Health specialist for a multi-cluster Kubernetes platform
@@ -16,6 +18,7 @@ Your capabilities:
 - Predict GPU failures before they impact workloads
 - Analyze GPU utilization patterns and memory pressure
 - Advise on node cordoning, workload migration, and driver issues
+- Cross-reference GPU issues with AWS EC2 instance health
 
 Key DCGM metrics you monitor:
 - DCGM_FI_DEV_GPU_UTIL: GPU compute utilization (%)
@@ -37,10 +40,17 @@ Thresholds:
 - PCIe replays > 100/min: link degradation
 - NVLink errors: training performance degradation
 
+AWS cross-layer correlation:
+- GPU XID errors + EC2 instance check FAILING -> hardware issue, file AWS support ticket
+- GPU XID errors + EC2 checks PASSING -> driver/software issue, not hardware
+- GPU degradation + spot interruption notice -> prioritize checkpoint save
+- GPU issues + scheduled maintenance -> may resolve after maintenance window
+
 Constraints:
 - Advisory-only: never execute commands
 - Always recommend cordoning before draining
 - Escalate hardware failures to on-call with evidence
+- Always include AWS EC2 health context in assessments
 """
 
 
@@ -74,6 +84,8 @@ class GPUHealthAssessment:
     predictions: list[str] = field(default_factory=list)
     recommended_actions: list[str] = field(default_factory=list)
     gpu_metrics: list[GPUHealthMetrics] = field(default_factory=list)
+    aws_context: Optional[AWSNodeContext] = None
+    aws_correlation: list[str] = field(default_factory=list)
     timestamp: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -101,10 +113,14 @@ class GPUHealthAgent:
 
     Uses DCGM metrics via metrics-mcp and K8s node status via
     kubernetes-mcp to assess GPU health across clusters.
+
+    Enhanced with AWS cross-layer correlation via CrossLayerCorrelator
+    to distinguish hardware (EC2) issues from driver/software issues.
     """
 
     def __init__(self) -> None:
         self.assessments: dict[str, GPUHealthAssessment] = {}
+        self.correlator = CrossLayerCorrelator()
 
     async def assess_node(
         self,
@@ -115,7 +131,8 @@ class GPUHealthAgent:
         """Assess GPU health for a specific node.
 
         Analyzes DCGM metrics and generates a health assessment
-        with risk score and recommended actions.
+        with risk score and recommended actions. Now includes
+        AWS EC2 health context for cross-layer correlation.
         """
         assessment = GPUHealthAssessment(
             node=node,
@@ -126,6 +143,43 @@ class GPUHealthAgent:
         if metrics:
             assessment.gpu_metrics = [metrics]
             self._evaluate_metrics(assessment, metrics)
+
+        # AWS cross-layer enrichment
+        aws_context = await self.correlator.enrich_for_node(node, cluster)
+        if aws_context:
+            assessment.aws_context = aws_context
+            correlation_insights = self.correlator.correlate_gpu_issue_with_aws(
+                aws_context
+            )
+            assessment.aws_correlation = correlation_insights
+
+            # Adjust assessment based on AWS context
+            if aws_context.instance_check == "impaired":
+                assessment.issues.append(
+                    "EC2 instance check FAILING — GPU issues likely hardware-related"
+                )
+                assessment.recommended_actions.append(
+                    "File AWS support ticket for instance hardware issue"
+                )
+                if assessment.status != "critical":
+                    assessment.status = "critical"
+                    assessment.risk_score = max(assessment.risk_score, 80)
+
+            if aws_context.spot_interruption:
+                assessment.issues.append(
+                    f"Spot interruption notice — instance being reclaimed "
+                    f"at {aws_context.spot_termination_time}"
+                )
+                assessment.recommended_actions.insert(
+                    0, "URGENT: Trigger checkpoint save for training jobs"
+                )
+
+            if aws_context.scheduled_events:
+                for event in aws_context.scheduled_events:
+                    assessment.predictions.append(
+                        f"Scheduled maintenance: {event.get('description', '')} "
+                        f"at {event.get('not_before', 'TBD')}"
+                    )
 
         self.assessments[f"{cluster}/{node}"] = assessment
         return assessment
@@ -251,6 +305,12 @@ class GPUHealthAgent:
             lines.append("\nPredictions:")
             for pred in assessment.predictions:
                 lines.append(f"  - {pred}")
+
+        # AWS cloud context
+        if assessment.aws_correlation:
+            lines.append("\nAWS Cloud Context:")
+            for insight in assessment.aws_correlation:
+                lines.append(f"  - {insight}")
 
         if assessment.recommended_actions:
             lines.append("\nRecommended Actions:")
