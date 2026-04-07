@@ -96,6 +96,10 @@ class SREOrchestrator:
         - cilium_*, network_*    -> Incident Response Agent
         - vllm_*                 -> Predictive Scaling Agent
         - cost_*                 -> Cost Optimization Agent
+        - ec2_*, ebs_*, spot_*   -> AWS Cloud Agent
+        - guardduty_*, securityhub_* -> AWS Cloud Agent
+        - aws_quota_*            -> AWS Cloud Agent
+        - cloudwatch_*           -> AWS Cloud Agent
         - Other                  -> On-Call Copilot Agent
         """
         alert_name = alert.get("labels", {}).get("alertname", "").lower()
@@ -107,6 +111,10 @@ class SREOrchestrator:
             (["cilium_", "network_"], AgentRole.INCIDENT_RESPONSE),
             (["vllm_"], AgentRole.PREDICTIVE_SCALING),
             (["cost_"], AgentRole.COST_OPTIMIZATION),
+            (["ec2_", "ebs_", "spot_"], AgentRole.AWS_CLOUD),
+            (["guardduty_", "securityhub_"], AgentRole.AWS_CLOUD),
+            (["aws_quota_"], AgentRole.AWS_CLOUD),
+            (["cloudwatch_"], AgentRole.AWS_CLOUD),
         ]
 
         for prefixes, role in routing_rules:
@@ -150,11 +158,42 @@ class SREOrchestrator:
             target_role.value,
         )
 
+        # For AWS cloud alerts, also request cross-layer enrichment
+        # from the AWS Cloud Agent even when routing to another agent
+        if target_role != AgentRole.AWS_CLOUD:
+            enrichment_needed = self._needs_aws_enrichment(alert)
+            if enrichment_needed:
+                context.enrichment["aws_cloud_check_requested"] = True
+                logger.info(
+                    "Also requesting AWS cloud enrichment for alert '%s'",
+                    alert_name,
+                )
+
         # In production, this calls the Claude Agent SDK:
         # advisory = await self._run_agent(target_role, context)
         # context.advisories.append(advisory)
 
         return context
+
+    def _needs_aws_enrichment(self, alert: dict[str, Any]) -> bool:
+        """Determine if an alert would benefit from AWS cloud context.
+
+        Most K8s-layer alerts can benefit from checking the underlying
+        EC2/EBS/network health to rule out infrastructure root causes.
+        """
+        alert_name = alert.get("labels", {}).get("alertname", "").lower()
+        # Pod crashes, node issues, and network problems often have AWS root causes
+        enrichment_patterns = [
+            "kube_pod_",
+            "container_",
+            "node_",
+            "kubelet_",
+            "cilium_",
+            "network_",
+            "gpu_",
+            "dcgm_",
+        ]
+        return any(alert_name.startswith(p) for p in enrichment_patterns)
 
     async def aggregate_advisories(
         self, context: InvestigationContext
@@ -188,6 +227,9 @@ class SREOrchestrator:
                 }
                 for a in context.advisories
             ],
+            "aws_enrichment": context.enrichment.get(
+                "aws_cloud_check_requested", False
+            ),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 

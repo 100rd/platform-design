@@ -52,6 +52,7 @@ data:
       capacity_prefixes: ["node_", "kubelet_"]
       scaling_prefixes: ["vllm_"]
       cost_prefixes: ["cost_"]
+      aws_cloud_prefixes: ["ec2_", "ebs_", "spot_", "guardduty_", "securityhub_", "aws_quota_", "cloudwatch_"]
     guardrails:
       advisory_only: true
       require_approval_for_writes: true

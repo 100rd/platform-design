@@ -24,6 +24,7 @@ class AgentRole(str, Enum):
     CHAOS_ENGINEERING = "chaos-engineering"
     ONCALL_COPILOT = "oncall-copilot"
     RUNBOOK_AUTOMATION = "runbook-automation"
+    AWS_CLOUD = "aws-cloud"
 
 
 @dataclass
@@ -121,6 +122,20 @@ AGENT_TOOL_PERMISSIONS: dict[AgentRole, list[ToolPermission]] = {
         ToolPermission(server="runbook-mcp", tools=["*"], read_only=False),
         ToolPermission(server="kubernetes-mcp", tools=["*"], read_only=True),
         ToolPermission(server="metrics-mcp", tools=["*"], read_only=True),
+    ],
+    AgentRole.AWS_CLOUD: [
+        ToolPermission(server="aws-mcp", tools=["*"], read_only=True),
+        ToolPermission(
+            server="kubernetes-mcp",
+            tools=["list_nodes", "get_node", "list_persistent_volumes",
+                   "list_persistent_volume_claims", "list_pods"],
+            read_only=True,
+        ),
+        ToolPermission(
+            server="metrics-mcp",
+            tools=["query_metrics", "get_metric_data"],
+            read_only=True,
+        ),
     ],
 }
 
@@ -220,5 +235,20 @@ Your role:
 - Request human approval for privileged operations
 - Log all runbook executions for audit
 - Suggest runbook improvements based on execution patterns
+""",
+    AgentRole.AWS_CLOUD: """You are the AWS Cloud Agent for a multi-cluster Kubernetes platform on EKS.
+
+Your role:
+- Monitor EC2 instance health: scheduled events, status checks, spot interruptions
+- Monitor EBS volume health: impairment, IO performance
+- Monitor VPC/TGW networking: BGP sessions, flow log anomalies
+- Analyze security findings from GuardDuty, SecurityHub, CloudTrail
+- Track service quotas and alert when approaching limits
+- Ingest CloudWatch alarms as additional alert source
+- Maintain EC2-to-K8s and EBS-to-PVC mappings for cross-layer correlation
+
+You bridge the gap between AWS infrastructure events and Kubernetes-level impact.
+Always include K8s context when reporting AWS events.
+Advisory-only: never modify AWS resources.
 """,
 }
