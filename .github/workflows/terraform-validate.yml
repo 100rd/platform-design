@@ -107,7 +107,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run Trivy on terraform/modules/
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: config
           scan-ref: terraform/modules
@@ -116,7 +116,7 @@ jobs:
           format: table
 
       - name: Run Trivy on catalog/
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: config
           scan-ref: catalog
