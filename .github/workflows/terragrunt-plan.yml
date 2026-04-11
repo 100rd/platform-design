@@ -118,20 +118,93 @@ jobs:
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
         continue-on-error: true
 
+      # Export plan as JSON for structured diff analysis and downstream OPA checks
+      - name: Export plan JSON
+        id: plan-json
+        if: steps.aws-creds.outcome == 'success' && steps.plan.outcome != 'skipped'
+        working-directory: ${{ matrix.module }}
+        run: |
+          terragrunt show -json tfplan 2>/dev/null > plan.json || echo '{}' > plan.json
+        continue-on-error: true
+
       - name: Post plan to PR
         uses: actions/github-script@v7
         if: always()
         with:
           script: |
             const fs = require('fs');
-            const planFile = '${{ matrix.module }}/plan_output.txt';
+            const module = '${{ matrix.module }}';
+            const planFile = `${module}/plan_output.txt`;
+            const planJsonFile = `${module}/plan.json`;
             const credsAvailable = '${{ steps.aws-creds.outcome }}' === 'success';
+            const planOutcome = '${{ steps.plan.outcome }}';
 
-            let planOutput;
-            let status;
+            // ----------------------------------------------------------------
+            // Helper: parse plan JSON for resource change counts
+            // ----------------------------------------------------------------
+            function parsePlanJson(jsonPath) {
+              const empty = { add: 0, change: 0, destroy: 0, replace: 0, destructive: [] };
+              try {
+                if (!fs.existsSync(jsonPath)) return empty;
+                const raw = fs.readFileSync(jsonPath, 'utf8');
+                const plan = JSON.parse(raw);
+                const changes = plan.resource_changes || [];
+                let add = 0, change = 0, destroy = 0, replace = 0;
+                const destructive = [];
+                for (const rc of changes) {
+                  const actions = rc.change?.actions || [];
+                  if (actions.includes('no-op') || actions.includes('read')) continue;
+                  if (actions.length === 1 && actions[0] === 'create') { add++; }
+                  else if (actions.length === 1 && actions[0] === 'update') { change++; }
+                  else if (actions.length === 1 && actions[0] === 'delete') {
+                    destroy++;
+                    destructive.push({ addr: rc.address, action: 'destroy' });
+                  } else if (JSON.stringify([...actions].sort()) === JSON.stringify(['create', 'delete'])) {
+                    replace++;
+                    destructive.push({ addr: rc.address, action: 'replace' });
+                  }
+                }
+                return { add, change, destroy, replace, destructive };
+              } catch (e) {
+                return empty;
+              }
+            }
+
+            // ----------------------------------------------------------------
+            // Helper: destructive changes warning callout
+            // ----------------------------------------------------------------
+            function destructiveWarning(items) {
+              if (!items || items.length === 0) return '';
+              const lines = items.map(i => `  - \`${i.addr}\` — **${i.action.toUpperCase()}**`);
+              return [
+                '> [!WARNING]',
+                '> **Destructive changes detected** — review carefully before merging:',
+                ...lines,
+                '',
+              ].join('\n');
+            }
+
+            // ----------------------------------------------------------------
+            // Helper: summary table
+            // ----------------------------------------------------------------
+            function summaryTable(counts) {
+              return [
+                '| Change type | Count |',
+                '|-------------|-------|',
+                `| Add         | ${counts.add} |`,
+                `| Change      | ${counts.change} |`,
+                `| Destroy     | ${counts.destroy} |`,
+                `| Replace     | ${counts.replace} |`,
+              ].join('\n');
+            }
+
+            // ----------------------------------------------------------------
+            // Build comment body
+            // ----------------------------------------------------------------
+            let body;
 
             if (!credsAvailable) {
-              planOutput = [
+              const noCredMsg = [
                 'AWS credentials not yet configured.',
                 '',
                 'To enable plan output:',
@@ -140,34 +213,69 @@ jobs:
                 '',
                 'See SYNC_ROADMAP.md Phase 1.5 for details.'
               ].join('\n');
-              status = '\u23ED\uFE0F';
+              body = `### \u23ED\uFE0F Terragrunt Plan: \`${module}\`\n\n${noCredMsg}`;
             } else if (fs.existsSync(planFile)) {
-              planOutput = fs.readFileSync(planFile, 'utf8');
-              status = '${{ steps.plan.outcome }}' === 'success' ? '\u2705' : '\u274C';
+              const statusIcon = planOutcome === 'success' ? '\u2705' : '\u274C';
+              const rawOutput = fs.readFileSync(planFile, 'utf8');
+              const counts = parsePlanJson(planJsonFile);
+              const hasDestructive = counts.destructive && counts.destructive.length > 0;
+              const overallIcon = hasDestructive ? '\u26A0\uFE0F' : statusIcon;
+
+              // Truncate raw output to stay within GitHub comment limits (65k chars)
+              const truncated = rawOutput.length > 55000
+                ? rawOutput.substring(0, 55000) + '\n\n... output truncated (>55 000 chars) — see Actions log for full output'
+                : rawOutput;
+
+              body = [
+                `### ${overallIcon} Terragrunt Plan: \`${module}\``,
+                '',
+                '#### Summary',
+                '',
+                summaryTable(counts),
+                '',
+                destructiveWarning(counts.destructive),
+                '<details>',
+                '<summary>Show full plan output</summary>',
+                '',
+                '```terraform',
+                truncated,
+                '```',
+                '',
+                '</details>',
+              ].join('\n');
             } else {
-              planOutput = 'No plan output available (plan step may have been skipped or failed).';
-              status = '\u274C';
+              body = `### \u274C Terragrunt Plan: \`${module}\`\n\nNo plan output available (plan step may have been skipped or failed).`;
             }
 
-            const truncated = planOutput.length > 60000
-              ? planOutput.substring(0, 60000) + '\n... (truncated)'
-              : planOutput;
+            // ----------------------------------------------------------------
+            // Upsert: update existing bot comment or create new one
+            // ----------------------------------------------------------------
+            const marker = `<!-- tg-plan:${module} -->`;
+            const fullBody = `${marker}\n${body}`;
 
-            await github.rest.issues.createComment({
+            const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `### ${status} Terragrunt Plan: \`${{ matrix.module }}\`
-
-            <details>
-            <summary>Show plan output</summary>
-
-            \`\`\`
-            ${truncated}
-            \`\`\`
-
-            </details>`
             });
+
+            const existing = comments.find(c => c.body && c.body.startsWith(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: fullBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: fullBody,
+              });
+            }
 
   # ---------------------------------------------------------------------------
   # Summary gate — required status check
