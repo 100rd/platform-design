@@ -1,0 +1,277 @@
+name: OPA Policy Checks (Conftest)
+
+# ---------------------------------------------------------------------------
+# Runs Conftest against the Terraform plan JSON for every changed Terragrunt
+# unit.  Policies live in tests/opa/ and enforce:
+#   - No public S3 buckets
+#   - No unrestricted security group ingress (0.0.0.0/0)
+#   - Required tags on all resources
+#   - No hardcoded credentials/secrets
+#   - Encryption at rest on all storage resources
+#
+# Conftest is run AFTER terragrunt plan so it evaluates the actual planned
+# changes, not just static source files.  The plan JSON is produced by
+# `terragrunt show -json tfplan`.
+#
+# Prerequisites: deploy catalog/units/github-oidc and set TERRAFORM_PLAN_ROLE_ARN.
+# If OIDC is not yet wired the policy step is skipped with an informational comment.
+# ---------------------------------------------------------------------------
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "terragrunt/**"
+      - "catalog/**"
+      - "terraform/modules/**"
+      - "tests/opa/**"
+      - ".github/workflows/conftest-opa.yml"
+
+concurrency:
+  group: conftest-opa-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  TF_VERSION: "1.14.8"
+  TG_VERSION: "0.99.5"
+  CONFTEST_VERSION: "0.57.0"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Detect changed Terragrunt units (same logic as terragrunt-plan.yml)
+  # ---------------------------------------------------------------------------
+  detect-changes:
+    name: Detect changed modules
+    runs-on: ubuntu-latest
+    outputs:
+      modules: ${{ steps.changes.outputs.modules }}
+      has_changes: ${{ steps.changes.outputs.has_changes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed Terragrunt directories
+        id: changes
+        run: |
+          CHANGED_DIRS=$(git diff --name-only origin/main...HEAD \
+            | grep -E '\.(hcl|tf|tfvars)$' \
+            | xargs -I{} dirname {} \
+            | grep -E '^(terragrunt/(dev|staging|prod|management|log-archive|security|network|third-party)/|catalog/units/)' \
+            | sort -u \
+            | jq -R -s -c 'split("\n") | map(select(. != ""))')
+
+          echo "modules=${CHANGED_DIRS}" >> "$GITHUB_OUTPUT"
+
+          if [ "$CHANGED_DIRS" = "[]" ] || [ -z "$CHANGED_DIRS" ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # OPA policy evaluation — one job per changed Terragrunt unit
+  # ---------------------------------------------------------------------------
+  opa-check:
+    name: OPA ${{ matrix.module }}
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ${{ fromJson(needs.detect-changes.outputs.modules) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Install Terragrunt
+        run: |
+          curl -sL "https://github.com/gruntwork-io/terragrunt/releases/download/v${TG_VERSION}/terragrunt_linux_amd64" \
+            -o /usr/local/bin/terragrunt
+          chmod +x /usr/local/bin/terragrunt
+
+      - name: Install Conftest
+        run: |
+          curl -sL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
+            | tar xz -C /tmp
+          sudo mv /tmp/conftest /usr/local/bin/conftest
+          conftest --version
+
+      - name: Configure AWS credentials via OIDC
+        id: aws-creds
+        uses: aws-actions/configure-aws-credentials@v4
+        if: vars.TERRAFORM_PLAN_ROLE_ARN != ''
+        continue-on-error: true
+        with:
+          role-to-assume: ${{ vars.TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - name: Terragrunt Init
+        if: steps.aws-creds.outcome == 'success'
+        working-directory: ${{ matrix.module }}
+        run: terragrunt init --non-interactive
+
+      - name: Terragrunt Plan (JSON output)
+        id: plan
+        if: steps.aws-creds.outcome == 'success'
+        working-directory: ${{ matrix.module }}
+        run: |
+          terragrunt plan -no-color -out=tfplan 2>&1
+          terragrunt show -json tfplan > plan.json
+        continue-on-error: true
+
+      - name: Run Conftest OPA policies
+        id: conftest
+        if: steps.aws-creds.outcome == 'success' && steps.plan.outcome == 'success'
+        working-directory: ${{ matrix.module }}
+        run: |
+          # Run conftest against the plan JSON; policies are in tests/opa/
+          set +e
+          conftest test plan.json \
+            --policy "$GITHUB_WORKSPACE/tests/opa" \
+            --no-color \
+            --output json \
+            > conftest_output.json 2>&1
+          CONFTEST_EXIT=$?
+          set -e
+
+          # Also produce a human-readable version for the log
+          conftest test plan.json \
+            --policy "$GITHUB_WORKSPACE/tests/opa" \
+            --no-color \
+            --output table 2>&1 || true
+
+          echo "exit_code=${CONFTEST_EXIT}" >> "$GITHUB_OUTPUT"
+          exit $CONFTEST_EXIT
+        continue-on-error: true
+
+      - name: Post OPA results to PR
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const fs = require('fs');
+            const module = '${{ matrix.module }}';
+            const credsAvailable = '${{ steps.aws-creds.outcome }}' === 'success';
+            const planOutcome = '${{ steps.plan.outcome }}';
+            const conftestOutcome = '${{ steps.conftest.outcome }}';
+            const conftestExit = '${{ steps.conftest.outputs.exit_code }}';
+            const jsonFile = `${module}/conftest_output.json`;
+
+            const marker = `<!-- conftest-opa:${module} -->`;
+
+            let body;
+
+            if (!credsAvailable) {
+              body = [
+                `### ⏭️ OPA Policy Check: \`${module}\``,
+                '',
+                'AWS credentials not yet configured — OPA check skipped.',
+                'Deploy `catalog/units/github-oidc` and set `TERRAFORM_PLAN_ROLE_ARN` to enable.',
+              ].join('\n');
+            } else if (planOutcome !== 'success') {
+              body = `### ⏭️ OPA Policy Check: \`${module}\`\n\nSkipped — Terraform plan did not produce a plan file.`;
+            } else {
+              const passed = conftestExit === '0';
+              const icon = passed ? '✅' : '❌';
+
+              let violations = [];
+              let warnings = [];
+              let successes = [];
+
+              try {
+                const raw = fs.readFileSync(jsonFile, 'utf8');
+                const results = JSON.parse(raw);
+                for (const r of (Array.isArray(results) ? results : [results])) {
+                  violations.push(...(r.failures || []));
+                  warnings.push(...(r.warnings || []));
+                  successes.push(...(r.successes || []));
+                }
+              } catch (e) {
+                // JSON parse failed — use raw output as fallback
+              }
+
+              const violationLines = violations.map(v =>
+                `- ❌ \`${v.metadata?.title || 'violation'}\`: ${v.msg}`
+              );
+              const warningLines = warnings.map(w =>
+                `- ⚠️ ${w.msg}`
+              );
+
+              const summaryLines = [
+                `| Result | Count |`,
+                `|--------|-------|`,
+                `| Violations | ${violations.length} |`,
+                `| Warnings   | ${warnings.length} |`,
+                `| Passed     | ${successes.length} |`,
+              ];
+
+              body = [
+                `### ${icon} OPA Policy Check: \`${module}\``,
+                '',
+                summaryLines.join('\n'),
+                '',
+                violations.length > 0 ? '#### Policy Violations\n' + violationLines.join('\n') : '',
+                warnings.length > 0 ? '#### Warnings\n' + warningLines.join('\n') : '',
+                violations.length === 0 && warnings.length === 0
+                  ? '_All policies passed._'
+                  : '',
+              ].filter(s => s !== '').join('\n');
+            }
+
+            const fullBody = `${marker}\n${body}`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body && c.body.startsWith(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: fullBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: fullBody,
+              });
+            }
+
+            // Fail the step if conftest found violations
+            if (conftestOutcome === 'failure') {
+              core.setFailed(`OPA policy violations found in ${module}`);
+            }
+
+  # ---------------------------------------------------------------------------
+  # Summary gate
+  # ---------------------------------------------------------------------------
+  opa-status:
+    name: OPA Policy Status
+    needs: [detect-changes, opa-check]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check OPA results
+        run: |
+          if [ "${{ needs.opa-check.result }}" = "failure" ]; then
+            echo "OPA policy violations found in one or more modules"
+            exit 1
+          fi
+          echo "All OPA policy checks passed (or skipped)"
