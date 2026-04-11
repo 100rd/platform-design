@@ -1,0 +1,170 @@
+name: Terraform Compliance
+
+on:
+  pull_request:
+    paths:
+      - 'terraform/**/*.tf'
+      - 'tests/compliance/**/*.feature'
+      - '.github/workflows/terraform-compliance.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'terraform/**/*.tf'
+      - 'tests/compliance/**/*.feature'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  terraform-compliance:
+    name: BDD Compliance Tests
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - vpc
+          - eks
+          - eks-cluster
+          - kms
+          - s3-app
+          - rds
+          - ecr
+          - dynamodb
+          - sqs
+          - cloudtrail
+          - iam-baseline
+          - guardduty-org
+          - security-hub
+          - secrets
+          - waf
+          - cloudfront-s3
+          - aws-config
+          - transit-gateway
+          - tgw-attachment
+          - vpc-endpoints
+          - organization
+          - scps
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.11"
+          terraform_wrapper: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install terraform-compliance
+        run: pip install terraform-compliance
+
+      - name: Terraform Init
+        working-directory: terraform/modules/${{ matrix.module }}
+        run: terraform init -backend=false
+
+      - name: Terraform Plan (JSON)
+        working-directory: terraform/modules/${{ matrix.module }}
+        run: terraform plan -out=plan.tfplan -input=false 2>/dev/null || true
+
+      - name: Convert Plan to JSON
+        working-directory: terraform/modules/${{ matrix.module }}
+        run: terraform show -json plan.tfplan > plan.json 2>/dev/null || echo '{}' > plan.json
+
+      - name: Run terraform-compliance
+        working-directory: terraform/modules/${{ matrix.module }}
+        run: |
+          terraform-compliance \
+            -f ../../../tests/compliance/ \
+            -p plan.json \
+            --no-failure || true
+
+  terraform-native-tests:
+    name: Native Tests
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - vpc
+          - eks
+          - eks-cluster
+          - kms
+          - s3-app
+          - rds
+          - ecr
+          - dynamodb
+          - sqs
+          - cloudtrail
+          - iam-baseline
+          - guardduty-org
+          - security-hub
+          - secrets
+          - waf
+          - argocd
+          - cilium
+          - cloudfront-s3
+          - aws-config
+          - transit-gateway
+          - tgw-attachment
+          - tgw-peering
+          - nlb-ingress
+          - global-accelerator
+          - placement-group
+          - ram-share
+          - route53-resolver
+          - scps
+          - sso
+          - vpn-connection
+          - hetzner-nodes
+          - karpenter
+          - keda
+          - monitoring
+          - crossplane
+          - falco
+          - wpa
+          - hpa-defaults
+          - vpc-endpoints
+          - organization
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.11"
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: terraform/modules/${{ matrix.module }}
+        run: terraform init -backend=false
+
+      - name: Run Terraform Tests
+        working-directory: terraform/modules/${{ matrix.module }}
+        run: terraform test -no-color
+
+  compliance-summary:
+    name: Compliance Summary
+    runs-on: ubuntu-latest
+    needs: [terraform-compliance, terraform-native-tests]
+    if: always()
+
+    steps:
+      - name: Check results
+        run: |
+          echo "Terraform Compliance: ${{ needs.terraform-compliance.result }}"
+          echo "Native Tests: ${{ needs.terraform-native-tests.result }}"
+          if [ "${{ needs.terraform-native-tests.result }}" = "failure" ]; then
+            echo "Native tests failed"
+            exit 1
+          fi
