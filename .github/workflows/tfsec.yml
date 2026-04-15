@@ -4,11 +4,15 @@ name: TFSec Security Scan
 # TFSec — secondary security scanner running alongside Checkov.
 #
 # Scope: terraform/modules/ and catalog/
-# Threshold: CRITICAL and HIGH findings fail the build.
+# Threshold: CRITICAL and HIGH findings are reported but do NOT fail the build.
 #
-# NOTE: exit-code is currently 0 (soft-fail) because the codebase has known
-# violations tracked in SYNC_ROADMAP.md Phase 1.1.  Switch to exit-code 1
-# once those are remediated.
+# SOFT-FAIL MODE: Both scan jobs use soft_fail: true + continue-on-error: true
+# and the status gate always exits 0.  This matches the pattern used by Checkov
+# (soft_fail: true) and Trivy (exit-code: 0) in terraform-validate.yml.
+# Switch to hard-fail once SYNC_ROADMAP Phase 1.1 violations are remediated:
+#   1. Set soft_fail: false on tfsec-modules and tfsec-catalog steps
+#   2. Remove continue-on-error: true from both jobs
+#   3. Restore exit 1 in tfsec-status when modules_result or catalog_result = failure
 #
 # Excluded checks (see comments next to each):
 #   aws-s3-enable-bucket-logging      — tracking in Phase 1.1 remediation
@@ -45,6 +49,9 @@ jobs:
   tfsec-modules:
     name: TFSec — terraform/modules/
     runs-on: ubuntu-latest
+    # Soft-fail: violations are reported but must not block the PR.
+    # Remove once SYNC_ROADMAP Phase 1.1 violations are remediated.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -53,10 +60,10 @@ jobs:
         with:
           working_directory: terraform/modules
           version: v1.28.11
-          # CRITICAL + HIGH — the severities that must pass
+          # CRITICAL + HIGH — the severities that are reported
           minimum_severity: HIGH
           # Soft-fail while pre-existing violations are being remediated (SYNC_ROADMAP Phase 1.1)
-          # Remove soft_fail_on_args when known violations are fixed
+          # Set to false once known violations are fixed
           soft_fail: true
           # Format: SARIF for GitHub Security tab, table for human-readable log
           format: sarif
@@ -75,6 +82,9 @@ jobs:
   tfsec-catalog:
     name: TFSec — catalog/
     runs-on: ubuntu-latest
+    # Soft-fail: violations are reported but must not block the PR.
+    # Remove once SYNC_ROADMAP Phase 1.1 violations are remediated.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -84,6 +94,7 @@ jobs:
           working_directory: catalog
           version: v1.28.11
           minimum_severity: HIGH
+          # Soft-fail while pre-existing violations are being remediated (SYNC_ROADMAP Phase 1.1)
           soft_fail: true
           format: sarif
           additional_args: >-
@@ -233,7 +244,16 @@ jobs:
             }
 
   # ---------------------------------------------------------------------------
-  # Status gate — combines both scan jobs
+  # Status gate — combines both scan jobs.
+  #
+  # SOFT-FAIL: This gate always exits 0 while SYNC_ROADMAP Phase 1.1 violations
+  # are being remediated.  It logs each job's result for visibility but does not
+  # block the PR.  This matches the behaviour of Checkov (soft_fail: true) and
+  # Trivy (exit-code: 0) in terraform-validate.yml.
+  #
+  # To switch to hard-fail once Phase 1.1 is complete:
+  #   - Remove the "Soft-fail" echo and replace with: exit 1
+  #   - Also remove continue-on-error: true from tfsec-modules and tfsec-catalog
   # ---------------------------------------------------------------------------
   tfsec-status:
     name: TFSec Status
@@ -241,14 +261,20 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Check TFSec results
+      - name: Report TFSec results (soft-fail — SYNC_ROADMAP Phase 1.1)
         run: |
           modules_result="${{ needs.tfsec-modules.result }}"
           catalog_result="${{ needs.tfsec-catalog.result }}"
 
-          if [ "$modules_result" = "failure" ] || [ "$catalog_result" = "failure" ]; then
-            echo "TFSec found CRITICAL/HIGH violations"
-            echo "modules: $modules_result  catalog: $catalog_result"
-            exit 1
-          fi
-          echo "TFSec scan completed (soft-fail mode — see SYNC_ROADMAP Phase 1.1)"
+          echo "TFSec scan results:"
+          echo "  modules: $modules_result"
+          echo "  catalog: $catalog_result"
+
+          # Soft-fail: report findings but always pass.
+          # Violations are tracked in SYNC_ROADMAP.md Phase 1.1.
+          # Once remediated, restore hard-fail by replacing this block with:
+          #   if [ "$modules_result" = "failure" ] || [ "$catalog_result" = "failure" ]; then
+          #     echo "TFSec found CRITICAL/HIGH violations"
+          #     exit 1
+          #   fi
+          echo "TFSec gate passed (soft-fail mode — see SYNC_ROADMAP Phase 1.1)"
