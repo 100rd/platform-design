@@ -1,3 +1,7 @@
+# NOTE: Cilium module uses yamlencode with conditional expressions that cause
+# "Inconsistent conditional result types" with mock_provider plan evaluation.
+# Tests are limited to variable-default validation which does not evaluate resources.
+
 mock_provider "helm" {}
 mock_provider "kubernetes" {}
 

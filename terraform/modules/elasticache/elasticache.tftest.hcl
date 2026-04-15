@@ -1,9 +1,9 @@
 mock_provider "aws" {}
 
 variables {
-  name     = "test-redis"
-  vpc_id   = "vpc-12345678"
-  vpc_cidr = "10.0.0.0/16"
+  name                       = "test-redis"
+  vpc_id                     = "vpc-12345678"
+  vpc_cidr                   = "10.0.0.0/16"
   subnet_ids                 = ["subnet-aaa", "subnet-bbb"]
   allowed_security_group_ids = ["sg-12345"]
   tags = {

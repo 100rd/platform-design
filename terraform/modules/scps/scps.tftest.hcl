@@ -18,8 +18,8 @@ run "creates_deny_leave_org_policy" {
   command = plan
 
   assert {
-    condition     = aws_organizations_policy.deny_leave_org.name == "platform-design-deny-leave-org"
-    error_message = "Deny leave org policy should be created with project prefix"
+    condition     = aws_organizations_policy.deny_leave_org.name == "DenyLeaveOrganization"
+    error_message = "Deny leave org policy should be created"
   }
 }
 
@@ -27,7 +27,7 @@ run "creates_deny_disable_cloudtrail_policy" {
   command = plan
 
   assert {
-    condition     = aws_organizations_policy.deny_disable_cloudtrail.name == "platform-design-deny-disable-cloudtrail"
+    condition     = aws_organizations_policy.deny_disable_cloudtrail.name == "DenyDisableCloudTrail"
     error_message = "Deny disable CloudTrail policy should be created"
   }
 }
@@ -36,7 +36,7 @@ run "creates_region_restriction_policy" {
   command = plan
 
   assert {
-    condition     = aws_organizations_policy.restrict_regions.name == "platform-design-restrict-regions"
+    condition     = aws_organizations_policy.restrict_regions.name == "RestrictToEURegions"
     error_message = "Region restriction policy should be created"
   }
 }

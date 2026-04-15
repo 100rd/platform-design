@@ -1,5 +1,12 @@
 mock_provider "aws" {}
 
+override_data {
+  target = data.aws_availability_zones.available
+  values = {
+    names = ["us-east-1a", "us-east-1b", "us-east-1c"]
+  }
+}
+
 variables {
   name     = "test-vpc"
   vpc_cidr = "10.0.0.0/16"

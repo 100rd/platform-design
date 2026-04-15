@@ -1,6 +1,17 @@
 mock_provider "helm" {}
 mock_provider "kubernetes" {}
 mock_provider "aws" {}
+mock_provider "aws" {
+  alias = "virginia"
+}
+
+override_data {
+  target = data.aws_ecrpublic_authorization_token.token
+  values = {
+    user_name = "AWS"
+    password  = "mock-token"
+  }
+}
 
 variables {
   cluster_name                      = "test-cluster"

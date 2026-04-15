@@ -3,9 +3,9 @@ mock_provider "aws" {}
 variables {
   name = "test-tgw"
   route_tables = {
-    shared   = "shared-rt"
-    nonprod  = "nonprod-rt"
-    prod     = "prod-rt"
+    shared  = {}
+    nonprod = {}
+    prod    = {}
   }
   tags = {
     Environment = "test"

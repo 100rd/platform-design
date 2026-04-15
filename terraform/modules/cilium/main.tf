@@ -77,7 +77,7 @@ resource "helm_release" "cilium" {
           enabled = var.enable_clustermesh
         }
         metrics = {
-          enabled = var.enable_hubble ? [
+          enabled = var.enable_hubble ? tolist([
             "dns",
             "drop",
             "tcp",
@@ -85,7 +85,7 @@ resource "helm_release" "cilium" {
             "port-distribution",
             "icmp",
             "httpV2:exemplars=true;labelsContext=source_ip,source_namespace,source_workload,destination_ip,destination_namespace,destination_workload,traffic_direction"
-          ] : []
+          ]) : tolist([])
           serviceMonitor = {
             enabled = var.enable_service_monitor
           }

@@ -1,3 +1,7 @@
+# NOTE: The vpc-endpoints module wraps terraform-aws-modules/vpc/aws//modules/vpc-endpoints
+# which uses data.aws_vpc_endpoint_service that requires provider configuration
+# incompatible with mock_provider. Tests are limited to variable-default validation.
+
 mock_provider "aws" {}
 
 variables {

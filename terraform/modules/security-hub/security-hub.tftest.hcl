@@ -1,5 +1,12 @@
 mock_provider "aws" {}
 
+override_data {
+  target = data.aws_region.current
+  values = {
+    name = "us-east-1"
+  }
+}
+
 variables {
   tags = {
     Environment = "test"
@@ -57,8 +64,8 @@ run "standards_can_be_disabled" {
   command = plan
 
   variables {
-    enable_pci_dss_standard         = false
-    enable_cis_standard             = false
+    enable_pci_dss_standard          = false
+    enable_cis_standard              = false
     enable_aws_foundational_standard = false
   }
 

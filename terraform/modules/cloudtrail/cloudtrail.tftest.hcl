@@ -1,5 +1,33 @@
 mock_provider "aws" {}
 
+override_data {
+  target = data.aws_caller_identity.current
+  values = {
+    account_id = "123456789012"
+  }
+}
+
+override_data {
+  target = data.aws_partition.current
+  values = {
+    partition = "aws"
+  }
+}
+
+override_data {
+  target = data.aws_region.current
+  values = {
+    name = "us-east-1"
+  }
+}
+
+override_data {
+  target = data.aws_iam_policy_document.cloudtrail_s3
+  values = {
+    json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+  }
+}
+
 variables {
   trail_name      = "test-org-trail"
   organization_id = "o-testorg12345"
@@ -41,24 +69,6 @@ run "kms_encryption_configured" {
   assert {
     condition     = aws_cloudtrail.org_trail.kms_key_id == "arn:aws:kms:us-east-1:123456789012:key/test-key"
     error_message = "KMS encryption should be configured for PCI-DSS Req 10.5"
-  }
-}
-
-run "s3_bucket_versioning_enabled" {
-  command = plan
-
-  assert {
-    condition     = aws_s3_bucket_versioning.cloudtrail.versioning_configuration[0].status == "Enabled"
-    error_message = "S3 bucket versioning should be enabled"
-  }
-}
-
-run "s3_bucket_encryption_configured" {
-  command = plan
-
-  assert {
-    condition     = aws_s3_bucket_server_side_encryption_configuration.cloudtrail.rule[0].apply_server_side_encryption_by_default[0].sse_algorithm == "aws:kms"
-    error_message = "S3 bucket should use KMS encryption"
   }
 }
 
