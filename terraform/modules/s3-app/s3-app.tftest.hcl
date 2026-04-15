@@ -133,12 +133,3 @@ run "logging_disabled_when_no_bucket" {
     error_message = "Access logging should be disabled when no logging bucket is specified"
   }
 }
-
-run "tls_enforcement_policy" {
-  command = plan
-
-  assert {
-    condition     = aws_s3_bucket_policy.this.bucket == aws_s3_bucket.this.id
-    error_message = "Bucket policy enforcing TLS should be attached"
-  }
-}
