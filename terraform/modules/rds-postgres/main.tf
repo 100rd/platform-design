@@ -37,12 +37,12 @@ resource "aws_secretsmanager_secret" "db_credentials" {
 resource "aws_secretsmanager_secret_version" "db_credentials" {
   secret_id = aws_secretsmanager_secret.db_credentials.id
   secret_string = jsonencode({
-    username    = var.master_username
-    password    = var.master_password != null ? var.master_password : random_password.master_password[0].result
-    engine      = "postgres"
-    host        = aws_db_instance.main.address
-    port        = aws_db_instance.main.port
-    dbname      = aws_db_instance.main.db_name
+    username     = var.master_username
+    password     = var.master_password != null ? var.master_password : random_password.master_password[0].result
+    engine       = "postgres"
+    host         = aws_db_instance.main.address
+    port         = aws_db_instance.main.port
+    dbname       = aws_db_instance.main.db_name
     database_url = "postgres://${var.master_username}:${var.master_password != null ? var.master_password : random_password.master_password[0].result}@${aws_db_instance.main.endpoint}/${aws_db_instance.main.db_name}?sslmode=require"
   })
 }
@@ -148,18 +148,18 @@ resource "aws_db_instance" "main" {
   publicly_accessible    = var.publicly_accessible
 
   # Backup
-  backup_retention_period = var.backup_retention_period
-  backup_window           = var.backup_window
-  maintenance_window      = var.maintenance_window
-  skip_final_snapshot     = var.skip_final_snapshot
+  backup_retention_period   = var.backup_retention_period
+  backup_window             = var.backup_window
+  maintenance_window        = var.maintenance_window
+  skip_final_snapshot       = var.skip_final_snapshot
   final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.name_prefix}-final-snapshot-${formatdate("YYYY-MM-DD-hhmm", timestamp())}"
 
   # Monitoring
-  enabled_cloudwatch_logs_exports = var.enabled_cloudwatch_logs_exports
-  monitoring_interval             = var.monitoring_interval
-  monitoring_role_arn             = var.monitoring_interval > 0 ? aws_iam_role.rds_monitoring[0].arn : null
-  performance_insights_enabled    = var.performance_insights_enabled
-  performance_insights_kms_key_id          = var.kms_key_id
+  enabled_cloudwatch_logs_exports       = var.enabled_cloudwatch_logs_exports
+  monitoring_interval                   = var.monitoring_interval
+  monitoring_role_arn                   = var.monitoring_interval > 0 ? aws_iam_role.rds_monitoring[0].arn : null
+  performance_insights_enabled          = var.performance_insights_enabled
+  performance_insights_kms_key_id       = var.kms_key_id
   performance_insights_retention_period = var.performance_insights_retention_period
 
   # Parameters
