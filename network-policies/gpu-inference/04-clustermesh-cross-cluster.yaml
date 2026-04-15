@@ -1,0 +1,96 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# Identity-Based Policy: ClusterMesh Cross-Cluster Connectivity
+# ---------------------------------------------------------------------------------------------------------------------
+# When ClusterMesh is enabled, pods on the gpu-inference cluster can discover
+# and connect to global services on the platform cluster without LoadBalancers.
+#
+# Cross-cluster identity selectors use the cluster name label:
+#   io.cilium.k8s.policy.cluster: <cluster-name>
+#
+# This enables:
+#   - gpu-inference pods → External Secrets on platform (via ClusterMesh)
+#   - gpu-inference pods → VictoriaMetrics vminsert on platform or dedicated cluster
+#   - AI SRE agents on platform → vLLM health endpoints on gpu-inference
+#   - ArgoCD on platform → gpu-inference pods (sync/health checks)
+#
+# Cluster ID assignments (must match Helm values):
+#   platform    = 1
+#   blockchain  = 2
+#   gpu-analysis = 3
+#   gpu-inference = 4
+# ---------------------------------------------------------------------------------------------------------------------
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: clustermesh-platform-to-gpu
+  namespace: gpu-inference
+  labels:
+    app.kubernetes.io/part-of: cilium-advanced-ebpf
+    app.kubernetes.io/managed-by: terragrunt
+spec:
+  description: "Cross-cluster access: platform cluster services can reach gpu-inference endpoints"
+  endpointSelector:
+    matchLabels:
+      app: vllm-inference
+  ingress:
+    # AI SRE agents on platform cluster monitor vLLM health
+    - fromEndpoints:
+        - matchLabels:
+            io.cilium.k8s.policy.cluster: prod-euw1-platform
+            app: ai-sre-agent
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+          rules:
+            http:
+              - method: "GET"
+                path: "/health"
+              - method: "GET"
+                path: "/v1/models"
+    # ArgoCD on platform checks application health
+    - fromEndpoints:
+        - matchLabels:
+            io.cilium.k8s.policy.cluster: prod-euw1-platform
+            app.kubernetes.io/name: argocd-server
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+          rules:
+            http:
+              - method: "GET"
+                path: "/health"
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: clustermesh-gpu-to-platform
+  namespace: gpu-inference
+  labels:
+    app.kubernetes.io/part-of: cilium-advanced-ebpf
+    app.kubernetes.io/managed-by: terragrunt
+spec:
+  description: "Cross-cluster egress: gpu-inference pods reach platform cluster services"
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": gpu-inference
+  egress:
+    # External Secrets Operator on platform cluster for GPU node secrets
+    - toEndpoints:
+        - matchLabels:
+            io.cilium.k8s.policy.cluster: prod-euw1-platform
+            app.kubernetes.io/name: external-secrets
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # VictoriaMetrics vminsert (global service, may be on platform or dedicated)
+    - toEndpoints:
+        - matchLabels:
+            io.cilium.k8s.policy.cluster: prod-euw1-platform
+            app: vminsert
+      toPorts:
+        - ports:
+            - port: "8480"
+              protocol: TCP

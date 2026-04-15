@@ -5,6 +5,7 @@
 # Phase 1: VPC + EKS cluster foundation.
 # Phase 2: Cilium v1.19 native routing + BGP Control Plane peering via TGW Connect.
 # Phase 3: Cilium WireGuard transparent encryption + high-scale tuning for 5000 nodes.
+# Phase 4: Cilium advanced eBPF -- socket LB, XDP+DSR, Hubble L7, ClusterMesh (Issue #144).
 # Additional units will be added as subsequent issues are implemented.
 # ---------------------------------------------------------------------------------------------------------------------
 
@@ -32,6 +33,15 @@ unit "gpu-inference-cilium-encryption" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-cilium-encryption"
   path   = "gpu-inference-cilium-encryption"
 }
+
+# Phase 4: Advanced eBPF -- socket LB, XDP+DSR, Hubble L7, ClusterMesh.
+# Manages PrometheusRules, Hubble ServiceMonitor, and bandwidth policy reference.
+# Helm values for these features are applied via the gpu-inference-cilium unit.
+unit "gpu-inference-cilium-advanced" {
+  source = "${get_repo_root()}/catalog/units/gpu-inference-cilium-advanced"
+  path   = "gpu-inference-cilium-advanced"
+}
+
 unit "gpu-inference-gpu-operator" {
   source = "${get_repo_root()}/catalog/units/gpu-inference-gpu-operator"
   path   = "gpu-inference-gpu-operator"
