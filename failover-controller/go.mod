@@ -3,7 +3,7 @@ module failover-controller
 go 1.23.0
 
 require (
-	github.com/lib/pq v1.12.2
+	github.com/lib/pq v1.12.3
 	github.com/prometheus/client_golang v1.23.2
 )
 
