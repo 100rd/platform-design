@@ -64,8 +64,8 @@ jobs:
             | sort -u \
             | jq -R -s -c 'split("\n") | map(select(. != ""))')
 
-          # Merge both arrays
-          ALL_ROOTS=$(jq -n \
+          # Merge both arrays into a single-line compact JSON
+          ALL_ROOTS=$(jq -c -n \
             --argjson a "${CHANGED_ROOTS:-[]}" \
             --argjson b "${CATALOG_CHANGED:-[]}" \
             '$a + $b | unique')
