@@ -1,0 +1,200 @@
+name: Terratest Integration Tests
+
+on:
+  # Run nightly at 2:00 AM UTC
+  schedule:
+    - cron: '0 2 * * *'
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      run_full_tests:
+        description: 'Run full integration tests (creates real infrastructure)'
+        required: false
+        default: 'false'
+        type: boolean
+  # Run on PRs that modify test files or terraform modules
+  pull_request:
+    paths:
+      - 'tests/terraform/**'
+      - 'terraform/modules/vpc/**'
+      - 'terraform/modules/s3-app/**'
+      - 'terraform/modules/eks/**'
+      - '.github/workflows/terratest.yml'
+
+permissions:
+  contents: read
+  id-token: write  # For OIDC authentication
+
+env:
+  GO_VERSION: '1.22'
+  TERRAFORM_VERSION: '1.11.0'
+  AWS_REGION: 'us-east-1'
+
+jobs:
+  # Unit tests - always run, no AWS credentials needed
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: tests/terraform/go.sum
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Download Go modules
+        working-directory: tests/terraform
+        run: go mod download
+
+      - name: Run Go vet
+        working-directory: tests/terraform
+        run: go vet ./...
+
+      - name: Build tests
+        working-directory: tests/terraform
+        run: go build ./...
+
+  # Plan-only tests - require AWS credentials but don't create resources
+  plan-tests:
+    name: Plan Validation Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    # Only run if AWS credentials are available
+    environment: terratest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: tests/terraform/go.sum
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+        continue-on-error: true
+
+      - name: Run plan validation tests
+        if: env.AWS_ACCESS_KEY_ID != ''
+        working-directory: tests/terraform
+        run: |
+          go test -v -timeout 30m -run "TestEKSPlanValidation|TestEKSClusterVersions" ./...
+        env:
+          CI: 'true'
+          AWS_REGION: ${{ env.AWS_REGION }}
+
+  # Full integration tests - creates real infrastructure, runs nightly or on manual trigger
+  integration-tests:
+    name: Full Integration Tests
+    runs-on: ubuntu-latest
+    needs: plan-tests
+    if: |
+      (github.event_name == 'schedule') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_full_tests == 'true')
+
+    environment: terratest
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        test:
+          - name: vpc
+            pattern: 'TestVPC'
+            timeout: '20m'
+          - name: s3
+            pattern: 'TestS3'
+            timeout: '15m'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: tests/terraform/go.sum
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Run ${{ matrix.test.name }} integration tests
+        working-directory: tests/terraform
+        run: |
+          go test -v -timeout ${{ matrix.test.timeout }} -run "${{ matrix.test.pattern }}" ./...
+        env:
+          CI: 'false'  # Allow full tests to run
+          AWS_REGION: ${{ env.AWS_REGION }}
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terratest-logs-${{ matrix.test.name }}
+          path: tests/terraform/*.log
+          retention-days: 7
+
+  # Notify on failure
+  notify:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [unit-tests, plan-tests, integration-tests]
+    if: failure() && github.event_name == 'schedule'
+
+    steps:
+      - name: Create issue on failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `Terratest nightly run failed - ${new Date().toISOString().split('T')[0]}`;
+            const body = `
+            ## Terratest Integration Tests Failed
+
+            **Workflow Run:** [${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+            **Date:** ${new Date().toISOString()}
+
+            Please investigate the failing tests and fix any issues.
+
+            /cc @platform-team
+            `;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['terratest', 'ci-failure', 'automated']
+            });
