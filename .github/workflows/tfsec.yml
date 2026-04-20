@@ -1,0 +1,277 @@
+name: TFSec Security Scan
+
+# ---------------------------------------------------------------------------
+# TFSec — secondary security scanner running alongside Checkov.
+#
+# Scope: terraform/modules/ and catalog/
+# Threshold: CRITICAL and HIGH findings are reported but do NOT fail the build.
+#
+# SOFT-FAIL MODE: Both scan jobs use soft_fail: true + continue-on-error: true
+# and the status gate always exits 0.  This matches the pattern used by Checkov
+# (soft_fail: true) and Trivy (exit-code: 0) in terraform-validate.yml.
+# Switch to hard-fail once SYNC_ROADMAP Phase 1.1 violations are remediated:
+#   1. Set soft_fail: false on tfsec-modules and tfsec-catalog steps
+#   2. Remove continue-on-error: true from both jobs
+#   3. Restore exit 1 in tfsec-status when modules_result or catalog_result = failure
+#
+# Excluded checks (see comments next to each):
+#   aws-s3-enable-bucket-logging      — tracking in Phase 1.1 remediation
+#   aws-s3-enable-bucket-versioning   — tracking in Phase 1.1 remediation
+#   aws-iam-no-policy-wildcards       — KMS CMK management requires kms:* (false positive)
+#   aws-dynamodb-enable-at-rest-encryption — pre-existing, tracked for CMK migration
+#
+# Relationship to other scanners:
+#   Trivy    — container images + config (broad coverage, SARIF output)
+#   Checkov  — CIS Benchmark + Well-Architected custom policies
+#   TFSec    — Terraform-specific deep analysis; catches issues Trivy/Checkov miss
+# ---------------------------------------------------------------------------
+
+on:
+  push:
+    branches: [main, feature/terragrunt]
+    paths:
+      - "terraform/**"
+      - "catalog/**"
+      - ".github/workflows/tfsec.yml"
+  pull_request:
+    paths:
+      - "terraform/**"
+      - "catalog/**"
+      - ".github/workflows/tfsec.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write  # Required for SARIF upload to GitHub Security tab
+
+jobs:
+  tfsec-modules:
+    name: TFSec — terraform/modules/
+    runs-on: ubuntu-latest
+    # Soft-fail: violations are reported but must not block the PR.
+    # Remove once SYNC_ROADMAP Phase 1.1 violations are remediated.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run TFSec on terraform/modules/
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform/modules
+          version: v1.28.11
+          # CRITICAL + HIGH — the severities that are reported
+          minimum_severity: HIGH
+          # Soft-fail while pre-existing violations are being remediated (SYNC_ROADMAP Phase 1.1)
+          # Set to false once known violations are fixed
+          soft_fail: true
+          # Format: SARIF for GitHub Security tab
+          format: sarif
+          additional_args: >-
+            --exclude-checks aws-s3-enable-bucket-logging,aws-s3-enable-bucket-versioning,aws-iam-no-policy-wildcards,aws-dynamodb-enable-at-rest-encryption
+            --no-color
+
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: results.sarif
+          category: tfsec-modules
+        continue-on-error: true  # SARIF upload is best-effort; don't fail the build
+
+  tfsec-catalog:
+    name: TFSec — catalog/
+    runs-on: ubuntu-latest
+    # Soft-fail: violations are reported but must not block the PR.
+    # Remove once SYNC_ROADMAP Phase 1.1 violations are remediated.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run TFSec on catalog/
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: catalog
+          version: v1.28.11
+          minimum_severity: HIGH
+          # Soft-fail while pre-existing violations are being remediated (SYNC_ROADMAP Phase 1.1)
+          soft_fail: true
+          format: sarif
+          additional_args: >-
+            --exclude-checks aws-s3-enable-bucket-logging,aws-s3-enable-bucket-versioning,aws-iam-no-policy-wildcards,aws-dynamodb-enable-at-rest-encryption
+            --no-color
+
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: results.sarif
+          category: tfsec-catalog
+        continue-on-error: true
+
+  # ---------------------------------------------------------------------------
+  # Human-readable output for PR review (using default format instead of table)
+  # ---------------------------------------------------------------------------
+  tfsec-table-report:
+    name: TFSec — PR summary report
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install TFSec
+        run: |
+          curl -sL \
+            "https://github.com/aquasecurity/tfsec/releases/download/v1.28.11/tfsec-linux-amd64" \
+            -o /usr/local/bin/tfsec
+          chmod +x /usr/local/bin/tfsec
+          tfsec --version
+
+      - name: Run TFSec (human-readable output — modules)
+        id: tfsec-modules
+        run: |
+          set +e
+          tfsec terraform/modules \
+            --minimum-severity HIGH \
+            --no-color \
+            --exclude aws-s3-enable-bucket-logging,aws-s3-enable-bucket-versioning,aws-iam-no-policy-wildcards,aws-dynamodb-enable-at-rest-encryption \
+            2>&1 | tee /tmp/tfsec-modules.txt
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          set -e
+
+      - name: Run TFSec (human-readable output — catalog)
+        id: tfsec-catalog
+        run: |
+          set +e
+          tfsec catalog \
+            --minimum-severity HIGH \
+            --no-color \
+            --exclude aws-s3-enable-bucket-logging,aws-s3-enable-bucket-versioning,aws-iam-no-policy-wildcards,aws-dynamodb-enable-at-rest-encryption \
+            2>&1 | tee /tmp/tfsec-catalog.txt
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          set -e
+
+      - name: Post TFSec summary to PR
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const fs = require('fs');
+
+            function readOutput(file) {
+              try { return fs.readFileSync(file, 'utf8'); } catch { return 'No output.'; }
+            }
+
+            function countIssues(text) {
+              // tfsec default format prints "X potential problem(s) detected"
+              const m = text.match(/(\d+)\s+potential problem/i);
+              return m ? parseInt(m[1], 10) : null;
+            }
+
+            const modulesOut = readOutput('/tmp/tfsec-modules.txt');
+            const catalogOut = readOutput('/tmp/tfsec-catalog.txt');
+            const modulesExit = '${{ steps.tfsec-modules.outputs.exit_code }}';
+            const catalogExit = '${{ steps.tfsec-catalog.outputs.exit_code }}';
+
+            const modulesCount = countIssues(modulesOut);
+            const catalogCount = countIssues(catalogOut);
+
+            const moduleIcon = modulesExit === '0' ? '✅' : '⚠️';
+            const catalogIcon = catalogExit === '0' ? '✅' : '⚠️';
+
+            function truncate(text, max) {
+              return text.length > max ? text.substring(0, max) + '\n... (truncated — see Actions log for full output)' : text;
+            }
+
+            const body = [
+              '### TFSec Security Scan Results',
+              '',
+              '| Target              | Status         | Issues |',
+              '|---------------------|----------------|--------|',
+              `| \`terraform/modules\` | ${moduleIcon} ${modulesExit === '0' ? 'Passed' : 'Has findings'} | ${modulesCount !== null ? modulesCount : '?'} |`,
+              `| \`catalog/\`          | ${catalogIcon} ${catalogExit === '0' ? 'Passed' : 'Has findings'} | ${catalogCount !== null ? catalogCount : '?'} |`,
+              '',
+              '> Severity threshold: **HIGH + CRITICAL**',
+              '> Build is soft-failing while pre-existing violations are being remediated (SYNC_ROADMAP Phase 1.1).',
+              '',
+              '<details>',
+              '<summary>terraform/modules — full output</summary>',
+              '',
+              '```',
+              truncate(modulesOut, 25000),
+              '```',
+              '',
+              '</details>',
+              '',
+              '<details>',
+              '<summary>catalog — full output</summary>',
+              '',
+              '```',
+              truncate(catalogOut, 25000),
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+
+            const marker = '<!-- tfsec-summary -->';
+            const fullBody = `${marker}\n${body}`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body && c.body.startsWith(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: fullBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: fullBody,
+              });
+            }
+
+  # ---------------------------------------------------------------------------
+  # Status gate — combines both scan jobs.
+  #
+  # SOFT-FAIL: This gate always exits 0 while SYNC_ROADMAP Phase 1.1 violations
+  # are being remediated.  It logs each job's result for visibility but does not
+  # block the PR.  This matches the behaviour of Checkov (soft_fail: true) and
+  # Trivy (exit-code: 0) in terraform-validate.yml.
+  #
+  # To switch to hard-fail once Phase 1.1 is complete:
+  #   - Remove the "Soft-fail" echo and replace with: exit 1
+  #   - Also remove continue-on-error: true from tfsec-modules and tfsec-catalog
+  # ---------------------------------------------------------------------------
+  tfsec-status:
+    name: TFSec Status
+    needs: [tfsec-modules, tfsec-catalog]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report TFSec results (soft-fail — SYNC_ROADMAP Phase 1.1)
+        run: |
+          modules_result="${{ needs.tfsec-modules.result }}"
+          catalog_result="${{ needs.tfsec-catalog.result }}"
+
+          echo "TFSec scan results:"
+          echo "  modules: $modules_result"
+          echo "  catalog: $catalog_result"
+
+          # Soft-fail: report findings but always pass.
+          # Violations are tracked in SYNC_ROADMAP.md Phase 1.1.
+          # Once remediated, restore hard-fail by replacing this block with:
+          #   if [ "$modules_result" = "failure" ] || [ "$catalog_result" = "failure" ]; then
+          #     echo "TFSec found CRITICAL/HIGH violations"
+          #     exit 1
+          #   fi
+          echo "TFSec gate passed (soft-fail mode — see SYNC_ROADMAP Phase 1.1)"
