@@ -1,5 +1,13 @@
 mock_provider "aws" {}
 
+override_data {
+  target = data.aws_ssoadmin_instances.this
+  values = {
+    arns               = ["arn:aws:sso:::instance/ssoins-1234567890abcdef"]
+    identity_store_ids = ["d-1234567890"]
+  }
+}
+
 variables {
   organization_id = "o-testorg12345"
   member_accounts = {}

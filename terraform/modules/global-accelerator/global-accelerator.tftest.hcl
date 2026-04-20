@@ -3,10 +3,12 @@ mock_provider "aws" {}
 variables {
   name = "test-accelerator"
   listeners = [{
-    port_ranges = [{ from_port = 443, to_port = 443 }]
-    protocol    = "TCP"
+    port_ranges     = [{ from = 443, to = 443 }]
+    protocol        = "TCP"
+    client_affinity = "NONE"
   }]
-  endpoint_groups = {}
+  endpoint_groups     = {}
+  flow_logs_s3_bucket = "test-flow-logs-bucket"
   tags = {
     Environment = "test"
     Team        = "network"

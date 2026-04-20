@@ -6,7 +6,10 @@ variables {
   vpc_id             = "vpc-12345"
   subnet_ids         = ["subnet-aaa", "subnet-bbb"]
   route_table_id     = "tgw-rtb-12345"
-  vpc_route_table_ids = ["rtb-aaa", "rtb-bbb"]
+  vpc_route_table_ids = {
+    private-a = "rtb-aaa"
+    private-b = "rtb-bbb"
+  }
   tgw_destination_cidr = "10.0.0.0/8"
   tags = {
     Environment = "test"

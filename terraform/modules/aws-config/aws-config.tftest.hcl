@@ -1,5 +1,26 @@
 mock_provider "aws" {}
 
+override_data {
+  target = data.aws_caller_identity.current
+  values = {
+    account_id = "123456789012"
+  }
+}
+
+override_data {
+  target = data.aws_partition.current
+  values = {
+    partition = "aws"
+  }
+}
+
+override_data {
+  target = data.aws_region.current
+  values = {
+    name = "us-east-1"
+  }
+}
+
 variables {
   s3_bucket_name = "test-config-bucket"
   tags = {

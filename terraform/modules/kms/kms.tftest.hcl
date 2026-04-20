@@ -1,5 +1,19 @@
 mock_provider "aws" {}
 
+override_data {
+  target = data.aws_caller_identity.current
+  values = {
+    account_id = "123456789012"
+  }
+}
+
+override_data {
+  target = data.aws_iam_policy_document.key_policy["eks"]
+  values = {
+    json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+  }
+}
+
 variables {
   environment = "dev"
   keys = {
@@ -81,6 +95,20 @@ run "key_usage_default_encrypt_decrypt" {
 
 run "multiple_keys_supported" {
   command = plan
+
+  override_data {
+    target = data.aws_iam_policy_document.key_policy["eks"]
+    values = {
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+    }
+  }
+
+  override_data {
+    target = data.aws_iam_policy_document.key_policy["rds"]
+    values = {
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+    }
+  }
 
   variables {
     keys = {

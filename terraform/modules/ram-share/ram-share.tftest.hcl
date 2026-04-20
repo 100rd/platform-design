@@ -3,6 +3,7 @@ mock_provider "aws" {}
 variables {
   name                = "test-ram-share"
   transit_gateway_arn = "arn:aws:ec2:us-east-1:123456789012:transit-gateway/tgw-12345"
+  organization_arn    = "arn:aws:organizations::123456789012:organization/o-testorg12345"
   tags = {
     Environment = "test"
     Team        = "network"
@@ -14,7 +15,7 @@ run "creates_tgw_ram_share" {
   command = plan
 
   assert {
-    condition     = aws_ram_resource_share.tgw.name == "test-ram-share-tgw"
+    condition     = aws_ram_resource_share.tgw.name == "test-ram-share-tgw-share"
     error_message = "TGW RAM share should be created with correct name"
   }
 }

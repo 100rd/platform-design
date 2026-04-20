@@ -1,8 +1,8 @@
 mock_provider "aws" {}
 
 variables {
-  name                     = "test-tgw-connect"
-  transit_gateway_id       = "tgw-12345"
+  name                          = "test-tgw-connect"
+  transit_gateway_id            = "tgw-12345"
   transit_gateway_attachment_id = "tgw-attach-12345"
   tags = {
     Environment = "test"

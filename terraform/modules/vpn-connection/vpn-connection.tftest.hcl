@@ -5,9 +5,9 @@ variables {
   transit_gateway_id = "tgw-12345"
   vpn_connections = {
     office = {
-      customer_gateway_ip = "203.0.113.1"
-      bgp_asn             = 65000
-      static_routes       = ["192.168.0.0/16"]
+      remote_ip     = "203.0.113.1"
+      bgp_asn       = 65000
+      static_routes = ["192.168.0.0/16"]
     }
   }
   tags = {
