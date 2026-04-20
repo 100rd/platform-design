@@ -1,0 +1,271 @@
+name: Infracost PR Cost Estimation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "terragrunt/**"
+      - "catalog/**"
+      - "terraform/modules/**"
+      - ".github/workflows/infracost.yml"
+      - "infracost.yml"
+
+concurrency:
+  group: infracost-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  # Monthly cost increase threshold in USD.
+  # WARN_THRESHOLD: post a warning comment (informational).
+  # BLOCK_THRESHOLD: fail the workflow (blocks merge).
+  # Override per-PR by adding the label: cost-approved
+  WARN_THRESHOLD: 100
+  BLOCK_THRESHOLD: 500
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Detect changed Terragrunt environments
+  # Matches platform-design's multi-account layout:
+  #   terragrunt/{account}/{region}/{stack}/
+  # ---------------------------------------------------------------------------
+  detect-changes:
+    name: Detect Terragrunt roots
+    runs-on: ubuntu-latest
+    outputs:
+      roots: ${{ steps.detect.outputs.roots }}
+      has_changes: ${{ steps.detect.outputs.has_changes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed Terragrunt environments
+        id: detect
+        run: |
+          # Collect top-level environment directories that have changed HCL/TF files.
+          # We group by {account}/{region} to avoid running infracost on every unit separately —
+          # this gives us a per-environment cost diff which is more actionable.
+          CHANGED_ROOTS=$(git diff --name-only origin/main...HEAD \
+            | grep -E '\.(hcl|tf|tfvars)$' \
+            | grep -E '^terragrunt/(dev|staging|prod|management|log-archive|security|network|third-party)/' \
+            | awk -F/ '{print $1"/"$2"/"$3}' \
+            | sort -u \
+            | jq -R -s -c 'split("\n") | map(select(. != ""))')
+
+          # Also include catalog/units/ changes
+          CATALOG_CHANGED=$(git diff --name-only origin/main...HEAD \
+            | grep -E '^catalog/units/' \
+            | grep -E '\.(hcl|tf|tfvars)$' \
+            | xargs -I{} dirname {} \
+            | sort -u \
+            | jq -R -s -c 'split("\n") | map(select(. != ""))')
+
+          # Merge both arrays
+          ALL_ROOTS=$(jq -n \
+            --argjson a "${CHANGED_ROOTS:-[]}" \
+            --argjson b "${CATALOG_CHANGED:-[]}" \
+            '$a + $b | unique')
+
+          echo "roots=${ALL_ROOTS}" >> "$GITHUB_OUTPUT"
+
+          if [ "$ALL_ROOTS" = "[]" ] || [ -z "$ALL_ROOTS" ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Infracost — generate cost diff per environment root, then post summary
+  # ---------------------------------------------------------------------------
+  infracost:
+    name: Cost estimate
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      # Checkout the base branch (main) to generate baseline costs
+      - name: Checkout base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+
+      # Checkout the PR branch to generate PR costs
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+
+      # ---------------------------------------------------------------------------
+      # Generate cost breakdown for each changed environment root on base branch.
+      # Infracost supports Terragrunt natively via --terragrunt-flags.
+      # ---------------------------------------------------------------------------
+      - name: Generate base costs
+        run: |
+          ROOTS='${{ needs.detect-changes.outputs.roots }}'
+          mkdir -p /tmp/infracost
+
+          echo "${ROOTS}" | jq -r '.[]' | while read -r root; do
+            safe_name=$(echo "${root}" | tr '/' '_')
+            dir="base/${root}"
+
+            if [ ! -d "${dir}" ]; then
+              echo "Skipping missing directory: ${dir}"
+              continue
+            fi
+
+            echo "Generating base costs for: ${root}"
+            infracost breakdown \
+              --path "${dir}" \
+              --format json \
+              --config-file infracost.yml \
+              --out-file "/tmp/infracost/base_${safe_name}.json" \
+              2>/dev/null || echo '{"totalMonthlyCost":"0"}' > "/tmp/infracost/base_${safe_name}.json"
+          done
+
+      # ---------------------------------------------------------------------------
+      # Generate cost breakdown for each changed environment root on PR branch.
+      # ---------------------------------------------------------------------------
+      - name: Generate PR costs
+        run: |
+          ROOTS='${{ needs.detect-changes.outputs.roots }}'
+
+          echo "${ROOTS}" | jq -r '.[]' | while read -r root; do
+            safe_name=$(echo "${root}" | tr '/' '_')
+            dir="pr/${root}"
+
+            if [ ! -d "${dir}" ]; then
+              echo "Skipping missing directory: ${dir}"
+              continue
+            fi
+
+            echo "Generating PR costs for: ${root}"
+            infracost breakdown \
+              --path "${dir}" \
+              --format json \
+              --config-file infracost.yml \
+              --out-file "/tmp/infracost/pr_${safe_name}.json" \
+              2>/dev/null || echo '{"totalMonthlyCost":"0"}' > "/tmp/infracost/pr_${safe_name}.json"
+          done
+
+      # ---------------------------------------------------------------------------
+      # Generate diff JSON files (base vs PR) for each environment root
+      # ---------------------------------------------------------------------------
+      - name: Generate cost diffs
+        run: |
+          ROOTS='${{ needs.detect-changes.outputs.roots }}'
+          DIFF_FILES=()
+
+          echo "${ROOTS}" | jq -r '.[]' | while read -r root; do
+            safe_name=$(echo "${root}" | tr '/' '_')
+            base_file="/tmp/infracost/base_${safe_name}.json"
+            pr_file="/tmp/infracost/pr_${safe_name}.json"
+            diff_file="/tmp/infracost/diff_${safe_name}.json"
+
+            if [ ! -f "${base_file}" ] || [ ! -f "${pr_file}" ]; then
+              echo "Skipping diff for ${root}: missing cost files"
+              continue
+            fi
+
+            infracost diff \
+              --path "${pr_file}" \
+              --compare-to "${base_file}" \
+              --format json \
+              --out-file "${diff_file}" \
+              2>/dev/null || true
+          done
+
+          # Merge all diffs into a single combined diff file
+          DIFF_JSONS=$(ls /tmp/infracost/diff_*.json 2>/dev/null | tr '\n' ' ')
+          if [ -n "${DIFF_JSONS}" ]; then
+            infracost output \
+              --path "/tmp/infracost/diff_*.json" \
+              --format json \
+              --out-file /tmp/infracost/combined.json \
+              2>/dev/null || cp $(ls /tmp/infracost/diff_*.json | head -1) /tmp/infracost/combined.json
+          else
+            echo '{"diffTotalMonthlyCost":"0","projects":[]}' > /tmp/infracost/combined.json
+          fi
+
+      # ---------------------------------------------------------------------------
+      # Post cost breakdown as PR comment
+      # ---------------------------------------------------------------------------
+      - name: Post cost comment
+        uses: infracost/actions/comment@v3
+        with:
+          path: /tmp/infracost/combined.json
+          behavior: update
+
+      # ---------------------------------------------------------------------------
+      # Enforce cost policy thresholds
+      # Label 'cost-approved' bypasses the block threshold.
+      # ---------------------------------------------------------------------------
+      - name: Enforce cost policy
+        run: |
+          COMBINED="/tmp/infracost/combined.json"
+
+          if [ ! -f "${COMBINED}" ]; then
+            echo "No combined diff found — skipping cost policy enforcement."
+            exit 0
+          fi
+
+          # Extract monthly cost diff (may be negative for reductions)
+          MONTHLY_DIFF=$(jq -r '.diffTotalMonthlyCost // "0"' "${COMBINED}")
+
+          # Normalise: strip sign for comparison, keep original for display
+          DIFF_ABS=$(echo "${MONTHLY_DIFF}" | sed 's/^-//')
+
+          echo "Monthly cost change: \$${MONTHLY_DIFF}"
+
+          # Check for cost-approved label (bypass block threshold)
+          LABELS="${{ toJson(github.event.pull_request.labels.*.name) }}"
+          if echo "${LABELS}" | jq -e '.[] | select(. == "cost-approved")' > /dev/null 2>&1; then
+            echo "Label 'cost-approved' found — skipping block threshold check."
+            exit 0
+          fi
+
+          # Only evaluate increases (positive diff)
+          IS_INCREASE=$(echo "${MONTHLY_DIFF}" | awk 'BEGIN{v=0} {if ($1+0 > 0) v=1} END{print v}')
+
+          if [ "${IS_INCREASE}" = "1" ]; then
+            OVER_WARN=$(awk -v diff="${DIFF_ABS}" -v threshold="${WARN_THRESHOLD}" \
+              'BEGIN{print (diff+0 > threshold+0) ? "true" : "false"}')
+            OVER_BLOCK=$(awk -v diff="${DIFF_ABS}" -v threshold="${BLOCK_THRESHOLD}" \
+              'BEGIN{print (diff+0 > threshold+0) ? "true" : "false"}')
+
+            if [ "${OVER_BLOCK}" = "true" ]; then
+              echo "ERROR: Monthly cost increase \$${MONTHLY_DIFF} exceeds block threshold \$${BLOCK_THRESHOLD}/month."
+              echo "To override: add the label 'cost-approved' to this PR and get sign-off from platform-eng."
+              exit 1
+            elif [ "${OVER_WARN}" = "true" ]; then
+              echo "WARNING: Monthly cost increase \$${MONTHLY_DIFF} exceeds warn threshold \$${WARN_THRESHOLD}/month."
+              echo "Please review the cost breakdown in the PR comment."
+              # Warning only — do not fail
+            else
+              echo "Cost increase \$${MONTHLY_DIFF}/month is within acceptable limits."
+            fi
+          else
+            echo "Cost is decreasing or unchanged (\$${MONTHLY_DIFF}/month). No action required."
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Skip notification when no Terraform changes are detected
+  # ---------------------------------------------------------------------------
+  no-tf-changes:
+    name: No Terraform changes
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has_changes == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log skip reason
+        run: echo "No Terragrunt/Terraform changes detected — skipping cost estimation."

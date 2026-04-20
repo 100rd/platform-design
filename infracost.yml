@@ -1,0 +1,79 @@
+# Infracost configuration file
+# https://www.infracost.io/docs/features/config_file/
+#
+# This file configures Infracost cost estimation for the platform-design
+# multi-account Terragrunt layout.
+#
+# Environment layout:
+#   terragrunt/dev/         — non-production development account
+#   terragrunt/staging/     — pre-production staging account
+#   terragrunt/prod/        — production account
+#   terragrunt/management/  — AWS Organizations management account
+#   terragrunt/network/     — shared networking (Transit Gateway, VPN)
+#   catalog/units/          — reusable Terraform units
+
+version: 0.1
+
+projects:
+  # ---------------------------------------------------------------------------
+  # Development environment — eu-west-1 primary region
+  # ---------------------------------------------------------------------------
+  - path: terragrunt/dev/eu-west-1/platform
+    name: dev/eu-west-1/platform
+    terraform_use_state: false
+
+  - path: terragrunt/dev/eu-central-1/platform
+    name: dev/eu-central-1/platform
+    terraform_use_state: false
+
+  # ---------------------------------------------------------------------------
+  # Staging environment — eu-west-1 primary region
+  # ---------------------------------------------------------------------------
+  - path: terragrunt/staging/eu-west-1/platform
+    name: staging/eu-west-1/platform
+    terraform_use_state: false
+
+  - path: terragrunt/staging/eu-central-1/platform
+    name: staging/eu-central-1/platform
+    terraform_use_state: false
+
+  # ---------------------------------------------------------------------------
+  # Production environment — all regions
+  # ---------------------------------------------------------------------------
+  - path: terragrunt/prod/eu-west-1/platform
+    name: prod/eu-west-1/platform
+    terraform_use_state: false
+
+  - path: terragrunt/prod/eu-central-1/platform
+    name: prod/eu-central-1/platform
+    terraform_use_state: false
+
+  - path: terragrunt/prod/eu-west-2/platform
+    name: prod/eu-west-2/platform
+    terraform_use_state: false
+
+  - path: terragrunt/prod/eu-west-3/platform
+    name: prod/eu-west-3/platform
+    terraform_use_state: false
+
+  # ---------------------------------------------------------------------------
+  # Network account — shared Transit Gateway, VPN connections
+  # ---------------------------------------------------------------------------
+  - path: terragrunt/network/eu-west-1
+    name: network/eu-west-1
+    terraform_use_state: false
+
+  # ---------------------------------------------------------------------------
+  # Terraform modules (direct module usage)
+  # ---------------------------------------------------------------------------
+  - path: terraform/modules/vpc
+    name: module/vpc
+    terraform_use_state: false
+
+  - path: terraform/modules/eks
+    name: module/eks
+    terraform_use_state: false
+
+  - path: terraform/modules/rds
+    name: module/rds
+    terraform_use_state: false

@@ -1,0 +1,413 @@
+name: Infrastructure Drift Detection
+
+on:
+  # Run daily at 06:00 UTC — before the engineering day starts in EU timezones
+  schedule:
+    - cron: "0 6 * * *"
+  # Allow manual trigger with optional environment filter
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to check (leave empty for all)"
+        required: false
+        type: choice
+        default: "all"
+        options:
+          - all
+          - dev
+          - staging
+          - prod
+          - network
+      dry_run:
+        description: "Dry run — detect drift but do not create GitHub issues"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  # Only one drift detection run at a time
+  group: drift-detection
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+env:
+  TF_VERSION: "1.14.8"
+  TG_VERSION: "0.99.5"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build the list of Terragrunt environments to check.
+  # On schedule: check all environments.
+  # On manual dispatch: check selected environment (or all).
+  # ---------------------------------------------------------------------------
+  prepare:
+    name: Prepare environment list
+    runs-on: ubuntu-latest
+    outputs:
+      environments: ${{ steps.build-list.outputs.environments }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build environment list
+        id: build-list
+        run: |
+          SELECTED="${{ inputs.environment }}"
+          SELECTED="${SELECTED:-all}"
+
+          if [ "${SELECTED}" = "all" ]; then
+            # Discover all top-level environment directories that contain
+            # at least one terragrunt.hcl unit
+            ENVS=$(find terragrunt -name "terragrunt.hcl" \
+              | awk -F/ '{print $2}' \
+              | sort -u \
+              | grep -v '^_' \
+              | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          else
+            ENVS=$(echo "[\"${SELECTED}\"]")
+          fi
+
+          echo "environments=${ENVS}" >> "$GITHUB_OUTPUT"
+          echo "Environments to check: ${ENVS}"
+
+  # ---------------------------------------------------------------------------
+  # Drift detection — one job per environment, parallel execution.
+  # Uses detect-drift.sh which returns exit code 0 (clean) or 1 (drift found).
+  # ---------------------------------------------------------------------------
+  detect:
+    name: Detect drift — ${{ matrix.environment }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJson(needs.prepare.outputs.environments) }}
+    outputs:
+      # NOTE: GitHub Actions matrix outputs are last-writer-wins — we use
+      # the drift report files as the source of truth instead, uploaded
+      # as artifacts and consumed by the report job.
+      drift_found: ${{ steps.run-detection.outputs.drift_found }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Install Terragrunt
+        run: |
+          curl -sL "https://github.com/gruntwork-io/terragrunt/releases/download/v${TG_VERSION}/terragrunt_linux_amd64" \
+            -o /usr/local/bin/terragrunt
+          chmod +x /usr/local/bin/terragrunt
+
+      - name: Configure AWS credentials via OIDC
+        id: aws-creds
+        uses: aws-actions/configure-aws-credentials@v4
+        if: vars.TERRAFORM_PLAN_ROLE_ARN != ''
+        continue-on-error: true
+        with:
+          role-to-assume: ${{ vars.TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - name: Make detect-drift.sh executable
+        run: chmod +x scripts/detect-drift.sh
+
+      - name: Run drift detection
+        id: run-detection
+        run: |
+          ENV="${{ matrix.environment }}"
+          REPORT_DIR="/tmp/drift-reports"
+          mkdir -p "${REPORT_DIR}"
+
+          if [ "${{ steps.aws-creds.outcome }}" != "success" ]; then
+            echo "AWS credentials not available — skipping drift detection for ${ENV}."
+            echo "drift_found=false" >> "$GITHUB_OUTPUT"
+            echo '{"environment":"'"${ENV}"'","status":"skipped","reason":"AWS credentials not configured","units":[]}' \
+              > "${REPORT_DIR}/${ENV}.json"
+            exit 0
+          fi
+
+          echo "Running drift detection for environment: ${ENV}"
+          set +e
+          bash scripts/detect-drift.sh \
+            --environment "${ENV}" \
+            --report-file "${REPORT_DIR}/${ENV}.json" \
+            --report-format json
+          EXIT_CODE=$?
+          set -e
+
+          if [ "${EXIT_CODE}" -eq 1 ]; then
+            echo "drift_found=true" >> "$GITHUB_OUTPUT"
+            echo "DRIFT DETECTED in environment: ${ENV}"
+          elif [ "${EXIT_CODE}" -eq 0 ]; then
+            echo "drift_found=false" >> "$GITHUB_OUTPUT"
+            echo "No drift detected in environment: ${ENV}"
+          else
+            echo "drift_found=false" >> "$GITHUB_OUTPUT"
+            echo "Drift detection returned unexpected exit code ${EXIT_CODE} for ${ENV}"
+          fi
+
+      - name: Upload drift report artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: drift-report-${{ matrix.environment }}
+          path: /tmp/drift-reports/${{ matrix.environment }}.json
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Report — download all artifacts, create GitHub issues for any drift found.
+  # Runs after all detect jobs complete (success or failure).
+  # ---------------------------------------------------------------------------
+  report:
+    name: Create drift issues
+    needs: [prepare, detect]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all drift report artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: drift-report-*
+          path: /tmp/drift-reports
+          merge-multiple: true
+
+      - name: Process drift reports and create issues
+        uses: actions/github-script@v7
+        env:
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const reportsDir = '/tmp/drift-reports';
+
+            if (!fs.existsSync(reportsDir)) {
+              console.log('No drift reports found — nothing to process.');
+              return;
+            }
+
+            const reportFiles = fs.readdirSync(reportsDir)
+              .filter(f => f.endsWith('.json'));
+
+            if (reportFiles.length === 0) {
+              console.log('No drift report JSON files found.');
+              return;
+            }
+
+            const dryRun = process.env.DRY_RUN === 'true';
+            let totalDriftCount = 0;
+            const driftEnvironments = [];
+
+            for (const file of reportFiles) {
+              const filePath = path.join(reportsDir, file);
+              let report;
+
+              try {
+                report = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+              } catch (e) {
+                console.log(`Failed to parse ${file}: ${e.message}`);
+                continue;
+              }
+
+              const { environment, status, units = [], summary } = report;
+
+              if (status === 'skipped') {
+                console.log(`Skipping ${environment}: ${report.reason}`);
+                continue;
+              }
+
+              const driftedUnits = units.filter(u => u.drift_detected === true);
+
+              if (driftedUnits.length === 0) {
+                console.log(`No drift in environment: ${environment}`);
+                continue;
+              }
+
+              totalDriftCount += driftedUnits.length;
+              driftEnvironments.push(environment);
+              console.log(`Drift detected in ${environment}: ${driftedUnits.length} unit(s)`);
+
+              // Build issue body
+              const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+              const timestamp = new Date().toISOString();
+
+              let unitDetails = driftedUnits.map(u => {
+                const adds = u.changes?.to_add ?? 0;
+                const changes = u.changes?.to_change ?? 0;
+                const destroys = u.changes?.to_destroy ?? 0;
+                const changeList = u.changed_resources ?? [];
+
+                let resourceLines = '';
+                if (changeList.length > 0) {
+                  resourceLines = '\n  Changed resources:\n' +
+                    changeList.slice(0, 20).map(r => `  - \`${r.action}\` ${r.address}`).join('\n');
+                  if (changeList.length > 20) {
+                    resourceLines += `\n  - ... and ${changeList.length - 20} more`;
+                  }
+                }
+
+                return `### \`${u.unit}\`\n` +
+                  `- **Add**: ${adds}  **Change**: ${changes}  **Destroy**: ${destroys}\n` +
+                  resourceLines;
+              }).join('\n\n');
+
+              const issueBody = [
+                '## Infrastructure Drift Detected',
+                '',
+                `**Environment**: \`${environment}\``,
+                `**Detected at**: ${timestamp}`,
+                `**Workflow run**: [View run](${runUrl})`,
+                `**Units with drift**: ${driftedUnits.length}`,
+                '',
+                '---',
+                '',
+                unitDetails,
+                '',
+                '---',
+                '',
+                '## Remediation Steps',
+                '',
+                `1. Review the full plan output in the [workflow run](${runUrl})`,
+                '2. Determine if drift is intentional (manual change) or unintentional',
+                '3. If unintentional: re-apply Terraform to reconcile state',
+                '   ```bash',
+                `   cd terragrunt/${environment}`,
+                '   terragrunt run --all apply',
+                '   ```',
+                '4. If intentional: import the resource or update the Terraform code to match',
+                '   ```bash',
+                '   cd <unit-directory>',
+                '   terraform import <resource_type>.<name> <resource_id>',
+                '   ```',
+                '5. Close this issue once drift is resolved',
+                '',
+                '---',
+                `*Auto-generated by the [drift-detection workflow](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/blob/main/.github/workflows/drift-detection.yml).*`,
+              ].join('\n');
+
+              const issueTitle = `[Drift] Infrastructure drift detected in \`${environment}\` (${driftedUnits.length} unit${driftedUnits.length > 1 ? 's' : ''})`;
+
+              if (dryRun) {
+                console.log(`DRY RUN — would create issue: "${issueTitle}"`);
+                console.log(issueBody);
+                continue;
+              }
+
+              // Check if a drift issue already exists for this environment (open)
+              const existingIssues = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                labels: 'drift,automated',
+              });
+
+              const existingForEnv = existingIssues.data.find(issue =>
+                issue.title.includes(`\`${environment}\``)
+              );
+
+              if (existingForEnv) {
+                // Update existing issue with new comment
+                console.log(`Updating existing drift issue #${existingForEnv.number} for ${environment}`);
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existingForEnv.number,
+                  body: `## Drift still present — ${timestamp}\n\n${unitDetails}\n\n[Workflow run](${runUrl})`,
+                });
+              } else {
+                // Create a new issue
+                console.log(`Creating new drift issue for environment: ${environment}`);
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: issueTitle,
+                  body: issueBody,
+                  labels: ['drift', 'automated'],
+                });
+              }
+            }
+
+            // Summary
+            if (totalDriftCount === 0) {
+              console.log('No drift detected across all environments. Infrastructure is clean.');
+            } else {
+              console.log(`Drift detected in ${driftEnvironments.length} environment(s): ${driftEnvironments.join(', ')}`);
+              console.log(`Total drifted units: ${totalDriftCount}`);
+            }
+
+  # ---------------------------------------------------------------------------
+  # Clean-up — close any open drift issues for environments now clean
+  # ---------------------------------------------------------------------------
+  close-resolved:
+    name: Close resolved drift issues
+    needs: [prepare, detect, report]
+    if: always() && inputs.dry_run != true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all drift report artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: drift-report-*
+          path: /tmp/drift-reports
+          merge-multiple: true
+
+      - name: Close resolved drift issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const reportsDir = '/tmp/drift-reports';
+
+            if (!fs.existsSync(reportsDir)) return;
+
+            const cleanEnvironments = fs.readdirSync(reportsDir)
+              .filter(f => f.endsWith('.json'))
+              .map(f => {
+                try {
+                  const report = JSON.parse(fs.readFileSync(path.join(reportsDir, f), 'utf8'));
+                  const drifted = (report.units ?? []).filter(u => u.drift_detected);
+                  return drifted.length === 0 ? report.environment : null;
+                } catch {
+                  return null;
+                }
+              })
+              .filter(Boolean);
+
+            if (cleanEnvironments.length === 0) return;
+
+            // Find open drift issues for clean environments and close them
+            const openDriftIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'drift,automated',
+            });
+
+            for (const issue of openDriftIssues.data) {
+              const envMatch = cleanEnvironments.find(env =>
+                issue.title.includes(`\`${env}\``)
+              );
+
+              if (envMatch) {
+                console.log(`Closing resolved drift issue #${issue.number} for ${envMatch}`);
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: `Drift resolved. No changes detected in \`${envMatch}\` as of ${new Date().toISOString()}.`,
+                });
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'closed',
+                });
+              }
+            }
