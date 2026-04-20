@@ -17,9 +17,9 @@ resource "kubernetes_manifest" "cilium_advanced_alerts" {
       name      = "cilium-advanced-ebpf-alerts"
       namespace = "kube-system"
       labels = {
-        "prometheus"                      = "kube-prometheus"
-        "app.kubernetes.io/part-of"       = "cilium-advanced-ebpf"
-        "app.kubernetes.io/managed-by"    = "terragrunt"
+        "prometheus"                   = "kube-prometheus"
+        "app.kubernetes.io/part-of"    = "cilium-advanced-ebpf"
+        "app.kubernetes.io/managed-by" = "terragrunt"
       }
     }
     spec = {
@@ -63,8 +63,8 @@ resource "kubernetes_manifest" "cilium_advanced_alerts" {
             {
               alert = "CiliumSockopsDisabled"
               # sockops enabled state is surfaced via cilium_feature_status metric (1.18+)
-              expr  = "cilium_feature_status{name='sockops'} == 0"
-              for   = "5m"
+              expr = "cilium_feature_status{name='sockops'} == 0"
+              for  = "5m"
               labels = {
                 severity = "warning"
                 feature  = "sockops"
@@ -109,8 +109,8 @@ resource "kubernetes_manifest" "cilium_advanced_alerts" {
             {
               alert = "HubbleL7ErrorRateHigh"
               # HTTP 5xx from vLLM inference endpoint captured via Hubble L7 metrics
-              expr  = "rate(hubble_http_responses_total{status=~'5..', destination_workload='vllm-inference'}[5m]) / rate(hubble_http_responses_total{destination_workload='vllm-inference'}[5m]) > 0.05"
-              for   = "5m"
+              expr = "rate(hubble_http_responses_total{status=~'5..', destination_workload='vllm-inference'}[5m]) / rate(hubble_http_responses_total{destination_workload='vllm-inference'}[5m]) > 0.05"
+              for  = "5m"
               labels = {
                 severity = "warning"
                 feature  = "hubble-l7"
@@ -213,9 +213,9 @@ resource "kubernetes_manifest" "hubble_service_monitor" {
       name      = "hubble-metrics"
       namespace = "kube-system"
       labels = {
-        "release"                         = "kube-prometheus-stack"
-        "app.kubernetes.io/part-of"       = "cilium-advanced-ebpf"
-        "app.kubernetes.io/managed-by"    = "terragrunt"
+        "release"                      = "kube-prometheus-stack"
+        "app.kubernetes.io/part-of"    = "cilium-advanced-ebpf"
+        "app.kubernetes.io/managed-by" = "terragrunt"
       }
     }
     spec = {
