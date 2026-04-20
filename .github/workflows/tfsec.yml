@@ -65,7 +65,7 @@ jobs:
           # Soft-fail while pre-existing violations are being remediated (SYNC_ROADMAP Phase 1.1)
           # Set to false once known violations are fixed
           soft_fail: true
-          # Format: SARIF for GitHub Security tab, table for human-readable log
+          # Format: SARIF for GitHub Security tab
           format: sarif
           additional_args: >-
             --exclude-checks aws-s3-enable-bucket-logging,aws-s3-enable-bucket-versioning,aws-iam-no-policy-wildcards,aws-dynamodb-enable-at-rest-encryption
@@ -110,8 +110,7 @@ jobs:
         continue-on-error: true
 
   # ---------------------------------------------------------------------------
-  # Human-readable table output for PR review (separate step — table format
-  # cannot be combined with SARIF in the same tfsec invocation).
+  # Human-readable output for PR review (using default format instead of table)
   # ---------------------------------------------------------------------------
   tfsec-table-report:
     name: TFSec — PR summary report
@@ -128,27 +127,25 @@ jobs:
           chmod +x /usr/local/bin/tfsec
           tfsec --version
 
-      - name: Run TFSec (table output — modules)
+      - name: Run TFSec (human-readable output — modules)
         id: tfsec-modules
         run: |
           set +e
           tfsec terraform/modules \
             --minimum-severity HIGH \
             --no-color \
-            --format table \
             --exclude aws-s3-enable-bucket-logging,aws-s3-enable-bucket-versioning,aws-iam-no-policy-wildcards,aws-dynamodb-enable-at-rest-encryption \
             2>&1 | tee /tmp/tfsec-modules.txt
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
           set -e
 
-      - name: Run TFSec (table output — catalog)
+      - name: Run TFSec (human-readable output — catalog)
         id: tfsec-catalog
         run: |
           set +e
           tfsec catalog \
             --minimum-severity HIGH \
             --no-color \
-            --format table \
             --exclude aws-s3-enable-bucket-logging,aws-s3-enable-bucket-versioning,aws-iam-no-policy-wildcards,aws-dynamodb-enable-at-rest-encryption \
             2>&1 | tee /tmp/tfsec-catalog.txt
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
@@ -166,7 +163,7 @@ jobs:
             }
 
             function countIssues(text) {
-              // tfsec table format prints "X potential problem(s) detected"
+              // tfsec default format prints "X potential problem(s) detected"
               const m = text.match(/(\d+)\s+potential problem/i);
               return m ? parseInt(m[1], 10) : null;
             }
