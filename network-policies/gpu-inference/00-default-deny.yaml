@@ -1,0 +1,52 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# Identity-Based Zero Trust — Default Deny for gpu-inference namespace
+# ---------------------------------------------------------------------------------------------------------------------
+# Cilium assigns each pod a numeric identity derived from its labels.
+# Policy binds to identities, not IPs. Pod restarts, Karpenter replacements,
+# and spot evictions do not break policy — identities follow labels, not IPs.
+#
+# This clusterwide policy denies all traffic into/out of gpu-inference pods
+# by default. Explicit CiliumNetworkPolicy rules in this directory grant access.
+# ---------------------------------------------------------------------------------------------------------------------
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: default-deny-gpu-inference
+  labels:
+    app.kubernetes.io/part-of: cilium-advanced-ebpf
+    app.kubernetes.io/managed-by: terragrunt
+spec:
+  description: "Default deny all traffic for gpu-inference namespace — identity-based zero trust baseline"
+  endpointSelector:
+    matchLabels:
+      "k8s:io.kubernetes.pod.namespace": gpu-inference
+  ingress:
+    # Allow intra-namespace traffic — pods within gpu-inference can talk to each other
+    # unless a more specific policy restricts it (e.g., vLLM-only → gpu-operator)
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": gpu-inference
+    # Allow Hubble Relay to collect flows from gpu-inference endpoints
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            k8s-app: hubble-relay
+  egress:
+    # Allow intra-namespace egress
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": gpu-inference
+    # Allow DNS resolution via CoreDNS in kube-system
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Allow reach to kube-apiserver (required by sidecar containers, DRA, etc.)
+    - toEntities:
+        - kube-apiserver

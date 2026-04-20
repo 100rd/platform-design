@@ -1,0 +1,56 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# Identity-Based Policy: GPU Operator Access
+# ---------------------------------------------------------------------------------------------------------------------
+# Restricts ingress to nvidia-gpu-operator pods to only authorized consumers:
+#   - vLLM inference pods (pod plugin calls)
+#   - DCGM exporter (device health data)
+#   - Volcano scheduler (device allocation)
+#
+# Identity is derived from labels — no IP addresses in this file.
+# Policies survive Karpenter spot replacements, rolling restarts, and
+# HPA scale-in/out without any manual update.
+# ---------------------------------------------------------------------------------------------------------------------
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: gpu-operator-access
+  namespace: gpu-inference
+  labels:
+    app.kubernetes.io/part-of: cilium-advanced-ebpf
+    app.kubernetes.io/managed-by: terragrunt
+spec:
+  description: "Only authorized consumers can reach the GPU operator plugin socket"
+  endpointSelector:
+    matchLabels:
+      app: nvidia-gpu-operator
+  ingress:
+    - fromEndpoints:
+        # vLLM inference pods requesting GPU device allocations
+        - matchLabels:
+            app: vllm-inference
+        # DCGM exporter collecting device telemetry
+        - matchLabels:
+            app: dcgm-exporter
+        # Volcano scheduler coordinating gang-scheduled training jobs
+        - matchLabels:
+            app: volcano-scheduler
+      toPorts:
+        - ports:
+            # GPU device plugin gRPC socket exposed via localhost — this policy
+            # controls pod-to-pod communication with the operator DaemonSet
+            - port: "8080"
+              protocol: TCP
+            - port: "8090"
+              protocol: TCP
+  egress:
+    # GPU operator needs to reach kube-apiserver for CRD updates
+    - toEntities:
+        - kube-apiserver
+    # GPU operator discovers DCGM sidecar on the same node
+    - toEndpoints:
+        - matchLabels:
+            app: dcgm-exporter
+      toPorts:
+        - ports:
+            - port: "9400"
+              protocol: TCP

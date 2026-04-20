@@ -1,0 +1,95 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# Identity-Based Policy: vLLM Inference API + Hubble L7 Visibility
+# ---------------------------------------------------------------------------------------------------------------------
+# vLLM pods serve inference requests on port 8000 (HTTP/gRPC).
+# This policy:
+#   1. Allows external traffic via NLB (XDP+DSR path) and ingress controllers
+#   2. Enables selective Hubble L7 inspection ONLY for vLLM — not for training pods
+#   3. Allows vLLM → GPU operator for device queries
+#   4. Allows vLLM → monitoring for metrics push
+#
+# Hubble L7 without sidecars:
+#   - The 'http' rule in toPorts.rules activates Hubble's kernel eBPF L7 parser
+#   - This captures HTTP status codes, latency, path metrics silently
+#   - NCCL/training traffic is NEVER touched — l7Proxy is off globally
+#   - No Envoy sidecar needed; eBPF hook in the kernel handles parsing
+#
+# XDP + DSR interaction:
+#   - Ingress from NLB hits XDP hook at NIC level (DNAT to pod IP)
+#   - Return packets from vLLM go directly to client (src=VIP, skip NLB)
+#   - This policy sees only the pod-level identity, not NLB IPs
+# ---------------------------------------------------------------------------------------------------------------------
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vllm-ingress
+  namespace: gpu-inference
+  labels:
+    app.kubernetes.io/part-of: cilium-advanced-ebpf
+    app.kubernetes.io/managed-by: terragrunt
+spec:
+  description: "vLLM inference API access with selective Hubble L7 observability"
+  endpointSelector:
+    matchLabels:
+      app: vllm-inference
+  ingress:
+    # External traffic arrives after XDP DNAT from NLB
+    # 'world' entity covers all external sources
+    - fromEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+          rules:
+            http:
+              # Hubble L7 captures these HTTP methods/paths silently via eBPF
+              # Visible in: hubble observe --namespace gpu-inference --protocol http
+              - method: "GET"
+              - method: "POST"
+                path: "/v1/.*"
+              - method: "GET"
+                path: "/health"
+              - method: "GET"
+                path: "/metrics"
+    # Internal consumers (AI SRE agents on platform cluster via ClusterMesh,
+    # auto-scaling controllers reading capacity)
+    - fromEndpoints:
+        - matchLabels:
+            app: ai-sre-agent
+        - matchLabels:
+            app: hpa-controller
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+          rules:
+            http:
+              - method: "GET"
+                path: "/health"
+              - method: "GET"
+                path: "/v1/models"
+  egress:
+    # vLLM queries GPU operator for device info
+    - toEndpoints:
+        - matchLabels:
+            app: nvidia-gpu-operator
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # vLLM pushes metrics to VictoriaMetrics (ClusterMesh global service)
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": monitoring
+      toPorts:
+        - ports:
+            - port: "8480"
+              protocol: TCP
+    # vLLM may load models from S3 via IRSA — allow HTTPS egress to AWS
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

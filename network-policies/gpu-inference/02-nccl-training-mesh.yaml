@@ -1,0 +1,70 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# Identity-Based Policy: NCCL All-Reduce Training Mesh
+# ---------------------------------------------------------------------------------------------------------------------
+# GPU training jobs (PyTorch DDP, NCCL all-reduce) require full mesh connectivity
+# between all training pods on ports 29400-29500.
+#
+# Key design:
+#   - Identity selector: workload-type=training (set by Volcano / DRA on job pods)
+#   - NCCL port range: 29400-29500 (configurable per training framework)
+#   - EFA (Elastic Fabric Adapter) control plane: port 2049 (not exposed externally)
+#   - No wildcard: training pods cannot talk to non-training pods on NCCL ports
+#
+# Socket-level LB note:
+#   - NCCL uses RDMA/EFA which bypasses the kernel network stack entirely
+#   - Socket-level LB does NOT intercept RDMA paths — no overhead for training
+#   - This policy controls the TCP fallback path and control-plane connections
+# ---------------------------------------------------------------------------------------------------------------------
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: nccl-training-mesh
+  namespace: gpu-inference
+  labels:
+    app.kubernetes.io/part-of: cilium-advanced-ebpf
+    app.kubernetes.io/managed-by: terragrunt
+spec:
+  description: "Full mesh TCP connectivity for NCCL all-reduce between training pods"
+  endpointSelector:
+    matchLabels:
+      workload-type: training
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            workload-type: training
+      toPorts:
+        - ports:
+            # NCCL rendezvous and data plane (TCP fallback when RDMA unavailable)
+            - port: "29400"
+              protocol: TCP
+            - port: "29500"
+              protocol: TCP
+            # PyTorch c10d rendezvous
+            - port: "29499"
+              protocol: TCP
+            # Gloo collective communication library
+            - port: "29501"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            workload-type: training
+      toPorts:
+        - ports:
+            - port: "29400"
+              protocol: TCP
+            - port: "29500"
+              protocol: TCP
+            - port: "29499"
+              protocol: TCP
+            - port: "29501"
+              protocol: TCP
+    # Training pods push metrics to VictoriaMetrics (global ClusterMesh service)
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": monitoring
+      toPorts:
+        - ports:
+            # vminsert remote write
+            - port: "8480"
+              protocol: TCP
