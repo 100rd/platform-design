@@ -1,0 +1,46 @@
+---
+# Grafana dashboard provisioning ConfigMap for AI SRE Analytics.
+#
+# These dashboards are loaded by Grafana's dashboard provisioner.
+# The JSON content is referenced from files via Helm .Files.Get or
+# Kustomize configMapGenerator in production.  The provisioner config
+# below tells Grafana to watch the /var/lib/grafana/dashboards/ai-sre/
+# mount path.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-ai-sre
+  namespace: observability
+  labels:
+    grafana_dashboard: "1"
+    app.kubernetes.io/component: grafana-dashboards
+    app.kubernetes.io/part-of: ai-sre
+  annotations:
+    # Grafana sidecar watches this label to auto-load dashboards
+    k8s-sidecar-target-directory: /var/lib/grafana/dashboards/ai-sre
+data:
+  # Dashboard provisioner configuration
+  dashboards-provisioner.yaml: |
+    apiVersion: 1
+    providers:
+      - name: ai-sre
+        orgId: 1
+        folder: AI SRE Analytics
+        folderUid: ai-sre-analytics
+        type: file
+        disableDeletion: false
+        editable: false
+        updateIntervalSeconds: 30
+        allowUiUpdates: false
+        options:
+          path: /var/lib/grafana/dashboards/ai-sre
+
+  # Dashboard JSON files are loaded here.
+  # In Helm: {{ .Files.Get "apps/infra/grafana-dashboards/ai-sre/dashboard-agent-usage.json" }}
+  # In Kustomize: use configMapGenerator with files[] referencing the JSON files.
+  #
+  # For direct provisioning, the dashboard JSONs are embedded below:
+  dashboard-agent-usage.json: ""     # set by Helm/Kustomize from dashboard-agent-usage.json
+  dashboard-findings.json: ""        # set by Helm/Kustomize from dashboard-findings.json
+  dashboard-accuracy.json: ""        # set by Helm/Kustomize from dashboard-accuracy.json
+  dashboard-cost-roi.json: ""        # set by Helm/Kustomize from dashboard-cost-roi.json

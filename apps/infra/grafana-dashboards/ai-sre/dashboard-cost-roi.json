@@ -1,0 +1,161 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_CLICKHOUSE",
+      "label": "ClickHouse-AI-SRE",
+      "type": "datasource",
+      "pluginId": "grafana-clickhouse-datasource",
+      "pluginName": "ClickHouse"
+    }
+  ],
+  "__requires": [
+    {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0"},
+    {"type": "datasource", "id": "grafana-clickhouse-datasource", "name": "ClickHouse", "version": "4.0.0"}
+  ],
+  "annotations": {"list": []},
+  "description": "AI SRE API cost, cost per finding, cost savings identified by agents, and ROI metrics",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": true, "icon": "external link", "includeVars": true, "keepTime": true,
+      "tags": ["ai-sre"], "title": "AI SRE Dashboards", "type": "dashboards"
+    }
+  ],
+  "panels": [
+    {
+      "id": 1, "type": "stat",
+      "title": "Total API Cost (selected range)",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background"},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD"}},
+      "targets": [
+        {
+          "rawSql": "SELECT round(sum(cost_usd), 2) AS total_cost FROM ai_sre.agent_usage WHERE timestamp >= $__fromTime AND timestamp <= $__toTime",
+          "format": "table", "refId": "A",
+          "datasource": {"type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}"}
+        }
+      ]
+    },
+    {
+      "id": 2, "type": "stat",
+      "title": "Cost per Finding",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value"},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD"}},
+      "targets": [
+        {
+          "rawSql": "SELECT round(sum(cost_usd) / countIf(finding_id IS NOT NULL), 4) AS cost_per_finding FROM ai_sre.agent_usage WHERE timestamp >= $__fromTime AND timestamp <= $__toTime",
+          "format": "table", "refId": "A",
+          "datasource": {"type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}"}
+        }
+      ]
+    },
+    {
+      "id": 3, "type": "stat",
+      "title": "Daily Average Cost",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value"},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD"}},
+      "targets": [
+        {
+          "rawSql": "SELECT round(sum(cost_usd) / toUInt32(dateDiff('day', toDate($__fromTime), toDate($__toTime)) + 1), 2) AS daily_avg FROM ai_sre.agent_usage WHERE timestamp >= $__fromTime AND timestamp <= $__toTime",
+          "format": "table", "refId": "A",
+          "datasource": {"type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}"}
+        }
+      ]
+    },
+    {
+      "id": 4, "type": "stat",
+      "title": "Cost per Token (USD/1k tokens)",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}"},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value"},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD"}},
+      "targets": [
+        {
+          "rawSql": "SELECT round(sum(cost_usd) / sum(tokens_input + tokens_output) * 1000, 6) AS cost_per_k_tokens FROM ai_sre.agent_usage WHERE timestamp >= $__fromTime AND timestamp <= $__toTime",
+          "format": "table", "refId": "A",
+          "datasource": {"type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}"}
+        }
+      ]
+    },
+    {
+      "id": 5, "type": "timeseries",
+      "title": "Daily API Cost Trend (stacked by model)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}"},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "custom": {"lineWidth": 2, "fillOpacity": 30}}},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {
+          "rawSql": "SELECT toDate(timestamp) AS time, model, round(sum(cost_usd), 4) AS cost FROM ai_sre.agent_usage WHERE timestamp >= $__fromTime AND timestamp <= $__toTime GROUP BY time, model ORDER BY time",
+          "format": "time_series", "refId": "A",
+          "datasource": {"type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}"}
+        }
+      ]
+    },
+    {
+      "id": 6, "type": "timeseries",
+      "title": "Cost per Finding (7-day rolling avg)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}"},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD", "custom": {"lineWidth": 2}}},
+      "options": {"legend": {"displayMode": "list"}},
+      "targets": [
+        {
+          "rawSql": "SELECT toDate(timestamp) AS time, round(sum(cost_usd) / greatest(countIf(finding_id IS NOT NULL), 1), 4) AS cost_per_finding FROM ai_sre.agent_usage WHERE timestamp >= $__fromTime AND timestamp <= $__toTime GROUP BY time ORDER BY time",
+          "format": "time_series", "refId": "A",
+          "datasource": {"type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}"}
+        }
+      ]
+    },
+    {
+      "id": 7, "type": "barchart",
+      "title": "Cost by Agent Role",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}"},
+      "options": {"orientation": "horizontal", "legend": {"displayMode": "list"}},
+      "fieldConfig": {"defaults": {"unit": "currencyUSD"}},
+      "targets": [
+        {
+          "rawSql": "SELECT agent_role, round(sum(cost_usd), 4) AS total_cost, count() AS invocations FROM ai_sre.agent_usage WHERE timestamp >= $__fromTime AND timestamp <= $__toTime GROUP BY agent_role ORDER BY total_cost DESC",
+          "format": "table", "refId": "A",
+          "datasource": {"type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}"}
+        }
+      ]
+    },
+    {
+      "id": 8, "type": "table",
+      "title": "Cost Waste Findings (cost_optimization findings)",
+      "description": "Infrastructure cost savings opportunities identified by the Cost Optimization agent",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "datasource": {"type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}"},
+      "options": {"sortBy": [{"displayName": "timestamp", "desc": true}]},
+      "targets": [
+        {
+          "rawSql": "SELECT timestamp, cluster, namespace, affected_resource, severity, root_cause_summary, status FROM ai_sre.findings WHERE finding_type = 'cost_waste' AND timestamp >= $__fromTime AND timestamp <= $__toTime ORDER BY timestamp DESC LIMIT 30",
+          "format": "table", "refId": "A",
+          "datasource": {"type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}"}
+        }
+      ]
+    }
+  ],
+  "refresh": "30m",
+  "schemaVersion": 38,
+  "tags": ["ai-sre", "cost", "roi"],
+  "templating": {
+    "list": []
+  },
+  "time": {"from": "now-30d", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "AI SRE — Cost & ROI",
+  "uid": "ai-sre-cost-roi",
+  "version": 1
+}

@@ -1,0 +1,170 @@
+---
+# ClickHouse StatefulSet for AI SRE analytics storage.
+#
+# Single-node deployment suitable for the analytics workload; scale to
+# a ClickHouseInstallation (operator) when sharding is needed.
+# Ref: https://clickhouse.com/docs/en/install
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse-ai-sre
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/component: analytics-db
+    app.kubernetes.io/part-of: ai-sre
+spec:
+  serviceName: clickhouse-ai-sre
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: clickhouse
+      app.kubernetes.io/component: analytics-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clickhouse
+        app.kubernetes.io/component: analytics-db
+        app.kubernetes.io/part-of: ai-sre
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # Run schema migrations on startup
+        - name: migrate
+          image: clickhouse/clickhouse-server:24.6-alpine
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until clickhouse-client \
+                --host clickhouse-ai-sre \
+                --port 9000 \
+                --user ai_sre \
+                --password "${CLICKHOUSE_PASSWORD}" \
+                --query "SELECT 1"; do
+                echo "Waiting for ClickHouse..."
+                sleep 2
+              done
+              clickhouse-client \
+                --host clickhouse-ai-sre \
+                --port 9000 \
+                --user ai_sre \
+                --password "${CLICKHOUSE_PASSWORD}" \
+                --multiquery < /migrations/001_create_analytics_schema.sql
+          env:
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-ai-sre-secret
+                  key: password
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:24.6-alpine
+          ports:
+            - name: http
+              containerPort: 8123
+              protocol: TCP
+            - name: native
+              containerPort: 9000
+              protocol: TCP
+          env:
+            - name: CLICKHOUSE_DB
+              value: ai_sre
+            - name: CLICKHOUSE_USER
+              value: ai_sre
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-ai-sre-secret
+                  key: password
+          resources:
+            requests:
+              cpu: "500m"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 8Gi
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false  # ClickHouse writes data dir
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+            - name: logs
+              mountPath: /var/log/clickhouse-server
+            - name: config
+              mountPath: /etc/clickhouse-server/config.d
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: clickhouse-ai-sre-config
+        - name: migrations
+          configMap:
+            name: clickhouse-ai-sre-migrations
+        - name: logs
+          emptyDir:
+            sizeLimit: 500Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 100Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse-ai-sre
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/component: analytics-db
+    app.kubernetes.io/part-of: ai-sre
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/component: analytics-db
+  ports:
+    - name: http
+      port: 8123
+      targetPort: http
+      protocol: TCP
+    - name: native
+      port: 9000
+      targetPort: native
+      protocol: TCP

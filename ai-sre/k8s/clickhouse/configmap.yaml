@@ -1,0 +1,93 @@
+---
+# ClickHouse server config — tunes memory limits and enables compression
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-ai-sre-config
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/component: analytics-db
+    app.kubernetes.io/part-of: ai-sre
+data:
+  storage.xml: |
+    <clickhouse>
+      <storage_policies>
+        <ai_sre_policy>
+          <volumes>
+            <main>
+              <disk>default</disk>
+            </main>
+          </volumes>
+        </ai_sre_policy>
+      </storage_policies>
+    </clickhouse>
+
+  compression.xml: |
+    <clickhouse>
+      <compression>
+        <case>
+          <method>zstd</method>
+          <level>3</level>
+        </case>
+      </compression>
+    </clickhouse>
+
+  resources.xml: |
+    <clickhouse>
+      <!-- Reserve 70% of container memory for ClickHouse -->
+      <max_server_memory_usage_to_ram_ratio>0.70</max_server_memory_usage_to_ram_ratio>
+      <max_memory_usage>5368709120</max_memory_usage>   <!-- 5 GiB -->
+    </clickhouse>
+
+  users.xml: |
+    <clickhouse>
+      <users>
+        <!-- ai_sre user — password set via secret -->
+        <ai_sre>
+          <password_sha256_hex from_env="CLICKHOUSE_PASSWORD_SHA256"/>
+          <networks>
+            <ip>::/0</ip>
+          </networks>
+          <profile>default</profile>
+          <quota>default</quota>
+          <databases>
+            <ai_sre/>
+          </databases>
+        </ai_sre>
+        <!-- read-only Grafana user -->
+        <grafana>
+          <password_sha256_hex from_env="CLICKHOUSE_GRAFANA_PASSWORD_SHA256"/>
+          <networks>
+            <ip>::/0</ip>
+          </networks>
+          <profile>readonly</profile>
+          <quota>default</quota>
+          <databases>
+            <ai_sre/>
+          </databases>
+        </grafana>
+      </users>
+      <profiles>
+        <readonly>
+          <readonly>1</readonly>
+        </readonly>
+      </profiles>
+    </clickhouse>
+---
+# Schema migrations — mounted into the init container
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-ai-sre-migrations
+  namespace: ai-sre-system
+  labels:
+    app.kubernetes.io/name: clickhouse
+    app.kubernetes.io/component: analytics-db
+    app.kubernetes.io/part-of: ai-sre
+data:
+  # The SQL file is projected from a separate ConfigMap to avoid size limits.
+  # In production this content is generated from the file at:
+  # ai-sre/analytics/migrations/001_create_analytics_schema.sql
+  # via a Kustomize configMapGenerator or Helm .Files.Get
+  001_create_analytics_schema.sql: ""   # populated by Helm/Kustomize

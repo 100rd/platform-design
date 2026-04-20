@@ -1,0 +1,28 @@
+---
+# Strategic merge patch: add ClickHouse analytics env vars to the Slack app.
+# The Slack app needs write access to record feedback from Slack reactions
+# and resolution button clicks.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-sre-slack-app
+  namespace: ai-sre-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: slack-app
+          env:
+            - name: CLICKHOUSE_HOST
+              value: clickhouse-ai-sre.ai-sre-system.svc.cluster.local
+            - name: CLICKHOUSE_PORT
+              value: "8123"
+            - name: CLICKHOUSE_USER
+              value: ai_sre
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-ai-sre-secret
+                  key: password
+            - name: ANALYTICS_ENABLED
+              value: "true"

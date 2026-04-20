@@ -1,0 +1,31 @@
+---
+# Strategic merge patch: add ClickHouse analytics env vars to the orchestrator.
+# Apply on top of deployment.yaml via Kustomize or Helm mergeValues.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-sre-orchestrator
+  namespace: ai-sre-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: orchestrator
+          env:
+            - name: CLICKHOUSE_HOST
+              value: clickhouse-ai-sre.ai-sre-system.svc.cluster.local
+            - name: CLICKHOUSE_PORT
+              value: "8123"
+            - name: CLICKHOUSE_USER
+              value: ai_sre
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-ai-sre-secret
+                  key: password
+            - name: ANALYTICS_ENABLED
+              value: "true"
+            - name: ANALYTICS_BATCH_SIZE
+              value: "100"
+            - name: ANALYTICS_FLUSH_INTERVAL_SEC
+              value: "10"
