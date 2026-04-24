@@ -97,7 +97,7 @@ jobs:
         id: aws-creds
         # OIDC auth requires github-oidc module to be deployed first.
         # Set TERRAFORM_PLAN_ROLE_ARN in repository variables to enable.
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         if: vars.TERRAFORM_PLAN_ROLE_ARN != ''
         continue-on-error: true
         with:
