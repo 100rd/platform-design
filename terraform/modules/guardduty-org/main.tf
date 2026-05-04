@@ -141,3 +141,27 @@ resource "aws_guardduty_organization_admin_account" "this" {
 
   admin_account_id = local.admin_account_id
 }
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Findings publishing destination — S3 in the log-archive account
+# Closes #163 acceptance criterion: "findings published to centralized location"
+# ---------------------------------------------------------------------------------------------------------------------
+# Wires GuardDuty's `aws_guardduty_publishing_destination` to dump findings as
+# objects into the supplied S3 bucket. The bucket is expected to live in the
+# log-archive account; cross-account write is authorized via the bucket
+# policy on that side. Only created when both the bucket ARN and KMS key are
+# set — otherwise findings stay in the GuardDuty service (still queryable, just
+# not centralized).
+
+resource "aws_guardduty_publishing_destination" "this" {
+  count = var.findings_destination_bucket_arn != null && var.findings_destination_bucket_arn != "" ? 1 : 0
+
+  detector_id     = aws_guardduty_detector.this.id
+  destination_arn = var.findings_destination_bucket_arn
+  kms_key_arn     = var.findings_destination_kms_key_arn
+
+  # The destination bucket policy must already grant
+  # guardduty.amazonaws.com put-object on `destination_arn` and the KMS key
+  # must allow `kms:GenerateDataKey` for that principal. Provisioned in the
+  # log-archive account by a sibling unit.
+}
