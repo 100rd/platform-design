@@ -48,6 +48,12 @@ variable "noncurrent_version_retention_days" {
   }
 }
 
+variable "enable_dynamodb_streams" {
+  description = "Enable DynamoDB streams on the lock table. Required if you plan to add cross-region replicas via the state-backend-dr module (DDB Global Tables v2). Default false to keep #159 behaviour. Setting this to true is an in-place table update — no recreation."
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Tags to apply to all resources. Merged with module-defined tags (Name, Purpose, ManagedBy, Account)."
   type        = map(string)
