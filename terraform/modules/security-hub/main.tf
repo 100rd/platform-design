@@ -74,3 +74,37 @@ resource "aws_securityhub_organization_configuration" "this" {
 
   depends_on = [aws_securityhub_account.this]
 }
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Delegated Administrator (#164)
+# ---------------------------------------------------------------------------------------------------------------------
+# Delegates Security Hub administration from the org management account to a
+# specified account (typically the security account). Only created when the
+# delegated admin is a different account than the current caller.
+
+data "aws_caller_identity" "current" {}
+
+resource "aws_securityhub_organization_admin_account" "this" {
+  count = var.delegated_admin_account_id != "" && var.delegated_admin_account_id != data.aws_caller_identity.current.account_id ? 1 : 0
+
+  admin_account_id = var.delegated_admin_account_id
+
+  depends_on = [aws_securityhub_account.this]
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Cross-Region Finding Aggregator (#164)
+# ---------------------------------------------------------------------------------------------------------------------
+# When enabled, aggregates findings from all (or specified) linked regions
+# into the home region of the SecurityHub admin account. Should be created
+# only in the admin account.
+
+resource "aws_securityhub_finding_aggregator" "this" {
+  count = var.enable_finding_aggregator ? 1 : 0
+
+  linking_mode = length(var.finding_aggregator_linked_regions) > 0 ? "SPECIFIED_REGIONS" : "ALL_REGIONS"
+
+  specified_regions = length(var.finding_aggregator_linked_regions) > 0 ? var.finding_aggregator_linked_regions : null
+
+  depends_on = [aws_securityhub_account.this]
+}
