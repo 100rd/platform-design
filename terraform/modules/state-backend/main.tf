@@ -172,7 +172,16 @@ resource "aws_dynamodb_table" "locks" {
     kms_key_arn = var.kms_key_arn != null && var.kms_key_arn != "" ? var.kms_key_arn : null
   }
 
-  # Prevent accidental deletion of lock table.
+  # Streams are required if a cross-region replica is going to be attached
+  # via state-backend-dr (DynamoDB Global Tables v2). Optional and additive —
+  # default `false` matches #159 behaviour. NEW_AND_OLD_IMAGES is required by
+  # `aws_dynamodb_table_replica`.
+  stream_enabled   = var.enable_dynamodb_streams
+  stream_view_type = var.enable_dynamodb_streams ? "NEW_AND_OLD_IMAGES" : null
+
+  # Prevent accidental deletion of lock table. The data inside is just
+  # ephemeral lease rows, but dropping the table out from under live state
+  # operations causes corruption and is exactly the failure mode this guards.
   lifecycle {
     prevent_destroy = true
   }
