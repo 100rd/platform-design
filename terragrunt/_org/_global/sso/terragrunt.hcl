@@ -113,11 +113,11 @@ inputs = {
   # The module resolves these to real group IDs via data sources.
   # ---------------------------------------------------------------------
   groups = {
-    admins              = "PlatformAdmins"
-    platform_engineers  = "PlatformEngineers"
-    developers          = "Developers"
-    auditors            = "SecurityAuditors"
-    billing             = "BillingTeam"
+    admins             = "PlatformAdmins"
+    platform_engineers = "PlatformEngineers"
+    developers         = "Developers"
+    auditors           = "SecurityAuditors"
+    billing            = "BillingTeam"
   }
 
   # ---------------------------------------------------------------------
