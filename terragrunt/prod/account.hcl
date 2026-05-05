@@ -3,6 +3,7 @@ locals {
   account_id     = "333333333333" # TODO: Replace with actual AWS account ID
   aws_account_id = "333333333333" # Alias for reference compatibility
   environment    = "prod"
+  email          = "aws+prod@example.com"
 
   # Cost allocation and audit tracing
   owner       = "platform-team"
