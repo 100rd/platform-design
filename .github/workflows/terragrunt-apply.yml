@@ -52,7 +52,7 @@ jobs:
       modules: ${{ steps.changes.outputs.modules }}
       has_changes: ${{ steps.changes.outputs.has_changes }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 2
 
@@ -113,7 +113,7 @@ jobs:
       matrix:
         module: ${{ fromJson(needs.detect-changes.outputs.modules) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: hashicorp/setup-terraform@v4
         with:
