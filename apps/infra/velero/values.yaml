@@ -6,26 +6,34 @@ velero:
 
   # Velero configuration
   configuration:
-    # Primary AWS S3 backup location
+    # Primary AWS S3 backup location.
+    # The KMS key (kmsKeyId) is REQUIRED — every Velero backup is
+    # SSE-KMS encrypted. The key is provisioned by terraform/modules/kms
+    # in the same account where the bucket lives, with alias 'alias/velero'.
     backupStorageLocation:
       - name: aws-primary
         provider: aws
-        bucket: ""  # REQUIRED: Set to your S3 bucket name
+        bucket: "" # REQUIRED: Set to your S3 bucket name (per-env override)
         prefix: velero
         default: true
         config:
-          region: ""  # TODO: Set via ArgoCD ApplicationSet region injection
+          region:           "" # TODO: Set via ArgoCD ApplicationSet region injection
           s3ForcePathStyle: false
+          # SSE-KMS — REQUIRED. Per-env override sets this to the KMS key ARN.
+          # Example: arn:aws:kms:eu-west-1:111111111111:key/alias/velero
+          kmsKeyId: ""
 
-      # Cross-region backup for disaster recovery
-      # Enable by setting the bucket name to your DR region bucket
+      # Cross-region backup for disaster recovery.
+      # Enable by setting the bucket name to your DR region bucket and
+      # supplying a KMS key in the DR region.
       - name: aws-dr
         provider: aws
-        bucket: ""  # REQUIRED for DR: Set to DR region S3 bucket
+        bucket: "" # REQUIRED for DR: Set to DR region S3 bucket
         prefix: velero-dr
         config:
-          region: ""  # TODO: Set via ArgoCD ApplicationSet region injection (DR region)
+          region:           "" # TODO: Set via ArgoCD ApplicationSet region injection (DR region)
           s3ForcePathStyle: false
+          kmsKeyId:         "" # SSE-KMS in the DR region's KMS
 
     # Volume snapshots (EBS)
     volumeSnapshotLocation:
