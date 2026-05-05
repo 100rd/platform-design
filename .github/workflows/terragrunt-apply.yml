@@ -126,7 +126,7 @@ jobs:
           chmod +x /usr/local/bin/terragrunt
 
       - name: Configure AWS credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.TERRAFORM_APPLY_ROLE_ARN }}
           aws-region: eu-west-1
