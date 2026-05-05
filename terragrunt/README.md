@@ -30,8 +30,9 @@ project/platform-design/
 │   │   ├── budgets.hcl
 │   │   ├── centralized-logging.hcl
 │   │   └── README.md
-│   ├── <env>/                            # dev | staging | prod | dr
-│   │   ├── account.hcl                   # AWS account ID, name, environment, sizing defaults
+│   ├── <account>/                        # _org | security | log-archive | network | shared
+│   │   │                                 # | dev | staging | prod | dr | third-party
+│   │   ├── account.hcl                   # AWS account_id, email, org_ou, sizing defaults
 │   │   ├── _global/                      # Account-wide resources (not region-specific)
 │   │   │   └── iam/terragrunt.hcl        # IAM roles, policies, cross-account access
 │   │   └── <region>/                     # eu-west-1 | eu-west-2 | eu-west-3 | eu-central-1
@@ -42,14 +43,32 @@ project/platform-design/
 └── terraform/modules/                    # Custom Terraform modules (referenced by catalog units)
 ```
 
-## Environments
+## Accounts
 
-| Environment | AWS Account  | Purpose                      |
-|-------------|-------------|------------------------------|
-| dev         | 111111111111 | Development and experimentation |
-| staging     | 222222222222 | Pre-production validation    |
-| prod        | 333333333333 | Production workloads         |
-| dr          | 444444444444 | Disaster recovery            |
+The Control Tower landing zone (issue #157) defines nine accounts. Each top-level
+folder under `terragrunt/` corresponds to one AWS account and carries `account.hcl`
++ `eu-west-1/region.hcl`. OU placement is defined in #158.
+
+| Folder         | AWS Account  | OU              | Purpose                                            |
+|----------------|--------------|-----------------|----------------------------------------------------|
+| `_org/`        | 000000000000 | Root            | Organization management account (Control Tower hub) |
+| `security/`    | 777777777777 | Security        | Delegated admin: GuardDuty, SecurityHub, Detective, Inspector, Macie |
+| `log-archive/` | 888888888888 | Security        | Centralized log bucket (CloudTrail, Config, VPC Flow, EKS audit)     |
+| `network/`     | 555555555555 | Infrastructure  | Transit Gateway hub, Route53 resolver, inspection VPC                |
+| `shared/`      | 999999999999 | Infrastructure  | Shared services: ECR, Route53 private zones, ACM authority           |
+| `dev/`         | 111111111111 | Non-Production  | Development workloads                                                |
+| `staging/`     | 222222222222 | Non-Production  | Pre-production validation (canonical name: `stage`)                  |
+| `prod/`        | 333333333333 | Production      | Production workloads                                                 |
+| `dr/`          | 444444444444 | Production      | Disaster recovery for prod                                           |
+| `third-party/` | 121212121212 | Security        | Vendor IAM principals (Datadog, Vanta, Snyk) — narrow cross-org trust |
+
+**Account.hcl shape**: every per-account file declares `account_name`, `account_id`,
+`email`, `org_ou`, `environment`, `owner`, `cost_center`. Sizing knobs (NAT posture,
+EKS node groups, RDS class, etc.) live in workload accounts only.
+
+> Note: this repo originally used `staging/` for pre-prod; Control Tower / source
+> reference call it `stage`. We keep `staging/` for backwards compatibility — it
+> satisfies the `stage` slot in the canonical 9-account structure.
 
 ## Regions
 

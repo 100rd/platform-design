@@ -3,6 +3,7 @@ locals {
   account_id     = "555555555555" # TODO: Replace with actual AWS network account ID
   aws_account_id = "555555555555"
   environment    = "network"
+  email          = "aws+network@example.com"
 
   # Cost allocation and audit tracing
   owner       = "platform-team"
