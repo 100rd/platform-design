@@ -1,0 +1,45 @@
+# EditorConfig — https://editorconfig.org
+# Repo-wide indentation, charset, EOL conventions. Honoured by most editors
+# (VS Code, JetBrains, Vim with editorconfig-vim, GitHub web).
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 120
+
+# ---- Languages with their own conventions ----
+
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+[Makefile]
+indent_style = tab
+
+[*.{go,mod,sum}]
+indent_style = tab
+indent_size = 4
+
+[*.{py}]
+indent_size = 4
+
+[*.{tf,tfvars,hcl}]
+indent_size = 2
+
+[*.{yaml,yml}]
+indent_size = 2
+
+[*.{json,jsonc}]
+indent_size = 2
+
+[*.{sh,bash,zsh}]
+indent_size = 2
+
+[*.{Dockerfile,Dockerfile.*}]
+indent_size = 2

@@ -1,0 +1,17 @@
+# Trivy ignore file — https://aquasecurity.github.io/trivy/latest/docs/configuration/filtering/
+# Vulnerabilities and misconfigurations listed here are SUPPRESSED. Use
+# sparingly: every entry should have an inline comment explaining the
+# justification and an expiry date. The CI workflow `.github/workflows/`
+# Trivy steps consume this file.
+#
+# Format:
+#   <CVE-ID or check ID>  # justification (and expiry: YYYY-MM-DD)
+#
+# Categories:
+#   1. False positives — checker mis-fires; document upstream issue link.
+#   2. Accepted risk — risk is real but mitigated by other controls.
+#   3. Pending upstream fix — track CVE; remove once patched version landed.
+#
+# Bias toward NOT adding entries. Prefer fixing the underlying issue.
+
+# (intentionally empty — initial baseline)
