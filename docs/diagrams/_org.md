@@ -8,6 +8,7 @@ the `generate-diagrams.yml` workflow regenerates on push to main).
 graph LR
   subgraph _org["_org"]
     _org__global_aws_config["_org/_global/aws-config<br/>(aws-config)"]
+    _org__global_budgets["_org/_global/budgets<br/>(unknown)"]
     _org__global_cloudtrail["_org/_global/cloudtrail<br/>(cloudtrail)"]
     _org__global_guardduty_org["_org/_global/guardduty-org<br/>(guardduty-org)"]
     _org__global_iam_baseline["_org/_global/iam-baseline<br/>(iam-baseline)"]
