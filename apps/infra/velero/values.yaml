@@ -17,7 +17,7 @@ velero:
         prefix: velero
         default: true
         config:
-          region:           "" # TODO: Set via ArgoCD ApplicationSet region injection
+          region: "" # TODO: Set via ArgoCD ApplicationSet region injection
           s3ForcePathStyle: false
           # SSE-KMS — REQUIRED. Per-env override sets this to the KMS key ARN.
           # Example: arn:aws:kms:eu-west-1:111111111111:key/alias/velero
@@ -31,9 +31,9 @@ velero:
         bucket: "" # REQUIRED for DR: Set to DR region S3 bucket
         prefix: velero-dr
         config:
-          region:           "" # TODO: Set via ArgoCD ApplicationSet region injection (DR region)
+          region: "" # TODO: Set via ArgoCD ApplicationSet region injection (DR region)
           s3ForcePathStyle: false
-          kmsKeyId:         "" # SSE-KMS in the DR region's KMS
+          kmsKeyId: "" # SSE-KMS in the DR region's KMS
 
     # Volume snapshots (EBS)
     volumeSnapshotLocation:
