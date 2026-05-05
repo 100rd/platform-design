@@ -1,0 +1,7 @@
+# asdf / mise tool-version pins for the platform-design repo.
+# Single source of truth: terragrunt/versions.hcl. Edit there first, then
+# mirror the values here so asdf/mise users get the same tool versions.
+#
+# Format: <tool>:<version>, one per line.
+terraform 1.14.8
+terragrunt 0.99.5
