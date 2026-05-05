@@ -25,6 +25,8 @@ dependency "organization" {
       Workloads      = "ou-mock-work"
       NonProd        = "ou-mock-nonprod"
       Prod           = "ou-mock-prod"
+      Deployments    = "ou-mock-deploy"
+      Sandbox        = "ou-mock-sandbox"
     }
   }
 
@@ -35,6 +37,12 @@ dependency "organization" {
 inputs = {
   organization_id = dependency.organization.outputs.organization_id
   ou_ids          = dependency.organization.outputs.ou_ids
+
+  # OUs treated as workload-bearing — deny-root-account SCP attaches to these.
+  # Includes Sandbox (#158) so developer-experiment accounts can't use root.
+  # Deployments NOT included — its accounts run AFT/CI tooling under
+  # programmatic IAM principals; SCPs are inherited from non-workload defaults.
+  workload_ou_names = ["NonProd", "Prod", "Sandbox"]
 
   tags = {
     Environment = "management"
