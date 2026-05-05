@@ -19,12 +19,14 @@ graph LR
   end
   subgraph dev["dev"]
     dev__global_iam["dev/_global/iam<br/>(iam)"]
+    dev_eu_west_1_tgw_attachment["dev/eu-west-1/tgw-attachment<br/>(tgw-attachment)"]
   end
   subgraph dr["dr"]
     dr__global_iam["dr/_global/iam<br/>(iam)"]
   end
   subgraph network["network"]
     network__global_iam["network/_global/iam<br/>(iam)"]
+    network_eu_west_1_transit_gateway["network/eu-west-1/transit-gateway<br/>(transit-gateway)"]
   end
   subgraph prod["prod"]
     prod__global_clustermesh_connect["prod/_global/clustermesh-connect<br/>(clustermesh-connect)"]
@@ -43,6 +45,8 @@ graph LR
   _org__global_security_hub -->|depends on| _org__global_security_hub__dep__config(config)
   _org__global_security_hub -->|depends on| _org__global_security_hub__dep__guardduty(guardduty)
   _org__global_sso -->|depends on| _org__global_sso__dep__organization(organization)
+  dev_eu_west_1_tgw_attachment -->|depends on| dev_eu_west_1_tgw_attachment__dep__tgw(tgw)
+  dev_eu_west_1_tgw_attachment -->|depends on| dev_eu_west_1_tgw_attachment__dep__vpc(vpc)
   prod__global_clustermesh_connect -->|depends on| prod__global_clustermesh_connect__dep__cilium_euc1_platform(cilium_euc1_platform)
   prod__global_clustermesh_connect -->|depends on| prod__global_clustermesh_connect__dep__cilium_euw1_gpu_inference(cilium_euw1_gpu_inference)
   prod__global_clustermesh_connect -->|depends on| prod__global_clustermesh_connect__dep__cilium_euw1_platform(cilium_euw1_platform)

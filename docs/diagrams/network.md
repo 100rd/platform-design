@@ -8,5 +8,6 @@ the `generate-diagrams.yml` workflow regenerates on push to main).
 graph LR
   subgraph network["network"]
     network__global_iam["network/_global/iam<br/>(iam)"]
+    network_eu_west_1_transit_gateway["network/eu-west-1/transit-gateway<br/>(transit-gateway)"]
   end
 ```

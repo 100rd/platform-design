@@ -8,5 +8,8 @@ the `generate-diagrams.yml` workflow regenerates on push to main).
 graph LR
   subgraph dev["dev"]
     dev__global_iam["dev/_global/iam<br/>(iam)"]
+    dev_eu_west_1_tgw_attachment["dev/eu-west-1/tgw-attachment<br/>(tgw-attachment)"]
   end
+  dev_eu_west_1_tgw_attachment -->|depends on| dev_eu_west_1_tgw_attachment__dep__tgw(tgw)
+  dev_eu_west_1_tgw_attachment -->|depends on| dev_eu_west_1_tgw_attachment__dep__vpc(vpc)
 ```
