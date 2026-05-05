@@ -9,18 +9,20 @@
 #   }
 #
 # Hierarchy files expected in the directory tree:
-#   account.hcl  - defines account_name, account_id, environment, sizing
-#   region.hcl   - defines aws_region, region_short, azs
+#   account.hcl   - defines account_name, account_id, environment, sizing
+#   region.hcl    - defines aws_region, region_short, azs
+#
+# Sourced helper files (sibling to this file):
+#   versions.hcl  - tool + provider version pins
+#   common.hcl    - shared locals (project metadata, tag conventions, regions)
 # -----------------------------------------------------------------------------
 
-# Exact version pin — eliminates drift between developers and CI.
-# Mirrors infra/versions.hcl: terragrunt_version = "0.99.5"
-terragrunt_version_constraint = "= 0.99.5"
-
 # -----------------------------------------------------------------------------
-# Locals: Read hierarchy config files
+# Sourced configs
 # -----------------------------------------------------------------------------
 locals {
+  versions     = read_terragrunt_config(find_in_parent_folders("versions.hcl"))
+  common       = read_terragrunt_config(find_in_parent_folders("common.hcl"))
   account_vars = read_terragrunt_config(find_in_parent_folders("account.hcl"))
   region_vars  = read_terragrunt_config(find_in_parent_folders("region.hcl"))
 
@@ -29,10 +31,19 @@ locals {
   aws_region   = local.region_vars.locals.aws_region
   environment  = local.account_vars.locals.environment
 
-  # Cost allocation and audit tracing tags — read from account.hcl with safe fallbacks
-  owner       = try(local.account_vars.locals.owner, "platform-team")
-  cost_center = try(local.account_vars.locals.cost_center, "platform")
+  # Cost allocation and audit tracing tags — read from account.hcl with
+  # safe fallbacks to common.hcl defaults.
+  owner       = try(local.account_vars.locals.owner, local.common.locals.default_owner)
+  cost_center = try(local.account_vars.locals.cost_center, local.common.locals.default_cost_center)
+
+  # Pinned provider version (single source of truth: versions.hcl).
+  aws_provider_version = local.versions.locals.provider_versions.aws
 }
+
+# -----------------------------------------------------------------------------
+# Terragrunt version pin (single source of truth: versions.hcl)
+# -----------------------------------------------------------------------------
+terragrunt_version_constraint = local.versions.locals.terragrunt_version_constraint
 
 # -----------------------------------------------------------------------------
 # Catalog: local infrastructure catalog
@@ -62,13 +73,13 @@ remote_state {
 
     s3_bucket_tags = {
       Environment = local.environment
-      ManagedBy   = "terragrunt"
+      ManagedBy   = local.common.locals.managed_by_tag_value
       Account     = local.account_name
     }
 
     dynamodb_table_tags = {
       Environment = local.environment
-      ManagedBy   = "terragrunt"
+      ManagedBy   = local.common.locals.managed_by_tag_value
       Account     = local.account_name
     }
   }
@@ -92,14 +103,14 @@ generate "provider" {
       default_tags {
         tags = {
           Environment    = "${local.environment}"
-          ManagedBy      = "terragrunt"
+          ManagedBy      = "${local.common.locals.managed_by_tag_value}"
           Account        = "${local.account_name}"
           Region         = "${local.aws_region}"
           Owner          = "${local.owner}"
           CostCenter     = "${local.cost_center}"
           TerragruntPath = "${path_relative_to_include()}"
-          Repository     = "100rd/platform-design"
-          Project        = "platform-design"
+          Repository     = "${local.common.locals.repository}"
+          Project        = "${local.common.locals.project_name}"
         }
       }
     }
@@ -108,7 +119,7 @@ generate "provider" {
 
 # -----------------------------------------------------------------------------
 # Generate: Terraform and Provider Version Constraints
-# Exact pin: mirrors infra/versions.hcl terraform_version = "1.14.8"
+# Pinned via versions.hcl
 # -----------------------------------------------------------------------------
 generate "versions" {
   path      = "versions_override.tf"
@@ -116,12 +127,12 @@ generate "versions" {
 
   contents = <<-EOF
     terraform {
-      required_version = "= 1.14.8"
+      required_version = "${local.versions.locals.terraform_version_constraint}"
 
       required_providers {
         aws = {
           source  = "hashicorp/aws"
-          version = "~> 6.0"
+          version = "${local.aws_provider_version}"
         }
       }
     }
@@ -149,14 +160,14 @@ inputs = merge(
   {
     tags = {
       Environment    = local.environment
-      ManagedBy      = "terragrunt"
+      ManagedBy      = local.common.locals.managed_by_tag_value
       Account        = local.account_name
       Region         = local.aws_region
       Owner          = local.owner
       CostCenter     = local.cost_center
       TerragruntPath = path_relative_to_include()
-      Repository     = "100rd/platform-design"
-      Project        = "platform-design"
+      Repository     = local.common.locals.repository
+      Project        = local.common.locals.project_name
     }
   }
 )
