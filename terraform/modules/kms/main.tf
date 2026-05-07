@@ -5,24 +5,73 @@
 # Designed for PCI-DSS compliance: all keys enable rotation and include audit-friendly
 # policies that grant CloudTrail logging access.
 #
-# NOTE: prevent_destroy lifecycle was intentionally removed. Key deletion protection
-# is provided by deletion_window_in_days (7–30 days) combined with IAM policy controls
-# that restrict ScheduleKeyDeletion to key administrators only. This approach is
-# compatible with Terraform state moves and environment teardown workflows.
+# IMPLEMENTATION NOTE — conditional prevent_destroy:
+#   Terraform lifecycle.prevent_destroy is a literal-only meta-argument; it does not
+#   accept input variables or expressions (even in Terraform 1.14). We use a dual-
+#   resource pattern to express the conditional:
+#
+#     aws_kms_key.this_protected   — created when allow_destroy = false (default)
+#                                    lifecycle { prevent_destroy = true }
+#     aws_kms_key.this_destroyable — created when allow_destroy = true (test stacks)
+#                                    no lifecycle block
+#
+#   The two for_each sets are mutually exclusive (one is always empty). A local
+#   "all_keys" merges both maps, so downstream resources (aliases, outputs) work
+#   identically regardless of which variant is active. Existing callers that do NOT
+#   pass allow_destroy (default = false) continue to receive protect_destroy = true,
+#   byte-identical to pre-round-1 behavior.
 # ---------------------------------------------------------------------------------------------------------------------
 
 data "aws_caller_identity" "current" {}
 
 locals {
   account_id = data.aws_caller_identity.current.account_id
+
+  # Merge the two mutually-exclusive resource maps into a single addressable map.
+  # Exactly one of the two maps will be non-empty at any given time.
+  all_keys = merge(aws_kms_key.this_protected, aws_kms_key.this_destroyable)
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# KMS Keys
+# KMS Keys — protected variant (allow_destroy = false, default)
+# ---------------------------------------------------------------------------------------------------------------------
+# This resource is created for all standard callers. Deletion protection at the
+# IaC layer prevents accidental `terraform destroy` of shared CMKs.
 # ---------------------------------------------------------------------------------------------------------------------
 
-resource "aws_kms_key" "this" {
-  for_each = var.keys
+resource "aws_kms_key" "this_protected" {
+  for_each = var.allow_destroy ? {} : var.keys
+
+  description             = each.value.description
+  deletion_window_in_days = each.value.deletion_window_in_days
+  key_usage               = each.value.key_usage
+  enable_key_rotation     = true
+
+  policy = data.aws_iam_policy_document.key_policy[each.key].json
+
+  tags = merge(var.tags, {
+    Name          = "${var.environment}-${each.key}"
+    pci-dss-scope = "true"
+    key-purpose   = each.key
+    Environment   = var.environment
+  })
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# KMS Keys — destroyable variant (allow_destroy = true, test/minimal stacks only)
+# ---------------------------------------------------------------------------------------------------------------------
+# This resource is created ONLY when allow_destroy = true. No lifecycle guard is
+# applied, allowing the stack to be torn down cleanly in CI/CD test environments.
+# AWS-native protection (deletion_window_in_days = 30) and IAM still apply.
+# DO NOT set allow_destroy = true in platform/ or blockchain/ catalog units.
+# ---------------------------------------------------------------------------------------------------------------------
+
+resource "aws_kms_key" "this_destroyable" {
+  for_each = var.allow_destroy ? var.keys : {}
 
   description             = each.value.description
   deletion_window_in_days = each.value.deletion_window_in_days
@@ -44,10 +93,10 @@ resource "aws_kms_key" "this" {
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "aws_kms_alias" "this" {
-  for_each = var.keys
+  for_each = local.all_keys
 
   name          = "alias/${var.alias_prefix != "" ? var.alias_prefix : var.environment}/${each.key}"
-  target_key_id = aws_kms_key.this[each.key].key_id
+  target_key_id = local.all_keys[each.key].key_id
 }
 
 # ---------------------------------------------------------------------------------------------------------------------

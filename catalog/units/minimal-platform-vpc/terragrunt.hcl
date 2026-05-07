@@ -8,6 +8,8 @@
 #   - Cluster name: staging-eu-central-1-minimal-platform
 #   - Single NAT gateway (Decision 1: saves ~$65/mo vs one-per-AZ)
 #   - Dedicated CIDR 10.14.0.0/16
+#   - VPC flow logs disabled (cost optimisation for test stack; PCI-DSS Req 10
+#     retention requirement does not apply here — production stacks keep flow logs)
 # ---------------------------------------------------------------------------------------------------------------------
 
 terraform {
@@ -57,14 +59,14 @@ inputs = {
   enable_dns_support   = true
 
   # ---------------------------------------------------------------------------
-  # VPC Flow Logs — PCI-DSS Req 10 (logging & monitoring)
+  # VPC Flow Logs — disabled for this test stack
   # ---------------------------------------------------------------------------
-  enable_flow_log                                 = true
-  flow_log_destination_type                       = "cloud-watch-logs"
-  create_flow_log_cloudwatch_log_group            = true
-  flow_log_cloudwatch_log_group_retention_in_days = 365
-  flow_log_max_aggregation_interval               = 60
-  flow_log_traffic_type                           = "ALL"
+  # PCI-DSS Req 10.7 (12-month retention) does not apply to this non-production
+  # test/validation stack. Disabling saves ~$5-10/mo in CloudWatch Logs ingestion
+  # and storage. Production stacks (platform/, blockchain/) keep flow logs enabled.
+  # See runbook: docs/runbooks/minimal-platform-bootstrap.md
+  # ---------------------------------------------------------------------------
+  enable_flow_log = false
 
   # ---------------------------------------------------------------------------
   # Subnet tags required by AWS Load Balancer Controller and Karpenter

@@ -35,6 +35,12 @@ variable "alias_prefix" {
   default     = ""
 }
 
+variable "allow_destroy" {
+  description = "When true, omits the IaC-layer lifecycle.prevent_destroy guard on KMS keys. Default false preserves deletion protection for all production and shared stacks. Test/minimal stacks that will be torn down may set this to true — AWS-native protection (deletion_window_in_days) and IAM still apply. NEVER set to true for platform/ or blockchain/ stacks."
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Common tags to apply to all KMS resources"
   type        = map(string)

@@ -57,6 +57,7 @@ dependency "kms" {
   mock_outputs = {
     key_arns = {
       eks-secrets = "arn:aws:kms:eu-central-1:000000000000:key/mock-eks-secrets-key"
+      ebs         = "arn:aws:kms:eu-central-1:000000000000:key/mock-ebs-key"
     }
   }
 
@@ -140,6 +141,24 @@ inputs = {
       desired_size   = local.account_vars.locals.eks_desired_size
 
       platform = "bottlerocket"
+
+      # -----------------------------------------------------------------------
+      # EBS root volume encryption — HIGH-2 fix (security review round 2)
+      # Explicit per-volume CMK encryption regardless of account-level default.
+      # Bottlerocket uses /dev/xvda for the OS root volume.
+      # -----------------------------------------------------------------------
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = 20
+            volume_type           = "gp3"
+            encrypted             = true
+            kms_key_id            = dependency.kms.outputs.key_arns["ebs"]
+            delete_on_termination = true
+          }
+        }
+      }
 
       taints = {
         cilium = {

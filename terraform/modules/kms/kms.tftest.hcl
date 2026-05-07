@@ -30,11 +30,12 @@ variables {
   }
 }
 
+# Default path: allow_destroy = false → keys land in this_protected
 run "creates_kms_key_with_rotation" {
   command = plan
 
   assert {
-    condition     = aws_kms_key.this["eks"].enable_key_rotation == true
+    condition     = aws_kms_key.this_protected["eks"].enable_key_rotation == true
     error_message = "KMS key rotation must be enabled for PCI-DSS compliance"
   }
 }
@@ -52,12 +53,12 @@ run "key_tagged_with_pci_scope" {
   command = plan
 
   assert {
-    condition     = aws_kms_key.this["eks"].tags["pci-dss-scope"] == "true"
+    condition     = aws_kms_key.this_protected["eks"].tags["pci-dss-scope"] == "true"
     error_message = "KMS key should be tagged as PCI-DSS scoped"
   }
 
   assert {
-    condition     = aws_kms_key.this["eks"].tags["key-purpose"] == "eks"
+    condition     = aws_kms_key.this_protected["eks"].tags["key-purpose"] == "eks"
     error_message = "KMS key should have key-purpose tag"
   }
 }
@@ -79,7 +80,7 @@ run "deletion_window_default_30_days" {
   command = plan
 
   assert {
-    condition     = aws_kms_key.this["eks"].deletion_window_in_days == 30
+    condition     = aws_kms_key.this_protected["eks"].deletion_window_in_days == 30
     error_message = "Default deletion window should be 30 days"
   }
 }
@@ -88,7 +89,7 @@ run "key_usage_default_encrypt_decrypt" {
   command = plan
 
   assert {
-    condition     = aws_kms_key.this["eks"].key_usage == "ENCRYPT_DECRYPT"
+    condition     = aws_kms_key.this_protected["eks"].key_usage == "ENCRYPT_DECRYPT"
     error_message = "Default key usage should be ENCRYPT_DECRYPT"
   }
 }
@@ -126,7 +127,26 @@ run "multiple_keys_supported" {
   }
 
   assert {
-    condition     = length(aws_kms_key.this) == 2
+    condition     = length(aws_kms_key.this_protected) == 2
     error_message = "Should create 2 KMS keys"
+  }
+}
+
+# Verify allow_destroy = true path: keys land in this_destroyable, protected is empty
+run "allow_destroy_uses_destroyable_resource" {
+  command = plan
+
+  variables {
+    allow_destroy = true
+  }
+
+  assert {
+    condition     = length(aws_kms_key.this_protected) == 0
+    error_message = "allow_destroy=true must produce zero protected keys"
+  }
+
+  assert {
+    condition     = length(aws_kms_key.this_destroyable) == 1
+    error_message = "allow_destroy=true must route keys to destroyable resource"
   }
 }
