@@ -18,7 +18,7 @@
 # ---------------------------------------------------------------------------------------------------------------------
 
 terraform {
-  source = "${get_repo_root()}/project/platform-design/terraform/modules/kms"
+  source = "${get_repo_root()}/terraform/modules/kms"
 }
 
 locals {

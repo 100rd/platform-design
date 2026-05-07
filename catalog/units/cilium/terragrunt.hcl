@@ -10,7 +10,7 @@
 # ---------------------------------------------------------------------------------------------------------------------
 
 terraform {
-  source = "${get_repo_root()}/project/platform-design/terraform/modules/cilium"
+  source = "${get_repo_root()}/terraform/modules/cilium"
 }
 
 locals {
