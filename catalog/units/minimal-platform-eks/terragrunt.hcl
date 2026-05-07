@@ -12,6 +12,16 @@
 #   - eks_access_entries          — overrides default SSO role access entries
 #   - eks_public_access_cidrs     — overrides default open public access (0.0.0.0/0)
 #   - eks_min_size / max / desired — node group sizing (already read from account.hcl)
+#
+# v21 input renames applied (terraform-aws-modules/eks/aws v21.x):
+#   cluster_name                      -> name
+#   cluster_version                   -> kubernetes_version
+#   cluster_endpoint_public_access    -> endpoint_public_access
+#   cluster_endpoint_private_access   -> endpoint_private_access
+#   cluster_endpoint_public_access_cidrs -> endpoint_public_access_cidrs
+#   cluster_encryption_config         -> encryption_config
+#   cluster_enabled_log_types         -> enabled_log_types
+#   cluster_addons                    -> addons
 # ---------------------------------------------------------------------------------------------------------------------
 
 terraform {
@@ -117,8 +127,10 @@ dependency "kms" {
 # ---------------------------------------------------------------------------------------------------------------------
 
 inputs = {
-  cluster_name    = local.cluster_name
-  cluster_version = "1.32"
+  # v21: cluster_name -> name
+  name = local.cluster_name
+  # v21: cluster_version -> kubernetes_version
+  kubernetes_version = "1.32"
 
   # Networking
   vpc_id                   = dependency.vpc.outputs.vpc_id
@@ -126,30 +138,41 @@ inputs = {
   control_plane_subnet_ids = dependency.vpc.outputs.private_subnets
 
   # Endpoint access — follows account.hcl settings
-  cluster_endpoint_public_access       = local.account_vars.locals.eks_public_access
-  cluster_endpoint_private_access      = true
-  cluster_endpoint_public_access_cidrs = local.public_access_cidrs
+  # v21: cluster_endpoint_public_access       -> endpoint_public_access
+  # v21: cluster_endpoint_private_access      -> endpoint_private_access
+  # v21: cluster_endpoint_public_access_cidrs -> endpoint_public_access_cidrs
+  endpoint_public_access       = local.account_vars.locals.eks_public_access
+  endpoint_private_access      = true
+  endpoint_public_access_cidrs = local.public_access_cidrs
 
   # IRSA (IAM Roles for Service Accounts)
   enable_irsa = true
 
+  # Disable name_prefix for IAM role: cluster name (e.g. sandbox-eu-central-1-minimal-platform)
+  # is 40 chars; appending "-cluster-" yields 50 which exceeds the 38-char name_prefix AWS limit.
+  # Using exact name is safe for a single cluster per environment.
+  iam_role_use_name_prefix = false
+
   # ---------------------------------------------------------------------------
   # Secrets Encryption — PCI-DSS Req 3.4
+  # v21: cluster_encryption_config -> encryption_config
   # ---------------------------------------------------------------------------
-  cluster_encryption_config = {
+  encryption_config = {
     provider_key_arn = dependency.kms.outputs.key_arns["eks-secrets"]
     resources        = ["secrets"]
   }
 
   # ---------------------------------------------------------------------------
   # Control Plane Logging — PCI-DSS Req 10.2
+  # v21: cluster_enabled_log_types -> enabled_log_types
   # ---------------------------------------------------------------------------
-  cluster_enabled_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+  enabled_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 
   # ---------------------------------------------------------------------------
   # Cluster Addons — vpc-cni intentionally omitted (Cilium CNI used instead)
+  # v21: cluster_addons -> addons
   # ---------------------------------------------------------------------------
-  cluster_addons = {
+  addons = {
     coredns = {
       most_recent = true
       configuration_values = jsonencode({
