@@ -15,6 +15,14 @@
 #     cluster_name, cluster_oidc_issuer_url, and oidc_provider_arn
 # ---------------------------------------------------------------------------------------------------------------------
 
+# Include root.hcl to activate remote_state (S3 backend generation) and provider
+# generation. Without this block, terragrunt ignores root.hcl entirely — no
+# backend.tf is generated and state falls back to local storage, which is lost
+# on any cache clean (rm -rf .terragrunt-cache / .terragrunt-stack).
+include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
 terraform {
   source = "${get_repo_root()}/terraform/modules/cilium"
 }

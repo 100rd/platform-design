@@ -24,6 +24,14 @@
 #   cluster_addons                    -> addons
 # ---------------------------------------------------------------------------------------------------------------------
 
+# Include root.hcl to activate remote_state (S3 backend generation) and provider
+# generation. Without this block, terragrunt ignores root.hcl entirely — no
+# backend.tf is generated and state falls back to local storage, which is lost
+# on any cache clean (rm -rf .terragrunt-cache / .terragrunt-stack).
+include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
 terraform {
   source = "tfr:///terraform-aws-modules/eks/aws?version=21.15.1"
 }
@@ -198,6 +206,37 @@ inputs = {
   # ---------------------------------------------------------------------------
   node_security_group_tags = {
     "karpenter.sh/discovery" = local.cluster_name
+  }
+
+  # ---------------------------------------------------------------------------
+  # Additional node security group rules for Cilium ENI mode (Fix #8).
+  #
+  # EKS v21 module default node SG rules cover:
+  #   - TCP 443 inbound from cluster SG (API -> nodes)
+  #   - TCP 10250 inbound from cluster SG (kubelet)
+  #   - TCP/UDP 53 self (CoreDNS)
+  #   - TCP 1025-65535 self (ephemeral; recommended rules)
+  #   - Egress all (0.0.0.0/0)
+  #
+  # Gap for Cilium ENI mode: pods get VPC IPs and inherit the node SG.
+  # Cross-node pod traffic uses VPC routing — the node SG must permit all
+  # inbound protocols from itself. The default covers TCP ephemeral ports
+  # but NOT UDP (needed for WireGuard encryption on UDP 51871) or ICMP
+  # (needed for path MTU discovery). A single self all-protocol rule fills
+  # both gaps.
+  #
+  # This replaces the manual `aws ec2 authorize-security-group-ingress`
+  # workaround that was required during the Round 7 first-apply.
+  # ---------------------------------------------------------------------------
+  node_security_group_additional_rules = {
+    ingress_self_all_cilium_eni = {
+      description = "Cilium ENI mode: all protocols self (pod-to-pod across nodes + WireGuard UDP 51871)"
+      type        = "ingress"
+      protocol    = "-1"
+      from_port   = 0
+      to_port     = 0
+      self        = true
+    }
   }
 
   # ---------------------------------------------------------------------------

@@ -12,6 +12,14 @@
 #     retention requirement does not apply here — production stacks keep flow logs)
 # ---------------------------------------------------------------------------------------------------------------------
 
+# Include root.hcl to activate remote_state (S3 backend generation) and provider
+# generation. Without this block, terragrunt ignores root.hcl entirely — no
+# backend.tf is generated and state falls back to local storage, which is lost
+# on any cache clean (rm -rf .terragrunt-cache / .terragrunt-stack).
+include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
 terraform {
   source = "tfr:///terraform-aws-modules/vpc/aws?version=6.6.0"
 }
