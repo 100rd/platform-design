@@ -4,9 +4,14 @@
 # Provisions a dedicated EKS cluster for the minimal-platform stack.
 #
 # Key difference from the standard eks catalog unit:
-#   - cluster_name = staging-eu-central-1-minimal-platform (avoids collision with
-#     the standard platform cluster staging-eu-central-1-platform in the same account)
+#   - cluster_name = <env>-<region>-minimal-platform (avoids collision with the
+#     standard platform cluster <env>-<region>-platform in the same account)
 #   - Depends on minimal-platform-vpc and minimal-platform-kms
+#
+# Configurable per account.hcl (all with backward-compatible try() defaults):
+#   - eks_access_entries          — overrides default SSO role access entries
+#   - eks_public_access_cidrs     — overrides default open public access (0.0.0.0/0)
+#   - eks_min_size / max / desired — node group sizing (already read from account.hcl)
 # ---------------------------------------------------------------------------------------------------------------------
 
 terraform {
@@ -26,8 +31,50 @@ locals {
 
   # ---------------------------------------------------------------------------
   # SSO Role ARNs — constructed from account ID and SSO permission set names.
+  # Used as the default access_entries for org accounts with AWS SSO.
   # ---------------------------------------------------------------------------
   sso_role_prefix = "arn:aws:iam::${local.account_id}:role/aws-reserved/sso.amazonaws.com"
+
+  default_access_entries = {
+    platform_engineer = {
+      principal_arn     = "${local.sso_role_prefix}/AWSReservedSSO_PlatformEngineer_*"
+      kubernetes_groups = ["platform-operators"]
+      type              = "STANDARD"
+    }
+
+    readonly_access = {
+      principal_arn     = "${local.sso_role_prefix}/AWSReservedSSO_ReadOnlyAccess_*"
+      kubernetes_groups = ["platform-viewers"]
+      type              = "STANDARD"
+    }
+
+    developer_access = {
+      principal_arn     = "${local.sso_role_prefix}/AWSReservedSSO_DeveloperAccess_*"
+      kubernetes_groups = ["platform-viewers"]
+      type              = "STANDARD"
+    }
+  }
+
+  # ---------------------------------------------------------------------------
+  # Access entries — configurable per account.
+  #
+  # Accounts with AWS SSO (staging, prod, dev) use the default SSO role entries.
+  # The personal sandbox account has no SSO; account.hcl sets eks_access_entries = {}
+  # and relies on enable_cluster_creator_admin_permissions = true for cluster access.
+  #
+  # Backward-compatible: if account.hcl does not define eks_access_entries,
+  # try() falls back to the SSO role defaults.
+  # ---------------------------------------------------------------------------
+  access_entries = try(local.account_vars.locals.eks_access_entries, local.default_access_entries)
+
+  # ---------------------------------------------------------------------------
+  # Public access CIDRs — configurable per account.
+  #
+  # Default: open to the world (0.0.0.0/0) for accounts where public access is
+  # already gated by eks_public_access = false in account.hcl (staging/prod).
+  # Sandbox: locked to user's IP via eks_public_access_cidrs in account.hcl.
+  # ---------------------------------------------------------------------------
+  public_access_cidrs = try(local.account_vars.locals.eks_public_access_cidrs, ["0.0.0.0/0"])
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -78,9 +125,10 @@ inputs = {
   subnet_ids               = dependency.vpc.outputs.private_subnets
   control_plane_subnet_ids = dependency.vpc.outputs.private_subnets
 
-  # Endpoint access — follows account.hcl setting (private-only for staging)
-  cluster_endpoint_public_access  = local.account_vars.locals.eks_public_access
-  cluster_endpoint_private_access = true
+  # Endpoint access — follows account.hcl settings
+  cluster_endpoint_public_access       = local.account_vars.locals.eks_public_access
+  cluster_endpoint_private_access      = true
+  cluster_endpoint_public_access_cidrs = local.public_access_cidrs
 
   # IRSA (IAM Roles for Service Accounts)
   enable_irsa = true
@@ -173,27 +221,12 @@ inputs = {
   enable_cluster_creator_admin_permissions = true
 
   # ---------------------------------------------------------------------------
-  # EKS Access Entries — PCI-DSS Req 7.1, 7.2, 8.5
+  # EKS Access Entries — configurable per account (PCI-DSS Req 7.1, 7.2, 8.5)
+  #
+  # Org accounts (staging, prod, dev): default SSO role entries from local.
+  # Sandbox: empty map from account.hcl; cluster access via creator permissions.
   # ---------------------------------------------------------------------------
-  access_entries = {
-    platform_engineer = {
-      principal_arn     = "${local.sso_role_prefix}/AWSReservedSSO_PlatformEngineer_*"
-      kubernetes_groups = ["platform-operators"]
-      type              = "STANDARD"
-    }
-
-    readonly_access = {
-      principal_arn     = "${local.sso_role_prefix}/AWSReservedSSO_ReadOnlyAccess_*"
-      kubernetes_groups = ["platform-viewers"]
-      type              = "STANDARD"
-    }
-
-    developer_access = {
-      principal_arn     = "${local.sso_role_prefix}/AWSReservedSSO_DeveloperAccess_*"
-      kubernetes_groups = ["platform-viewers"]
-      type              = "STANDARD"
-    }
-  }
+  access_entries = local.access_entries
 
   tags = {
     Environment = local.environment
