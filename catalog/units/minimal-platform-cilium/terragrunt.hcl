@@ -2,17 +2,23 @@
 # Minimal Platform Cilium CNI — Catalog Unit
 # ---------------------------------------------------------------------------------------------------------------------
 # Deploys Cilium as the CNI for the minimal-platform EKS cluster.
-# Must be deployed AFTER minimal-platform-eks.
+# Must be deployed AFTER minimal-platform-eks-cluster and BEFORE minimal-platform-eks-nodes.
+#
+# Deploy order:
+#   vpc -> kms -> eks-cluster -> cilium (this unit) -> eks-nodes
 #
 # Key differences from the standard cilium catalog unit:
 #   - enable_clustermesh = false (Decision 3: this stack is standalone, not part
 #     of the multi-region mesh; saves ClusterMesh API server cost)
-#   - cluster_name derived from dependency.eks.outputs.cluster_name (not hardcoded)
+#   - cluster_name derived from dependency.eks_cluster.outputs.cluster_name (not hardcoded)
 #   - cluster_oidc_issuer_url + cluster_oidc_provider_arn wired for IRSA
 #     (Cilium operator needs EC2 ENI APIs; IRSA role created by the module)
 #   - generate "k8s_providers" block for helm + kubernetes providers
 #   - Extended mock_outputs covering cluster_certificate_authority_data,
 #     cluster_name, cluster_oidc_issuer_url, and oidc_provider_arn
+#
+# Changed in Round 10.5: dependency renamed from "eks" (../eks) to
+# "eks_cluster" (../eks-cluster) to reflect the cluster/nodes split.
 # ---------------------------------------------------------------------------------------------------------------------
 
 # Include root.hcl to activate remote_state (S3 backend generation) and provider
@@ -36,11 +42,14 @@ locals {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# DEPENDENCY: Minimal Platform EKS Cluster
+# DEPENDENCY: Minimal Platform EKS Cluster (control plane only)
+# Points to eks-cluster unit — the split unit that has no node groups.
+# This ensures Cilium is deployed after the control plane is ready but
+# before any nodes join, breaking the CNI chicken-and-egg cycle.
 # ---------------------------------------------------------------------------------------------------------------------
 
-dependency "eks" {
-  config_path = "../eks"
+dependency "eks_cluster" {
+  config_path = "../eks-cluster"
 
   mock_outputs = {
     cluster_endpoint                   = "https://XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.gr7.eu-central-1.eks.amazonaws.com"
@@ -64,23 +73,23 @@ generate "k8s_providers" {
   contents  = <<-PROVIDERS
     provider "helm" {
       kubernetes {
-        host                   = "${dependency.eks.outputs.cluster_endpoint}"
-        cluster_ca_certificate = base64decode("${dependency.eks.outputs.cluster_certificate_authority_data}")
+        host                   = "${dependency.eks_cluster.outputs.cluster_endpoint}"
+        cluster_ca_certificate = base64decode("${dependency.eks_cluster.outputs.cluster_certificate_authority_data}")
         exec {
           api_version = "client.authentication.k8s.io/v1beta1"
           command     = "aws"
-          args        = ["eks", "get-token", "--cluster-name", "${dependency.eks.outputs.cluster_name}"]
+          args        = ["eks", "get-token", "--cluster-name", "${dependency.eks_cluster.outputs.cluster_name}"]
         }
       }
     }
 
     provider "kubernetes" {
-      host                   = "${dependency.eks.outputs.cluster_endpoint}"
-      cluster_ca_certificate = base64decode("${dependency.eks.outputs.cluster_certificate_authority_data}")
+      host                   = "${dependency.eks_cluster.outputs.cluster_endpoint}"
+      cluster_ca_certificate = base64decode("${dependency.eks_cluster.outputs.cluster_certificate_authority_data}")
       exec {
         api_version = "client.authentication.k8s.io/v1beta1"
         command     = "aws"
-        args        = ["eks", "get-token", "--cluster-name", "${dependency.eks.outputs.cluster_name}"]
+        args        = ["eks", "get-token", "--cluster-name", "${dependency.eks_cluster.outputs.cluster_name}"]
       }
     }
   PROVIDERS
@@ -92,11 +101,11 @@ generate "k8s_providers" {
 
 inputs = {
   # Identity — required for IRSA role naming and OIDC trust policy
-  cluster_name              = dependency.eks.outputs.cluster_name
-  cluster_oidc_issuer_url   = dependency.eks.outputs.cluster_oidc_issuer_url
-  cluster_oidc_provider_arn = dependency.eks.outputs.oidc_provider_arn
+  cluster_name              = dependency.eks_cluster.outputs.cluster_name
+  cluster_oidc_issuer_url   = dependency.eks_cluster.outputs.cluster_oidc_issuer_url
+  cluster_oidc_provider_arn = dependency.eks_cluster.outputs.oidc_provider_arn
 
-  cluster_endpoint = replace(dependency.eks.outputs.cluster_endpoint, "https://", "")
+  cluster_endpoint = replace(dependency.eks_cluster.outputs.cluster_endpoint, "https://", "")
 
   cilium_version = "1.16.5"
 

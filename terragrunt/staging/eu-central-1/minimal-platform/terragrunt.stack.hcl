@@ -15,9 +15,17 @@
 # catalog units, following the established pattern (cf. blockchain stack). This
 # avoids coupling the shared units to stack-specific overrides.
 #
+# Deploy order (Round 10.5 split):
+#   vpc -> kms -> eks-cluster -> cilium -> eks-nodes
+#
+# The eks unit was split into eks-cluster + eks-nodes to break the Cilium
+# chicken-and-egg cycle: Cilium is deployed after the control plane but before
+# nodes join, so the CNI is ready when nodes first start up.
+#
 # Usage:
-#   terragrunt stack plan
-#   terragrunt stack apply   # CI/CD only — never run manually
+#   terragrunt stack generate
+#   terragrunt stack plan   # review before apply
+#   terragrunt stack apply  # CI/CD only — never run manually
 # ---------------------------------------------------------------------------------------------------------------------
 
 unit "vpc" {
@@ -30,12 +38,17 @@ unit "kms" {
   path   = "kms"
 }
 
-unit "eks" {
-  source = "${get_repo_root()}/catalog/units/minimal-platform-eks"
-  path   = "eks"
+unit "eks-cluster" {
+  source = "${get_repo_root()}/catalog/units/minimal-platform-eks-cluster"
+  path   = "eks-cluster"
 }
 
 unit "cilium" {
   source = "${get_repo_root()}/catalog/units/minimal-platform-cilium"
   path   = "cilium"
+}
+
+unit "eks-nodes" {
+  source = "${get_repo_root()}/catalog/units/minimal-platform-eks-nodes"
+  path   = "eks-nodes"
 }

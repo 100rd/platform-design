@@ -1,27 +1,29 @@
 # ---------------------------------------------------------------------------------------------------------------------
-# Minimal Platform EKS Cluster — Catalog Unit
+# Minimal Platform EKS Cluster (control plane only) — Catalog Unit
 # ---------------------------------------------------------------------------------------------------------------------
-# Provisions a dedicated EKS cluster for the minimal-platform stack.
+# Provisions the EKS control plane, IAM roles, OIDC provider, KMS encryption,
+# cluster addons, and shared security groups for the minimal-platform stack.
 #
-# Key difference from the standard eks catalog unit:
-#   - cluster_name = <env>-<region>-minimal-platform (avoids collision with the
-#     standard platform cluster <env>-<region>-platform in the same account)
-#   - Depends on minimal-platform-vpc and minimal-platform-kms
+# IMPORTANT: This unit deliberately creates NO managed node groups (eks_managed_node_groups = {}).
+# The node group lives in a separate catalog unit (minimal-platform-eks-nodes) which
+# depends on this unit AND on minimal-platform-cilium.
 #
-# Configurable per account.hcl (all with backward-compatible try() defaults):
-#   - eks_access_entries          — overrides default SSO role access entries
-#   - eks_public_access_cidrs     — overrides default open public access (0.0.0.0/0)
-#   - eks_min_size / max / desired — node group sizing (already read from account.hcl)
+# Deploy order:
+#   vpc -> kms -> eks-cluster -> cilium -> eks-nodes
 #
-# v21 input renames applied (terraform-aws-modules/eks/aws v21.x):
-#   cluster_name                      -> name
-#   cluster_version                   -> kubernetes_version
-#   cluster_endpoint_public_access    -> endpoint_public_access
-#   cluster_endpoint_private_access   -> endpoint_private_access
-#   cluster_endpoint_public_access_cidrs -> endpoint_public_access_cidrs
-#   cluster_encryption_config         -> encryption_config
-#   cluster_enabled_log_types         -> enabled_log_types
-#   cluster_addons                    -> addons
+# This split breaks the Cilium chicken-and-egg cycle:
+#   - Cilium operator/DaemonSet manifests are installed BEFORE nodes come up
+#   - Nodes start with taint node.cilium.io/agent-not-ready=true:NoExecute
+#   - Cilium agent removes the taint once it initialises on each node
+#   - Nodes become Ready without any manual CNI intervention
+#
+# All cluster-level outputs (cluster_endpoint, cluster_name, oidc_provider_arn,
+# cluster_certificate_authority_data, cluster_service_cidr, cluster_ip_family,
+# cluster_security_group_id, node_security_group_id) are available immediately
+# after this unit applies — no nodes required.
+#
+# Derived from minimal-platform-eks with the managed node group block removed.
+# Input renames for terraform-aws-modules/eks/aws v21.x applied.
 # ---------------------------------------------------------------------------------------------------------------------
 
 # Include root.hcl to activate remote_state (S3 backend generation) and provider
@@ -76,9 +78,8 @@ locals {
   # ---------------------------------------------------------------------------
   # Access entries — configurable per account.
   #
-  # Accounts with AWS SSO (staging, prod, dev) use the default SSO role entries.
-  # The personal sandbox account has no SSO; account.hcl sets eks_access_entries = {}
-  # and relies on enable_cluster_creator_admin_permissions = true for cluster access.
+  # Org accounts (staging, prod, dev): default SSO role entries from local.
+  # Sandbox: empty map from account.hcl; cluster access via creator permissions.
   #
   # Backward-compatible: if account.hcl does not define eks_access_entries,
   # try() falls back to the SSO role defaults.
@@ -240,45 +241,11 @@ inputs = {
   }
 
   # ---------------------------------------------------------------------------
-  # Managed node groups — sizes from account.hcl (shared with platform)
+  # No managed node groups — nodes live in the separate eks-nodes unit.
+  # This allows Cilium to be deployed between cluster creation and node join,
+  # breaking the CNI chicken-and-egg problem.
   # ---------------------------------------------------------------------------
-  eks_managed_node_groups = {
-    system = {
-      ami_type       = "BOTTLEROCKET_x86_64"
-      instance_types = local.account_vars.locals.eks_instance_types
-      min_size       = local.account_vars.locals.eks_min_size
-      max_size       = local.account_vars.locals.eks_max_size
-      desired_size   = local.account_vars.locals.eks_desired_size
-
-      platform = "bottlerocket"
-
-      # -----------------------------------------------------------------------
-      # EBS root volume encryption — HIGH-2 fix (security review round 2)
-      # Explicit per-volume CMK encryption regardless of account-level default.
-      # Bottlerocket uses /dev/xvda for the OS root volume.
-      # -----------------------------------------------------------------------
-      block_device_mappings = {
-        xvda = {
-          device_name = "/dev/xvda"
-          ebs = {
-            volume_size           = 20
-            volume_type           = "gp3"
-            encrypted             = true
-            kms_key_id            = dependency.kms.outputs.key_arns["ebs"]
-            delete_on_termination = true
-          }
-        }
-      }
-
-      taints = {
-        cilium = {
-          key    = "node.cilium.io/agent-not-ready"
-          value  = "true"
-          effect = "NO_SCHEDULE"
-        }
-      }
-    }
-  }
+  eks_managed_node_groups = {}
 
   enable_cluster_creator_admin_permissions = true
 

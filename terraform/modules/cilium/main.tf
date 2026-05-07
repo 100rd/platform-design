@@ -193,6 +193,25 @@ resource "helm_release" "cilium" {
             memory = "512Mi"
           }
         }
+
+        # Tolerations for the operator pod.
+        # The startup taint node.cilium.io/agent-not-ready=true:NoExecute is set on
+        # all nodes in the eks-nodes unit. Without this toleration, the operator pod
+        # would be evicted immediately on node join before Cilium is ready.
+        # The Cilium agent DaemonSet already tolerates everything via {operator: Exists},
+        # so only the operator needs an explicit entry here.
+        tolerations = [
+          {
+            key      = "node.cilium.io/agent-not-ready"
+            operator = "Exists"
+            effect   = "NoExecute"
+          },
+          {
+            key      = "node-role.kubernetes.io/control-plane"
+            operator = "Exists"
+            effect   = "NoSchedule"
+          },
+        ]
       }
 
       # Agent configuration

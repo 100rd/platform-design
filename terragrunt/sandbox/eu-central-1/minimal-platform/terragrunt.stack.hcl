@@ -12,6 +12,13 @@
 #   - S3 native state locking (use_lockfile = true) — no DynamoDB lock table
 #   - No Transit Gateway, no ClusterMesh, no cross-account log shipping
 #
+# Deploy order (Round 10.5 split):
+#   vpc -> kms -> eks-cluster -> cilium -> eks-nodes
+#
+# The eks unit was split into eks-cluster + eks-nodes to break the Cilium
+# chicken-and-egg cycle: Cilium is deployed after the control plane but before
+# nodes join, so the CNI is ready when nodes first start up.
+#
 # Usage:
 #   terragrunt stack generate
 #   terragrunt stack plan   # review before apply
@@ -28,12 +35,17 @@ unit "kms" {
   path   = "kms"
 }
 
-unit "eks" {
-  source = "${get_repo_root()}/catalog/units/minimal-platform-eks"
-  path   = "eks"
+unit "eks-cluster" {
+  source = "${get_repo_root()}/catalog/units/minimal-platform-eks-cluster"
+  path   = "eks-cluster"
 }
 
 unit "cilium" {
   source = "${get_repo_root()}/catalog/units/minimal-platform-cilium"
   path   = "cilium"
+}
+
+unit "eks-nodes" {
+  source = "${get_repo_root()}/catalog/units/minimal-platform-eks-nodes"
+  path   = "eks-nodes"
 }
