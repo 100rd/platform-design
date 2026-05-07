@@ -21,6 +21,15 @@ locals {
   tgw_route_table_id    = ""
 
   # -------------------------------------------------------------------------
+  # S3 state bucket — fixed to eu-central-1 regardless of deployment region.
+  # The bucket "opsfleet-terraform-state-007027391583" was created in
+  # eu-central-1 and cannot be moved. All sandbox deployments (including
+  # eu-west-1) must point the backend region to eu-central-1.
+  # root.hcl reads this via try(account_vars.state_bucket_region, aws_region).
+  # -------------------------------------------------------------------------
+  state_bucket_region = "eu-central-1"
+
+  # -------------------------------------------------------------------------
   # Cost optimizations — single NAT gateway, minimal node sizing
   # -------------------------------------------------------------------------
   single_nat_gateway = true
@@ -41,15 +50,15 @@ locals {
   # -------------------------------------------------------------------------
   # KMS — IAM user direct access; OrganizationAccountAccessRole does not exist
   # in this personal sandbox account (no AWS Organization membership).
+  #
+  # The ASG service-linked role (AWSServiceRoleForAutoScaling) is no longer
+  # listed here — it is granted at module level in terraform/modules/kms/main.tf
+  # (statements AllowAutoScalingSLRCrypto + AllowAutoScalingSLRGrant) so all
+  # stacks using this module get the grant automatically without per-account
+  # overrides.
   # -------------------------------------------------------------------------
   kms_admin_arns = ["arn:aws:iam::007027391583:user/igor"]
-  # ASG service-linked role added so EC2 instances launched by the EKS managed
-  # node group can use the EBS CMK (CreateGrant + Encrypt/Decrypt). Without this,
-  # ASG fails with InvalidKMSKey.InvalidState when launching encrypted volumes.
-  kms_user_arns = [
-    "arn:aws:iam::007027391583:user/igor",
-    "arn:aws:iam::007027391583:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling",
-  ]
+  kms_user_arns  = ["arn:aws:iam::007027391583:user/igor"]
 
   # -------------------------------------------------------------------------
   # EKS access entries — no AWS SSO roles in this personal account.
