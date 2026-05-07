@@ -7,6 +7,7 @@
 # Prerequisites:
 #   - EKS cluster created with cluster_addons.vpc-cni DISABLED
 #   - Karpenter EC2NodeClass using Bottlerocket AMI family
+#   - IRSA enabled on the EKS cluster (enable_irsa = true)
 # ---------------------------------------------------------------------------------------------------------------------
 
 terraform {
@@ -32,6 +33,8 @@ dependency "eks" {
     cluster_endpoint                   = "https://XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.gr7.eu-central-1.eks.amazonaws.com"
     cluster_certificate_authority_data = "bW9jay1jYS1kYXRh"
     cluster_name                       = "staging-eu-central-1-platform"
+    cluster_oidc_issuer_url            = "https://oidc.eks.eu-central-1.amazonaws.com/id/MOCKMOCKMOCKMOCKMOCKMOCKMOCKMOCK"
+    oidc_provider_arn                  = "arn:aws:iam::000000000000:oidc-provider/oidc.eks.eu-central-1.amazonaws.com/id/MOCKMOCKMOCKMOCKMOCKMOCKMOCKMOCK"
   }
 
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
@@ -75,6 +78,11 @@ generate "k8s_providers" {
 # ---------------------------------------------------------------------------------------------------------------------
 
 inputs = {
+  # Identity — required for IRSA role naming and OIDC trust policy
+  cluster_name              = dependency.eks.outputs.cluster_name
+  cluster_oidc_issuer_url   = dependency.eks.outputs.cluster_oidc_issuer_url
+  cluster_oidc_provider_arn = dependency.eks.outputs.oidc_provider_arn
+
   cluster_endpoint = replace(dependency.eks.outputs.cluster_endpoint, "https://", "")
 
   cilium_version = "1.16.5"
@@ -111,4 +119,9 @@ inputs = {
   cluster_mesh_name              = try(local.account_vars.locals.enable_clustermesh, false) ? "${local.environment}-${local.region_vars.locals.region_short}" : ""
   cluster_mesh_id                = try(local.account_vars.locals.enable_clustermesh, false) ? local.account_vars.locals.clustermesh_cluster_ids[local.aws_region] : 0
   clustermesh_apiserver_replicas = try(local.account_vars.locals.clustermesh_apiserver_replicas, 2)
+
+  tags = {
+    Environment = local.environment
+    ManagedBy   = "terragrunt"
+  }
 }

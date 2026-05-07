@@ -4,8 +4,23 @@ variable "cilium_version" {
   default     = "1.17.1"
 }
 
+variable "cluster_name" {
+  description = "EKS cluster name — used to name the Cilium operator IAM role and policy"
+  type        = string
+}
+
 variable "cluster_endpoint" {
   description = "EKS cluster API server endpoint (without https://)"
+  type        = string
+}
+
+variable "cluster_oidc_issuer_url" {
+  description = "EKS OIDC issuer URL (https://oidc.eks.REGION.amazonaws.com/id/XXXXXXXX). Required for IRSA."
+  type        = string
+}
+
+variable "cluster_oidc_provider_arn" {
+  description = "EKS OIDC provider ARN (arn:aws:iam::ACCOUNT:oidc-provider/oidc.eks.REGION.amazonaws.com/id/XXXXXXXX). Required for IRSA."
   type        = string
 }
 
@@ -113,4 +128,10 @@ variable "clustermesh_apiserver_replicas" {
   description = "Number of ClusterMesh API server replicas"
   type        = number
   default     = 2
+}
+
+variable "tags" {
+  description = "Tags to apply to all IAM resources created by this module"
+  type        = map(string)
+  default     = {}
 }

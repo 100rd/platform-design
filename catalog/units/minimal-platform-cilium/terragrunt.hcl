@@ -8,8 +8,11 @@
 #   - enable_clustermesh = false (Decision 3: this stack is standalone, not part
 #     of the multi-region mesh; saves ClusterMesh API server cost)
 #   - cluster_name derived from dependency.eks.outputs.cluster_name (not hardcoded)
+#   - cluster_oidc_issuer_url + cluster_oidc_provider_arn wired for IRSA
+#     (Cilium operator needs EC2 ENI APIs; IRSA role created by the module)
 #   - generate "k8s_providers" block for helm + kubernetes providers
-#   - Extended mock_outputs covering cluster_certificate_authority_data + cluster_name
+#   - Extended mock_outputs covering cluster_certificate_authority_data,
+#     cluster_name, cluster_oidc_issuer_url, and oidc_provider_arn
 # ---------------------------------------------------------------------------------------------------------------------
 
 terraform {
@@ -35,6 +38,8 @@ dependency "eks" {
     cluster_endpoint                   = "https://XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.gr7.eu-central-1.eks.amazonaws.com"
     cluster_certificate_authority_data = "bW9jay1jYS1kYXRh"
     cluster_name                       = "staging-eu-central-1-minimal-platform"
+    cluster_oidc_issuer_url            = "https://oidc.eks.eu-central-1.amazonaws.com/id/MOCKMOCKMOCKMOCKMOCKMOCKMOCKMOCK"
+    oidc_provider_arn                  = "arn:aws:iam::000000000000:oidc-provider/oidc.eks.eu-central-1.amazonaws.com/id/MOCKMOCKMOCKMOCKMOCKMOCKMOCKMOCK"
   }
 
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
@@ -78,6 +83,11 @@ generate "k8s_providers" {
 # ---------------------------------------------------------------------------------------------------------------------
 
 inputs = {
+  # Identity — required for IRSA role naming and OIDC trust policy
+  cluster_name              = dependency.eks.outputs.cluster_name
+  cluster_oidc_issuer_url   = dependency.eks.outputs.cluster_oidc_issuer_url
+  cluster_oidc_provider_arn = dependency.eks.outputs.oidc_provider_arn
+
   cluster_endpoint = replace(dependency.eks.outputs.cluster_endpoint, "https://", "")
 
   cilium_version = "1.16.5"
@@ -113,4 +123,9 @@ inputs = {
   cluster_mesh_name              = ""
   cluster_mesh_id                = 0
   clustermesh_apiserver_replicas = 2
+
+  tags = {
+    Environment = local.environment
+    ManagedBy   = "terragrunt"
+  }
 }

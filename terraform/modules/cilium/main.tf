@@ -7,6 +7,94 @@
 # Prerequisites:
 #   - EKS cluster must be created WITHOUT vpc-cni addon
 #   - Nodes must use Bottlerocket AMI (has Cilium support built-in)
+#   - IRSA must be enabled on the EKS cluster (enable_irsa = true)
+# ---------------------------------------------------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------------------------------------------------
+# IRSA — IAM Role for Cilium Operator (ENI mode)
+# ---------------------------------------------------------------------------------------------------------------------
+# Cilium operator needs EC2 ENI APIs to create/attach/detach network interfaces
+# for VPC-native pod IP assignment. Without this IAM role, ENI mode fails immediately.
+# Reference: https://docs.cilium.io/en/stable/network/concepts/ipam/eni/#required-iam-permissions
+
+data "aws_caller_identity" "current" {}
+
+resource "aws_iam_role" "cilium_operator" {
+  name = "${var.cluster_name}-cilium-operator"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Federated = var.cluster_oidc_provider_arn }
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "${replace(var.cluster_oidc_issuer_url, "https://", "")}:sub" = "system:serviceaccount:kube-system:cilium-operator"
+          "${replace(var.cluster_oidc_issuer_url, "https://", "")}:aud" = "sts.amazonaws.com"
+        }
+      }
+    }]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_policy" "cilium_operator" {
+  name        = "${var.cluster_name}-cilium-operator"
+  description = "EC2 ENI permissions for Cilium operator running on EKS cluster ${var.cluster_name}"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "CiliumENIDescribe"
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeVpcs",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeInstances",
+          "ec2:DescribeInstanceTypes",
+          "ec2:DescribeTags",
+          "ec2:DescribeAvailabilityZones",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "CiliumENIMutate"
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateNetworkInterface",
+          "ec2:AttachNetworkInterface",
+          "ec2:DetachNetworkInterface",
+          "ec2:DeleteNetworkInterface",
+          "ec2:ModifyNetworkInterfaceAttribute",
+          "ec2:UnassignPrivateIpAddresses",
+          "ec2:AssignPrivateIpAddresses",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid      = "CiliumENITagNetworkInterface"
+        Effect   = "Allow"
+        Action   = "ec2:CreateTags"
+        Resource = "arn:aws:ec2:*:${data.aws_caller_identity.current.account_id}:network-interface/*"
+      },
+    ]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "cilium_operator" {
+  role       = aws_iam_role.cilium_operator.name
+  policy_arn = aws_iam_policy.cilium_operator.arn
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Cilium Helm Release
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "helm_release" "cilium" {
@@ -232,12 +320,32 @@ resource "helm_release" "cilium" {
         "app.kubernetes.io/part-of" = "cilium"
       }
 
+      # IRSA — annotate both Cilium agent and operator service accounts with the
+      # IAM role ARN so the EKS pod identity webhook injects AWS credentials.
+      # Both need ENI permissions: operator manages ENI lifecycle, agent programs eBPF.
+      serviceAccounts = {
+        cilium = {
+          annotations = {
+            "eks.amazonaws.com/role-arn" = aws_iam_role.cilium_operator.arn
+          }
+        }
+        operator = {
+          annotations = {
+            "eks.amazonaws.com/role-arn" = aws_iam_role.cilium_operator.arn
+          }
+        }
+      }
+
       # Extra config
       extraConfig = var.extra_config
     })
   ]
 
-  depends_on = [var.module_depends_on]
+  # IAM role must exist before pods try to assume it via the IRSA webhook
+  depends_on = [
+    aws_iam_role_policy_attachment.cilium_operator,
+    var.module_depends_on,
+  ]
 }
 
 # Cilium ClusterwideNetworkPolicy for default deny (optional)

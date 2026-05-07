@@ -43,7 +43,13 @@ locals {
   # in this personal sandbox account (no AWS Organization membership).
   # -------------------------------------------------------------------------
   kms_admin_arns = ["arn:aws:iam::007027391583:user/igor"]
-  kms_user_arns  = ["arn:aws:iam::007027391583:user/igor"]
+  # ASG service-linked role added so EC2 instances launched by the EKS managed
+  # node group can use the EBS CMK (CreateGrant + Encrypt/Decrypt). Without this,
+  # ASG fails with InvalidKMSKey.InvalidState when launching encrypted volumes.
+  kms_user_arns = [
+    "arn:aws:iam::007027391583:user/igor",
+    "arn:aws:iam::007027391583:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling",
+  ]
 
   # -------------------------------------------------------------------------
   # EKS access entries — no AWS SSO roles in this personal account.
@@ -55,7 +61,7 @@ locals {
   # -------------------------------------------------------------------------
   # Cilium
   # -------------------------------------------------------------------------
-  cilium_replace_kube_proxy = false
+  cilium_replace_kube_proxy = true
 
   # -------------------------------------------------------------------------
   # ClusterMesh — disabled; standalone sandbox cluster, no multi-region mesh
