@@ -143,11 +143,16 @@ resource "helm_release" "cilium" {
         algorithm = "maglev"
       }
 
-      # ClusterMesh for multi-region service discovery
+      # ClusterMesh for multi-region service discovery.
+      # Both branches must have identical attribute structure for Terraform's type checker.
+      # When enable_clustermesh=false, Cilium ignores these values because useAPIServer=false.
       cluster = var.enable_clustermesh ? {
         name = var.cluster_mesh_name
         id   = var.cluster_mesh_id
-      } : {}
+        } : {
+        name = ""
+        id   = 0
+      }
 
       clustermesh = var.enable_clustermesh ? {
         useAPIServer = true
@@ -173,7 +178,28 @@ resource "helm_release" "cilium" {
             }
           }
         }
-      } : {}
+        } : {
+        useAPIServer = false
+        apiserver = {
+          replicas = 0
+          service = {
+            type        = "ClusterIP"
+            annotations = {}
+          }
+          tls = {
+            auto = {
+              enabled = false
+              method  = ""
+            }
+          }
+          etcd = {
+            resources = {
+              requests = { cpu = "100m", memory = "256Mi" }
+              limits   = { cpu = "500m", memory = "512Mi" }
+            }
+          }
+        }
+      }
 
       # Enable local redirect policy for node-local DNS
       localRedirectPolicy = true
