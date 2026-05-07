@@ -196,6 +196,65 @@ data "aws_iam_policy_document" "key_policy" {
     }
   }
 
+  # ---------------------------------------------------------------------------
+  # AWS Auto Scaling service-linked role — required for EBS-encrypted EC2 in ASGs.
+  #
+  # When an EKS managed node group launches EC2 instances with encrypted EBS
+  # volumes, the ASG service-linked role (not the node IAM role) performs the
+  # initial CreateGrant + Encrypt calls on the EBS CMK. Without these statements
+  # the ASG fails with InvalidKMSKey.InvalidState and the node group goes
+  # CREATE_FAILED.
+  #
+  # This is a module-level fix so every stack using this KMS module automatically
+  # permits the ASG SLR — no per-account workaround in account.hcl is needed.
+  # The account.hcl kms_user_arns override has been reverted to contain only
+  # the human user/role ARNs for this account.
+  #
+  # Two statements are required:
+  #   AllowAutoScalingSLRCrypto — crypto ops so the SLR can use the key when
+  #     launching encrypted instances (Encrypt/Decrypt/GenerateDataKey/DescribeKey).
+  #   AllowAutoScalingSLRGrant  — CreateGrant with kms:GrantIsForAWSResource so
+  #     the SLR can delegate key use to EC2 for the lifetime of each EBS volume.
+  # ---------------------------------------------------------------------------
+  statement {
+    sid    = "AllowAutoScalingSLRCrypto"
+    effect = "Allow"
+
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${local.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"]
+    }
+
+    actions = [
+      "kms:Encrypt",
+      "kms:Decrypt",
+      "kms:ReEncrypt*",
+      "kms:GenerateDataKey*",
+      "kms:DescribeKey",
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "AllowAutoScalingSLRGrant"
+    effect = "Allow"
+
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${local.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"]
+    }
+
+    actions   = ["kms:CreateGrant"]
+    resources = ["*"]
+
+    condition {
+      test     = "Bool"
+      variable = "kms:GrantIsForAWSResource"
+      values   = ["true"]
+    }
+  }
+
   # CloudTrail logging access
   statement {
     sid    = "AllowCloudTrailLogging"
