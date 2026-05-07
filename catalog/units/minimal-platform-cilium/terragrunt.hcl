@@ -1,12 +1,15 @@
 # ---------------------------------------------------------------------------------------------------------------------
-# Cilium CNI — Catalog Unit
+# Minimal Platform Cilium CNI — Catalog Unit
 # ---------------------------------------------------------------------------------------------------------------------
-# Deploys Cilium as the CNI for EKS, replacing AWS VPC CNI.
-# Must be deployed AFTER EKS but BEFORE Karpenter nodepools.
+# Deploys Cilium as the CNI for the minimal-platform EKS cluster.
+# Must be deployed AFTER minimal-platform-eks.
 #
-# Prerequisites:
-#   - EKS cluster created with cluster_addons.vpc-cni DISABLED
-#   - Karpenter EC2NodeClass using Bottlerocket AMI family
+# Key differences from the standard cilium catalog unit:
+#   - enable_clustermesh = false (Decision 3: this stack is standalone, not part
+#     of the multi-region mesh; saves ClusterMesh API server cost)
+#   - cluster_name derived from dependency.eks.outputs.cluster_name (not hardcoded)
+#   - generate "k8s_providers" block for helm + kubernetes providers
+#   - Extended mock_outputs covering cluster_certificate_authority_data + cluster_name
 # ---------------------------------------------------------------------------------------------------------------------
 
 terraform {
@@ -22,7 +25,7 @@ locals {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# DEPENDENCY: EKS Cluster
+# DEPENDENCY: Minimal Platform EKS Cluster
 # ---------------------------------------------------------------------------------------------------------------------
 
 dependency "eks" {
@@ -31,7 +34,7 @@ dependency "eks" {
   mock_outputs = {
     cluster_endpoint                   = "https://XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.gr7.eu-central-1.eks.amazonaws.com"
     cluster_certificate_authority_data = "bW9jay1jYS1kYXRh"
-    cluster_name                       = "staging-eu-central-1-platform"
+    cluster_name                       = "staging-eu-central-1-minimal-platform"
   }
 
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
@@ -79,8 +82,6 @@ inputs = {
 
   cilium_version = "1.16.5"
 
-  # Start with kube-proxy enabled for safer migration
-  # Set to true after validating Cilium is stable
   replace_kube_proxy = local.account_vars.locals.cilium_replace_kube_proxy
 
   # Hubble observability
@@ -96,19 +97,20 @@ inputs = {
   # Bandwidth manager for QoS
   enable_bandwidth_manager = true
 
-  # Default deny policy — PCI-DSS Req 1.2 (restrict CDE connections)
+  # Default deny policy — PCI-DSS Req 1.2
   enable_default_deny = true
 
-  # WireGuard transparent encryption — PCI-DSS Req 4.1 (encrypt data in transit)
+  # WireGuard transparent encryption — PCI-DSS Req 4.1
   enable_encryption = true
   encryption_type   = "wireguard"
 
   # HA for operator
   operator_replicas = local.environment == "prod" ? 2 : 1
 
-  # ClusterMesh for multi-region service discovery
-  enable_clustermesh             = try(local.account_vars.locals.enable_clustermesh, false)
-  cluster_mesh_name              = try(local.account_vars.locals.enable_clustermesh, false) ? "${local.environment}-${local.region_vars.locals.region_short}" : ""
-  cluster_mesh_id                = try(local.account_vars.locals.enable_clustermesh, false) ? local.account_vars.locals.clustermesh_cluster_ids[local.aws_region] : 0
-  clustermesh_apiserver_replicas = try(local.account_vars.locals.clustermesh_apiserver_replicas, 2)
+  # Decision 3: ClusterMesh disabled — this stack is standalone and does not
+  # participate in the multi-region service mesh.
+  enable_clustermesh             = false
+  cluster_mesh_name              = ""
+  cluster_mesh_id                = 0
+  clustermesh_apiserver_replicas = 2
 }

@@ -4,6 +4,11 @@
 # Creates multiple KMS CMKs with aliases, automatic key rotation, and IAM key policies.
 # Designed for PCI-DSS compliance: all keys enable rotation and include audit-friendly
 # policies that grant CloudTrail logging access.
+#
+# NOTE: prevent_destroy lifecycle was intentionally removed. Key deletion protection
+# is provided by deletion_window_in_days (7–30 days) combined with IAM policy controls
+# that restrict ScheduleKeyDeletion to key administrators only. This approach is
+# compatible with Terraform state moves and environment teardown workflows.
 # ---------------------------------------------------------------------------------------------------------------------
 
 data "aws_caller_identity" "current" {}
@@ -32,10 +37,6 @@ resource "aws_kms_key" "this" {
     key-purpose   = each.key
     Environment   = var.environment
   })
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -45,7 +46,7 @@ resource "aws_kms_key" "this" {
 resource "aws_kms_alias" "this" {
   for_each = var.keys
 
-  name          = "alias/${var.environment}/${each.key}"
+  name          = "alias/${var.alias_prefix != "" ? var.alias_prefix : var.environment}/${each.key}"
   target_key_id = aws_kms_key.this[each.key].key_id
 }
 

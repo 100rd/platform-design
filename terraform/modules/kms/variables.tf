@@ -29,6 +29,12 @@ variable "environment" {
   }
 }
 
+variable "alias_prefix" {
+  description = "Override prefix for KMS alias names. When non-empty, aliases are created as alias/<alias_prefix>/<key>. When empty, falls back to alias/<environment>/<key>. Use this to avoid alias collisions when multiple stacks share the same environment."
+  type        = string
+  default     = ""
+}
+
 variable "tags" {
   description = "Common tags to apply to all KMS resources"
   type        = map(string)

@@ -1,0 +1,87 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# Minimal Platform VPC — Catalog Unit
+# ---------------------------------------------------------------------------------------------------------------------
+# Isolated VPC for the minimal-platform EKS cluster in staging/eu-central-1.
+# Uses CIDR 10.14.0.0/16 to avoid collision with the standard platform VPC (10.13.0.0/16).
+#
+# Key differences from the standard platform VPC unit:
+#   - Cluster name: staging-eu-central-1-minimal-platform
+#   - Single NAT gateway (Decision 1: saves ~$65/mo vs one-per-AZ)
+#   - Dedicated CIDR 10.14.0.0/16
+# ---------------------------------------------------------------------------------------------------------------------
+
+terraform {
+  source = "tfr:///terraform-aws-modules/vpc/aws?version=6.6.0"
+}
+
+locals {
+  account_vars = read_terragrunt_config(find_in_parent_folders("account.hcl"))
+  region_vars  = read_terragrunt_config(find_in_parent_folders("region.hcl"))
+
+  account_name = local.account_vars.locals.account_name
+  aws_region   = local.region_vars.locals.aws_region
+  environment  = local.account_vars.locals.environment
+
+  # Fixed CIDR for the minimal-platform stack — dedicated allocation to avoid
+  # collision with the standard platform VPC (10.13.0.0/16 for staging-eu-central-1).
+  vpc_cidr     = "10.14.0.0/16"
+  cluster_name = "${local.environment}-${local.aws_region}-minimal-platform"
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# MODULE INPUTS
+# ---------------------------------------------------------------------------------------------------------------------
+
+inputs = {
+  name = local.cluster_name
+  cidr = local.vpc_cidr
+
+  azs = local.region_vars.locals.azs
+
+  # Subnet CIDR derivation using cidrsubnet on the VPC /16 block.
+  # Each subnet gets a /20 (4 additional bits).
+  #   private:  indices 0..N   (first AZ slots)
+  #   public:   indices 4..N+4 (offset by 4)
+  #   database: indices 8..N+8 (offset by 8)
+  private_subnets  = [for i, az in local.region_vars.locals.azs : cidrsubnet(local.vpc_cidr, 4, i)]
+  public_subnets   = [for i, az in local.region_vars.locals.azs : cidrsubnet(local.vpc_cidr, 4, i + 4)]
+  database_subnets = [for i, az in local.region_vars.locals.azs : cidrsubnet(local.vpc_cidr, 4, i + 8)]
+
+  # Decision 1: single NAT gateway — cost optimisation for non-production minimal stack.
+  # The standard platform stack uses one NAT gateway per AZ (account.hcl: single_nat_gateway = false).
+  enable_nat_gateway = true
+  single_nat_gateway = true
+
+  # DNS
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  # ---------------------------------------------------------------------------
+  # VPC Flow Logs — PCI-DSS Req 10 (logging & monitoring)
+  # ---------------------------------------------------------------------------
+  enable_flow_log                                 = true
+  flow_log_destination_type                       = "cloud-watch-logs"
+  create_flow_log_cloudwatch_log_group            = true
+  flow_log_cloudwatch_log_group_retention_in_days = 365
+  flow_log_max_aggregation_interval               = 60
+  flow_log_traffic_type                           = "ALL"
+
+  # ---------------------------------------------------------------------------
+  # Subnet tags required by AWS Load Balancer Controller and Karpenter
+  # ---------------------------------------------------------------------------
+  public_subnet_tags = {
+    "kubernetes.io/role/elb"                      = "1"
+    "kubernetes.io/cluster/${local.cluster_name}" = "shared"
+  }
+
+  private_subnet_tags = {
+    "kubernetes.io/role/internal-elb"             = "1"
+    "kubernetes.io/cluster/${local.cluster_name}" = "shared"
+    "karpenter.sh/discovery"                      = local.cluster_name
+  }
+
+  tags = {
+    Environment = local.environment
+    ManagedBy   = "terragrunt"
+  }
+}
