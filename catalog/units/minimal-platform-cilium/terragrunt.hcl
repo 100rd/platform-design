@@ -92,6 +92,17 @@ generate "k8s_providers" {
         args        = ["eks", "get-token", "--cluster-name", "${dependency.eks_cluster.outputs.cluster_name}"]
       }
     }
+
+    provider "kubectl" {
+      host                   = "${dependency.eks_cluster.outputs.cluster_endpoint}"
+      cluster_ca_certificate = base64decode("${dependency.eks_cluster.outputs.cluster_certificate_authority_data}")
+      load_config_file       = false
+      exec {
+        api_version = "client.authentication.k8s.io/v1beta1"
+        command     = "aws"
+        args        = ["eks", "get-token", "--cluster-name", "${dependency.eks_cluster.outputs.cluster_name}"]
+      }
+    }
   PROVIDERS
 }
 
@@ -130,7 +141,7 @@ inputs = {
   # Disabled on first apply: kubernetes_manifest validates CRD existence at
   # plan time, but Cilium CRDs are installed by the same helm_release in the
   # same apply. Two-phase enable: set true after first successful apply.
-  enable_default_deny = false
+  enable_default_deny = true
 
   # WireGuard transparent encryption — PCI-DSS Req 4.1
   enable_encryption = true

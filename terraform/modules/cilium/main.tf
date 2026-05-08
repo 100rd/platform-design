@@ -194,24 +194,27 @@ resource "helm_release" "cilium" {
           }
         }
 
-        # Tolerations for the operator pod.
-        # The startup taint node.cilium.io/agent-not-ready=true:NoExecute is set on
-        # all nodes in the eks-nodes unit. Without this toleration, the operator pod
-        # would be evicted immediately on node join before Cilium is ready.
-        # The Cilium agent DaemonSet already tolerates everything via {operator: Exists},
-        # so only the operator needs an explicit entry here.
+        # Fix #4: Permissive toleration — operator must schedule even when nodes
+        # carry any combination of startup taints:
+        #   - node.cilium.io/agent-not-ready:NoExecute  (Cilium startup taint)
+        #   - node.kubernetes.io/not-ready:NoSchedule   (kubelet NotReady taint)
+        #   - node.kubernetes.io/unreachable:NoSchedule (kubelet unreachable taint)
+        #   - node-role.kubernetes.io/control-plane:NoSchedule
+        #
+        # Round 11 post-mortem: specific key-based tolerations were insufficient.
+        # The operator stayed Pending because nodes also carried not-ready /
+        # unreachable taints added by kubelet during the bootstrap window.
+        # A single {operator: Exists} covers all taints unconditionally.
         tolerations = [
           {
-            key      = "node.cilium.io/agent-not-ready"
             operator = "Exists"
-            effect   = "NoExecute"
-          },
-          {
-            key      = "node-role.kubernetes.io/control-plane"
-            operator = "Exists"
-            effect   = "NoSchedule"
-          },
+          }
         ]
+
+        # Ensure the operator is scheduled with the highest system priority so it
+        # is not preempted or left Pending when cluster resources are constrained
+        # during node bootstrap.
+        priorityClassName = "system-cluster-critical"
       }
 
       # Agent configuration
@@ -325,7 +328,8 @@ resource "helm_release" "cilium" {
         }
       }
 
-      # Tolerations to run on all nodes
+      # Agent DaemonSet tolerations — permissive by Cilium chart default;
+      # explicitly set here to be self-documenting.
       tolerations = [
         {
           operator = "Exists"
@@ -370,11 +374,24 @@ resource "helm_release" "cilium" {
   ]
 }
 
-# Cilium ClusterwideNetworkPolicy for default deny (optional)
-resource "kubernetes_manifest" "default_deny_policy" {
+# ---------------------------------------------------------------------------------------------------------------------
+# Cilium ClusterwideNetworkPolicy — default deny (optional)
+# ---------------------------------------------------------------------------------------------------------------------
+# Fix #2: Uses gavinbunney/kubectl kubectl_manifest instead of
+# hashicorp/kubernetes kubernetes_manifest because:
+#   - kubernetes_manifest validates GVK (GroupVersionKind) at PLAN time
+#   - CiliumClusterwideNetworkPolicy CRD is installed by the helm_release above
+#     in the SAME apply — at plan time the CRD does not yet exist → plan fails
+#   - kubectl_manifest validates only at apply time, after the helm_release has
+#     installed the Cilium CRDs
+#
+# This allows enable_default_deny = true from the very first apply without a
+# two-phase workaround. The Round 11 workaround (enable_default_deny = false
+# in the catalog unit) can now be reverted to true if desired.
+resource "kubectl_manifest" "default_deny_policy" {
   count = var.enable_default_deny ? 1 : 0
 
-  manifest = {
+  yaml_body = yamlencode({
     apiVersion = "cilium.io/v2"
     kind       = "CiliumClusterwideNetworkPolicy"
     metadata = {
@@ -427,7 +444,7 @@ resource "kubernetes_manifest" "default_deny_policy" {
         }
       ]
     }
-  }
+  })
 
   depends_on = [helm_release.cilium]
 }
