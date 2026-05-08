@@ -14,6 +14,12 @@ variable "cluster_endpoint" {
   type        = string
 }
 
+variable "aws_region" {
+  description = "AWS region. Set as AWS_REGION env var in Cilium operator pod so the AWS SDK can resolve EC2 ENI API endpoint when running ENI IPAM mode."
+  type        = string
+  default     = ""
+}
+
 variable "cluster_oidc_issuer_url" {
   description = "EKS OIDC issuer URL (https://oidc.eks.REGION.amazonaws.com/id/XXXXXXXX). Required for IRSA."
   type        = string

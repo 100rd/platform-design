@@ -215,6 +215,17 @@ resource "helm_release" "cilium" {
         # is not preempted or left Pending when cluster resources are constrained
         # during node bootstrap.
         priorityClassName = "system-cluster-critical"
+
+        # Round 13 finding: Cilium operator in ENI mode crashes with "Missing
+        # Region" when calling EC2 DescribeInstanceTypes via IRSA. The AWS SDK
+        # can't infer region from IMDS in operator pod context. Set AWS_REGION
+        # explicitly. Empty string => skip the env var (backward compat).
+        extraEnv = var.aws_region != "" ? [
+          {
+            name  = "AWS_REGION"
+            value = var.aws_region
+          }
+        ] : []
       }
 
       # Agent configuration

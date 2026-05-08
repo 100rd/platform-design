@@ -118,6 +118,9 @@ inputs = {
 
   cluster_endpoint = replace(dependency.eks_cluster.outputs.cluster_endpoint, "https://", "")
 
+  # Round 13: Cilium operator needs AWS_REGION env var to call EC2 ENI APIs
+  aws_region = local.aws_region
+
   cilium_version = "1.16.5"
 
   replace_kube_proxy = local.account_vars.locals.cilium_replace_kube_proxy
@@ -138,10 +141,12 @@ inputs = {
   enable_bandwidth_manager = true
 
   # Default deny policy — PCI-DSS Req 1.2
-  # Disabled on first apply: kubernetes_manifest validates CRD existence at
-  # plan time, but Cilium CRDs are installed by the same helm_release in the
-  # same apply. Two-phase enable: set true after first successful apply.
-  enable_default_deny = true
+  # Round 13 finding: even kubectl_manifest validates CRD at apply time, and
+  # CRDs don't propagate to API discovery instantly after helm_release completes.
+  # Need time_sleep between helm and kubectl_manifest, or null_resource with
+  # kubectl retries. Tracked as Round 14 fix; disabled for now to unblock
+  # full apply chain validation.
+  enable_default_deny = false
 
   # WireGuard transparent encryption — PCI-DSS Req 4.1
   enable_encryption = true
