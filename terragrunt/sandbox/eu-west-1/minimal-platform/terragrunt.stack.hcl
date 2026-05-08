@@ -16,7 +16,7 @@
 #   - No Transit Gateway, no ClusterMesh, no cross-account log shipping
 #
 # Deploy order (Round 10.5 split):
-#   vpc -> kms -> eks-cluster -> cilium -> eks-nodes
+#   vpc -> kms -> eks-cluster -> cilium -> eks-nodes -> eks-addons
 #
 # The eks unit was split into eks-cluster + eks-nodes to break the Cilium
 # chicken-and-egg cycle: Cilium is deployed after the control plane but before
@@ -51,4 +51,9 @@ unit "cilium" {
 unit "eks-nodes" {
   source = "${get_repo_root()}/catalog/units/minimal-platform-eks-nodes"
   path   = "eks-nodes"
+}
+
+unit "eks-addons" {
+  source = "${get_repo_root()}/catalog/units/minimal-platform-eks-addons"
+  path   = "eks-addons"
 }
