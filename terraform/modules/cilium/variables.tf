@@ -43,9 +43,9 @@ variable "enable_hubble_ui" {
 }
 
 variable "enable_service_monitor" {
-  description = "Enable Prometheus ServiceMonitor for Cilium/Hubble metrics"
+  description = "Enable Prometheus ServiceMonitor for Cilium/Hubble metrics. Requires prometheus-operator CRDs (ServiceMonitor) to be installed before enabling."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "enable_prefix_delegation" {
