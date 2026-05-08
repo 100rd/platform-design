@@ -32,3 +32,8 @@ output "cluster_mesh_id" {
   description = "ClusterMesh cluster ID"
   value       = var.cluster_mesh_id
 }
+
+output "iam_role_arn" {
+  description = "ARN of the IAM role assumed by Cilium operator via IRSA for EC2 ENI operations"
+  value       = aws_iam_role.cilium_operator.arn
+}
