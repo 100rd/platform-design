@@ -178,22 +178,15 @@ inputs = {
   enabled_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 
   # ---------------------------------------------------------------------------
-  # Cluster Addons — vpc-cni intentionally omitted (Cilium CNI used instead)
+  # Cluster Addons — DaemonSet-based addons only (kube-proxy, eks-pod-identity-agent).
+  # vpc-cni intentionally omitted (Cilium CNI used instead).
+  # CoreDNS (Deployment) is deferred to a post-nodes step because EKS waits
+  # for addon ACTIVE status which requires running pods → blocks apply forever
+  # in a no-nodes cluster. CoreDNS will be installed via eks-nodes unit's
+  # post_apply or as a separate addon unit after nodes exist.
   # v21: cluster_addons -> addons
   # ---------------------------------------------------------------------------
   addons = {
-    coredns = {
-      most_recent = true
-      configuration_values = jsonencode({
-        tolerations = [
-          {
-            key      = "node.cilium.io/agent-not-ready"
-            operator = "Exists"
-            effect   = "NoSchedule"
-          }
-        ]
-      })
-    }
     kube-proxy = {
       most_recent = true
     }

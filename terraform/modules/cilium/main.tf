@@ -257,7 +257,10 @@ resource "helm_release" "cilium" {
         name = var.cluster_mesh_name
         id   = var.cluster_mesh_id
         } : {
-        name = ""
+        # Cilium chart validates cluster.name: non-empty, <= 32 chars.
+        # Truncate cluster_name to the first 32 chars when ClusterMesh
+        # is disabled (sufficient as local cluster identity).
+        name = substr(var.cluster_name, 0, 32)
         id   = 0
       }
 

@@ -115,8 +115,10 @@ inputs = {
   enable_hubble    = true
   enable_hubble_ui = true
 
-  # Prometheus integration
-  enable_service_monitor = true
+  # Prometheus integration — requires ServiceMonitor CRD from prometheus-operator.
+  # Disabled for this minimal stack (no monitoring deployed). Re-enable when
+  # prometheus-operator is added to the stack.
+  enable_service_monitor = false
 
   # ENI prefix delegation for higher pod density
   enable_prefix_delegation = true
@@ -125,7 +127,10 @@ inputs = {
   enable_bandwidth_manager = true
 
   # Default deny policy — PCI-DSS Req 1.2
-  enable_default_deny = true
+  # Disabled on first apply: kubernetes_manifest validates CRD existence at
+  # plan time, but Cilium CRDs are installed by the same helm_release in the
+  # same apply. Two-phase enable: set true after first successful apply.
+  enable_default_deny = false
 
   # WireGuard transparent encryption — PCI-DSS Req 4.1
   enable_encryption = true
