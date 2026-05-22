@@ -22,6 +22,7 @@ locals {
 
   single_nat_gateway    = true
   eks_public_access     = true
+  eks_public_access_cidrs = ["0.0.0.0/0"]
   eks_instance_types    = ["m6i.large"]
   eks_min_size          = 1
   eks_max_size          = 3

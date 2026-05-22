@@ -55,6 +55,13 @@ variable "cluster_endpoint_public_access" {
   default     = false
 }
 
+variable "cluster_endpoint_public_access_cidrs" {
+  description = "List of CIDR blocks which can access the Amazon EKS public API server endpoint"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+
 variable "enable_vpc_cni" {
   description = "Enable AWS VPC CNI addon. Set to false to use Cilium CNI instead (recommended)."
   type        = bool

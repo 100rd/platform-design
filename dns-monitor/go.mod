@@ -1,6 +1,6 @@
 module dns-monitor
 
-go 1.24.0
+go 1.23.0
 
 require (
 	github.com/lib/pq v1.12.3
