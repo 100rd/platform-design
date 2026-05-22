@@ -88,8 +88,9 @@ inputs = {
 
   # Endpoint access
   # Dev environments allow public access for developer convenience; staging/prod are private only.
-  cluster_endpoint_public_access  = local.account_vars.locals.eks_public_access
-  cluster_endpoint_private_access = true
+  cluster_endpoint_public_access       = local.account_vars.locals.eks_public_access
+  cluster_endpoint_private_access      = true
+  cluster_endpoint_public_access_cidrs = try(local.account_vars.locals.eks_public_access_cidrs, ["0.0.0.0/0"])
 
   # IRSA (IAM Roles for Service Accounts)
   enable_irsa = true
