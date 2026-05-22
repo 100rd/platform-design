@@ -68,7 +68,7 @@ jobs:
           # Format: SARIF for GitHub Security tab
           format: sarif
           additional_args: >-
-            --exclude-checks aws-s3-enable-bucket-logging,aws-s3-enable-bucket-versioning,aws-iam-no-policy-wildcards,aws-dynamodb-enable-at-rest-encryption
+            -e aws-s3-enable-bucket-logging,aws-s3-enable-bucket-versioning,aws-iam-no-policy-wildcards,aws-dynamodb-enable-at-rest-encryption
             --no-color
 
       - name: Upload SARIF to GitHub Security tab
@@ -98,7 +98,7 @@ jobs:
           soft_fail: true
           format: sarif
           additional_args: >-
-            --exclude-checks aws-s3-enable-bucket-logging,aws-s3-enable-bucket-versioning,aws-iam-no-policy-wildcards,aws-dynamodb-enable-at-rest-encryption
+            -e aws-s3-enable-bucket-logging,aws-s3-enable-bucket-versioning,aws-iam-no-policy-wildcards,aws-dynamodb-enable-at-rest-encryption
             --no-color
 
       - name: Upload SARIF to GitHub Security tab
