@@ -6,7 +6,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/hello-world .
 
 FROM alpine:3.21
-RUN adduser -D -u 65534 nonroot
+RUN adduser -D -u 65532 nonroot
 WORKDIR /app
 COPY --from=builder /app/hello-world .
 USER nonroot
