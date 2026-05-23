@@ -1,0 +1,5 @@
+environment: "shared"
+rabbitmq:
+  replicas: 1
+  storageSize: 5Gi
+  storageClassName: gp3

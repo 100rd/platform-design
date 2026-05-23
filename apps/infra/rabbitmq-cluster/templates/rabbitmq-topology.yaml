@@ -1,0 +1,84 @@
+{{- if eq .Values.environment "production" }}
+{{- range $env := list "prod" "ops" "env2" "env3" }}
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Vhost
+metadata:
+  name: {{ $env }}-vhost
+  namespace: {{ $.Release.Namespace }}
+spec:
+  name: /{{ $env }}
+  rabbitmqClusterReference:
+    name: qbiq-rabbitmq
+
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: User
+metadata:
+  name: {{ $env }}-user
+  namespace: {{ $.Release.Namespace }}
+spec:
+  tags: []
+  rabbitmqClusterReference:
+    name: qbiq-rabbitmq
+  importCredentialsSecret:
+    name: rabbitmq-{{ $env }}-credentials
+
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Permission
+metadata:
+  name: {{ $env }}-permission
+  namespace: {{ $.Release.Namespace }}
+spec:
+  vhost: /{{ $env }}
+  user: {{ $env }}-user
+  permissions:
+    configure: ".*"
+    write: ".*"
+    read: ".*"
+  rabbitmqClusterReference:
+    name: qbiq-rabbitmq
+{{- end }}
+{{- else }}
+# Default vhost for shared/dev/preview environments
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Vhost
+metadata:
+  name: preview-vhost
+  namespace: {{ .Release.Namespace }}
+spec:
+  name: /preview
+  rabbitmqClusterReference:
+    name: qbiq-rabbitmq
+
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: User
+metadata:
+  name: preview-user
+  namespace: {{ .Release.Namespace }}
+spec:
+  tags: []
+  rabbitmqClusterReference:
+    name: qbiq-rabbitmq
+  importCredentialsSecret:
+    name: rabbitmq-preview-credentials
+
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Permission
+metadata:
+  name: preview-permission
+  namespace: {{ .Release.Namespace }}
+spec:
+  vhost: /preview
+  user: preview-user
+  permissions:
+    configure: ".*"
+    write: ".*"
+    read: ".*"
+  rabbitmqClusterReference:
+    name: qbiq-rabbitmq
+{{- end }}
