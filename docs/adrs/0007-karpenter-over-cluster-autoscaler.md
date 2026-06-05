@@ -1,6 +1,9 @@
 # ADR-0007: Karpenter over Cluster Autoscaler for EKS node provisioning
 
 - Status: **Accepted** — decision is *adopted (live in source estate)*
+- platform-design status: **synced** — Karpenter modules present
+  (`terraform/modules/karpenter` controller + `karpenter-nodepools` for
+  `NodePool`/`EC2NodeClass` CRDs).
 - Date: 2026-06-03
 - Authors: platform-team
 - Related issues: (ported)

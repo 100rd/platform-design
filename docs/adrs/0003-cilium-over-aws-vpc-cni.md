@@ -1,6 +1,9 @@
 # ADR-0003: Cilium over aws-vpc-cni as the EKS CNI
 
 - Status: **Accepted** — decision is *adopted (live in source estate)*
+- platform-design status: **synced** — Cilium modules present
+  (`terraform/modules/cilium`, EKS add-on disabled in favour of Cilium;
+  GPU-inference Cilium variants under `gpu-inference-cilium*`).
 - Date: 2026-06-03
 - Authors: platform-team
 - Related issues: (ported)

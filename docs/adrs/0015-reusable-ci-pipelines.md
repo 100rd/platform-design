@@ -1,8 +1,16 @@
 # ADR-0015: Reusable CI/CD pipelines for the platform organisation
 
-- Status: **Proposed** — decision is a *design-target* (the reusable-pipeline
-  platform is being rolled out; source estate has the seed `build-and-push`
-  workflow live)
+- Status: **Accepted** — rolling out. The two-layer reuse model is *implemented
+  in this repo* by PR #241; org-wide adoption across every caller repo is the
+  remaining *design-target*.
+- platform-design status: **synced** — composite actions (`cosign-sign`,
+  `manifest-validate`, `argocd-tag-bump`, `argocd-wait-sync-and-smoke`,
+  `syft-sbom`, `trivy-scan`) + reusable workflows (`reusable-build-and-push`,
+  `reusable-deploy-via-argocd`, `reusable-manifest-validate`) + the
+  `github-oidc` module + a demo caller (`reusable-pipeline-demo.yml`) are all
+  present. Org-wide `@v1` fan-out to every caller repo is still rolling out.
+- Implemented by: PR #241 (CI/CD consolidation — Tier-1 composite actions,
+  reusable `workflow_call` pipelines, central OIDC→ECR role, cosign signing).
 - Date: 2026-06-03
 - Authors: platform-team, security
 - Related issues: (ported)
@@ -116,5 +124,7 @@ are needed.
 
 ---
 *Ported from infra@572b54d (and argocd@c364c6c) during the 2026-06
-platform-design sync. Decision status in the source estate: Proposed / rolling
-out (design-target); the seed OIDC+ECR+Trivy build workflow is live.*
+platform-design sync. Implemented in platform-design by PR #241 (composite
+actions + reusable workflows + central OIDC→ECR + cosign). Status: Accepted —
+rolling out; org-wide `@v1` adoption across every caller repo remains a
+design-target.*

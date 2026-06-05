@@ -9,6 +9,13 @@ historical context — covers transaction-analytics work, see `docs/transaction-
 analytics/`) and the granular `TODO.md` (kept as a per-task checklist working
 file). Issue #183.
 
+> **ADRs govern decisions; ROADMAP tracks work.** Each phase and GATE below cites
+> the ADR number(s) that govern its decisions — see the catalog and the
+> per-ADR **platform-design status** (`synced` / `partial` / `pending`) in
+> [`docs/adrs/README.md`](docs/adrs/README.md). When an ADR is `partial` or
+> `pending`, the gap is the work this ROADMAP tracks; when a phase introduces a
+> new controversial trade-off, file an ADR first and link it here.
+
 ## Phase status legend
 
 - DONE — landed on `main`, has tests and runbook
@@ -27,6 +34,13 @@ Initial multi-account AWS, EKS, observability, GitOps stack. See `docs/02-terrag
 ## Phase 1 — Landing zone (DONE / IN PROGRESS)
 
 GATE umbrella: **#207 [GATE] Landing Zone Done**.
+
+Governing ADRs: [ADR-0001](docs/adrs/0001-ou-split.md) (OU split),
+[ADR-0005](docs/adrs/0005-hub-spoke-transit-gateway.md) (hub-spoke TGW),
+[ADR-0011](docs/adrs/0011-break-glass-iam-destroy-protection.md) (break-glass —
+`partial`: SSO/procedure model, no break-glass-user `prevent_destroy` yet),
+[ADR-0013](docs/adrs/0013-inter-vpc-access-security-model.md) (inter-VPC model —
+`pending`, tracked by #243).
 
 | # | Title | Status |
 |---|-------|--------|
@@ -52,6 +66,11 @@ GATE umbrella: **#207 [GATE] Landing Zone Done**.
 
 ## Phase 2 — Networking (PLANNED)
 
+Governing ADRs: [ADR-0005](docs/adrs/0005-hub-spoke-transit-gateway.md) (hub-spoke
+TGW — `synced`),
+[ADR-0013](docs/adrs/0013-inter-vpc-access-security-model.md) (inter-VPC security
+model incl. the inspection VPC — `pending`, tracked by #243).
+
 | # | Title | Status | Depends on |
 |---|-------|--------|-----------|
 | #170 | Transit Gateway hub-and-spoke (modules: `transit-gateway`, `tgw-attachment`) | DONE | #157 |
@@ -62,6 +81,13 @@ GATE umbrella: **#207 [GATE] Landing Zone Done**.
 ## Phase 3 — CI/CD hardening (IN PROGRESS)
 
 GATE umbrella: **#208 [GATE] CI/CD Hardened**.
+
+Governing ADRs: [ADR-0015](docs/adrs/0015-reusable-ci-pipelines.md) (reusable
+CI/CD pipelines) and
+[ADR-0016](docs/adrs/0016-tier1-supply-chain-hardening.md) (Tier-1 hardening) —
+both **Accepted — rolling out**, implemented in-repo by #241 (`synced`); the
+org-wide `@v1` fan-out and the dep-scan/SAST composite actions are the remaining
+design-target.
 
 | # | Title | Status | Depends on |
 |---|-------|--------|-----------|
@@ -79,6 +105,11 @@ GATE umbrella: **#208 [GATE] CI/CD Hardened**.
 
 ## Phase 4 — Cost & operations (IN PROGRESS)
 
+Governing ADRs: [ADR-0001](docs/adrs/0001-ou-split.md) (per-account / per-OU cost
+allocation underpins per-account budgets),
+[ADR-0004](docs/adrs/0004-terragrunt-over-plain-terraform.md) (the
+`generate "provider"` `default_tags` that drive cost-allocation tags).
+
 | # | Title | Status |
 |---|-------|--------|
 | #175 | AWS Budgets module + per-account cost alerts | DONE |
@@ -87,6 +118,11 @@ GATE umbrella: **#208 [GATE] CI/CD Hardened**.
 ---
 
 ## Phase 5 — Observability extensions (PLANNED)
+
+Governing ADRs: [ADR-0001](docs/adrs/0001-ou-split.md) (the Security / Log-Archive
+account the org-wide log pattern lands in),
+[ADR-0006](docs/adrs/0006-argocd-for-gitops.md) (observability stack is delivered
+as ArgoCD ApplicationSets).
 
 | # | Title | Status | Depends on |
 |---|-------|--------|-----------|
@@ -97,6 +133,16 @@ GATE umbrella: **#208 [GATE] CI/CD Hardened**.
 
 ## Phase 6 — EKS data plane (PLANNED)
 
+Governing ADRs: [ADR-0003](docs/adrs/0003-cilium-over-aws-vpc-cni.md) (Cilium CNI
+— `synced`; #186 mTLS extends it),
+[ADR-0007](docs/adrs/0007-karpenter-over-cluster-autoscaler.md) (Karpenter —
+`synced`),
+[ADR-0009](docs/adrs/0009-cilium-gateway-api-ingress.md) (Cilium Gateway API
+ingress — `partial`: only HTTPRoute scaffolding, cluster ingress still
+nlb-ingress),
+[ADR-0014](docs/adrs/0014-argo-rollouts-canary-progressive-delivery.md) (Argo
+Rollouts canary — `synced`, #238).
+
 | # | Title | Status |
 |---|-------|--------|
 | #185 | Velero for Kubernetes backup/migration | PLANNED |
@@ -105,6 +151,11 @@ GATE umbrella: **#208 [GATE] CI/CD Hardened**.
 ---
 
 ## Phase 7 — Documentation & process (DONE / IN PROGRESS)
+
+Governing ADRs: [ADR-0011](docs/adrs/0011-break-glass-iam-destroy-protection.md)
+(break-glass — #169 ships the procedure runbook; the IAM-user `prevent_destroy`
+guard is the `partial` remainder). #176 stands up the ADR catalog itself
+([`docs/adrs/README.md`](docs/adrs/README.md)).
 
 | # | Title | Status |
 |---|-------|--------|
@@ -118,10 +169,10 @@ GATE umbrella: **#208 [GATE] CI/CD Hardened**.
 
 ## GATE umbrella issues
 
-| GATE | Issue | Children | Status |
-|---|---|---|---|
-| Landing Zone Done | [#207](https://github.com/100rd/platform-design/issues/207) | #156-167, #168-169, #173 | 12/15 done |
-| CI/CD Hardened | [#208](https://github.com/100rd/platform-design/issues/208) | #172, #173, #177, #180, #187 | 2/5 done |
+| GATE | Issue | Children | Governing ADRs | Status |
+|---|---|---|---|---|
+| Landing Zone Done | [#207](https://github.com/100rd/platform-design/issues/207) | #156-167, #168-169, #173 | ADR-0001, 0005, 0011, 0013 | 12/15 done |
+| CI/CD Hardened | [#208](https://github.com/100rd/platform-design/issues/208) | #172, #173, #177, #180, #187 | ADR-0015, 0016 | 2/5 done |
 
 Add new GATE umbrellas in pull-requests when initiating any multi-issue effort that spans more than 3 children.
 
@@ -129,9 +180,18 @@ Add new GATE umbrellas in pull-requests when initiating any multi-issue effort t
 
 ## Cross-cutting decisions
 
-ADRs live in `docs/adrs/`. The two filed at the time of writing:
+ADRs live in `docs/adrs/` — see the [index](docs/adrs/README.md) for the full
+catalog (0001–0016) with each ADR's **platform-design status**. The two native
+foundation ADRs:
 - [ADR-0001 OU split](docs/adrs/0001-ou-split.md) — explains why `Prod` / `NonProd` aliases were preserved instead of renaming to canonical `Production` / `Non-Production`.
 - [ADR-0002 TF-only state backend bootstrap](docs/adrs/0002-tf-only-state-backend.md) — bootstrap chicken-and-egg resolution.
+
+ADRs 0003–0016 were ported from the source-of-truth estate during the 2026-06
+sync; 0015/0016 (CI/CD) are implemented in-repo by #241. The per-ADR
+**platform-design status** column flags where the mock still lags a decision
+(`partial`/`pending`) — those rows are the work the phases above track
+(notably 0009 ingress, 0010 prod allow-list, 0011 break-glass guard, 0013
+inter-VPC tracked by #243).
 
 When a phase introduces a controversial trade-off, file an ADR. The 7-section template at `docs/adrs/0000-template.md` keeps the format consistent.
 

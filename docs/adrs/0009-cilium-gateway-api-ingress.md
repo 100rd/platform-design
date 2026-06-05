@@ -1,6 +1,12 @@
 # ADR-0009: Cilium Gateway API as the cluster ingress controller
 
 - Status: **Accepted** — decision is *adopted (live in source estate)*
+- platform-design status: **partial** — only the per-workload `HTTPRoute`
+  scaffolding exists (`helm/app/templates/httproute.yaml`, `httpRoute.enabled`,
+  default-off, on the canary path). Cilium is **not** enabled as the cluster
+  ingress controller here (no `gatewayAPI.enabled=true`, no cluster-level
+  `Gateway`/`GatewayClass`); in-tree ingress is still `nlb-ingress` +
+  `aws-lb-controller` + `external-dns`.
 - Date: 2026-06-03
 - Authors: platform-team
 - Related issues: (ported)

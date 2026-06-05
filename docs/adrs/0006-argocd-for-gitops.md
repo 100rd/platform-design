@@ -1,6 +1,9 @@
 # ADR-0006: ArgoCD for GitOps delivery of Kubernetes workloads
 
 - Status: **Accepted** — decision is *adopted (live in source estate)*
+- platform-design status: **synced** — ArgoCD app-of-apps present
+  (`argocd/bootstrap/`, ApplicationSets for infra / observability / workloads /
+  cluster-roles, `appproject-workloads.yaml`, Kargo bootstrap).
 - Date: 2026-06-03
 - Authors: platform-team
 - Related issues: (ported)
