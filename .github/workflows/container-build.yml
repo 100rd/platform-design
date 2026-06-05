@@ -138,7 +138,23 @@ jobs:
         with:
           sarif_file: "trivy-results.sarif"
 
+      # ---------------------------------------------------------------------
+      # Supply-chain hardening (platform-workflows consolidation sync):
+      # generate an SBOM, push, then SIGN the pushed image by digest and attest
+      # the SBOM — keyless via the job's GitHub OIDC identity. Closes the gap
+      # where platform-design pushed unsigned images with no SBOM. Composite
+      # actions live in .github/actions/ (mirrors platform-workflows).
+      # ---------------------------------------------------------------------
+      - name: Generate SBOM (Syft)
+        uses: ./.github/actions/syft-sbom
+        with:
+          image-ref: "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag-sha }}"
+          format: spdx-json
+          output-path: sbom.spdx.json
+          artifact-name: sbom-${{ steps.meta.outputs.service-name }}-${{ steps.meta.outputs.tag-sha }}
+
       - name: Push image to ECR
+        id: push-ecr
         if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.AWS_ROLE_ARN != ''
         uses: docker/build-push-action@v6
         with:
@@ -147,3 +163,11 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag-sha }}
           cache-from: type=gha,scope=${{ matrix.service }}
+
+      - name: Sign image + attest SBOM (cosign keyless)
+        if: steps.push-ecr.outcome == 'success' && steps.push-ecr.outputs.digest != ''
+        uses: ./.github/actions/cosign-sign
+        with:
+          image-ref: "${{ steps.meta.outputs.image }}@${{ steps.push-ecr.outputs.digest }}"
+          sbom-path: sbom.spdx.json
+          sbom-type: spdxjson

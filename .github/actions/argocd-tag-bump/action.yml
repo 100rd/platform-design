@@ -1,0 +1,184 @@
+# -----------------------------------------------------------------------------
+# argocd-tag-bump
+#
+# Mirrors platform-workflows@3bb35df .github/actions/argocd-tag-bump
+# (2026-06 platform-workflows consolidation sync). Adapted to platform-design's
+# argocd config repo (100rd/argocd) and bot identity.
+# -----------------------------------------------------------------------------
+name: "ArgoCD Tag Bump"
+description: "Open a PR in the argocd config repo updating image.tag and image.digest in a values file. Auto-merge labelled for non-prod environments."
+
+inputs:
+  app-name:
+    description: "Application name (used in branch name and PR title)."
+    required: true
+  env:
+    description: "Target environment: dev, stage, or prod."
+    required: true
+  image-tag:
+    description: "New image tag (usually the git SHA)."
+    required: true
+  image-digest:
+    description: "Image content digest (sha256:...). Pinned alongside the tag for supply-chain integrity."
+    required: true
+  values-path:
+    description: "Path to the values file inside the argocd repo. REQUIRED — no default. Caller must specify explicitly. Common patterns: `envs/{env}/values/{app}.yaml` or `workloads/{app}/envs/{env}/values.yaml`. The substrings `{env}` and `{app}` are replaced before checkout."
+    required: true
+  argocd-repo:
+    description: "ArgoCD config repo in `owner/repo` form."
+    required: false
+    default: "100rd/argocd"
+  bot-token:
+    description: "GitHub token with `contents:write` and `pull-requests:write` on the argocd repo. Pass via secrets, never inline."
+    required: true
+  auto-merge:
+    description: "Add `auto-merge` label to the PR. Convention: true for dev/stage, false for prod."
+    required: false
+    default: "true"
+  git-user-name:
+    description: "Git committer name."
+    required: false
+    default: "platform-design-ci[bot]"
+  git-user-email:
+    description: "Git committer email."
+    required: false
+    default: "ci@platform-design.local"
+
+outputs:
+  pr-number:
+    description: "Number of the opened PR."
+    value: ${{ steps.open-pr.outputs.pr-number }}
+  pr-url:
+    description: "URL of the opened PR."
+    value: ${{ steps.open-pr.outputs.pr-url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve target values path
+      id: resolve
+      shell: bash
+      env:
+        VALUES_PATH_TEMPLATE: ${{ inputs.values-path }}
+        APP_NAME: ${{ inputs.app-name }}
+        ENV: ${{ inputs.env }}
+      run: |
+        set -euo pipefail
+        resolved="${VALUES_PATH_TEMPLATE//\{app\}/${APP_NAME}}"
+        resolved="${resolved//\{env\}/${ENV}}"
+        echo "values-path=${resolved}" >> "$GITHUB_OUTPUT"
+        echo "Resolved values path: ${resolved}"
+
+    - name: Checkout argocd repo
+      # actions/checkout v4.2.2
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      with:
+        repository: ${{ inputs.argocd-repo }}
+        token: ${{ inputs.bot-token }}
+        path: .argocd-repo
+
+    - name: Install yq
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! command -v yq >/dev/null 2>&1; then
+          YQ_VERSION="v4.44.3"
+          curl -sSL -o /tmp/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          sudo mv /tmp/yq /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+        fi
+        yq --version
+
+    - name: Update image tag and digest
+      shell: bash
+      working-directory: .argocd-repo
+      env:
+        VALUES_PATH: ${{ steps.resolve.outputs.values-path }}
+        IMAGE_TAG: ${{ inputs.image-tag }}
+        IMAGE_DIGEST: ${{ inputs.image-digest }}
+        ARGOCD_REPO: ${{ inputs.argocd-repo }}
+      run: |
+        set -euo pipefail
+        if [ ! -f "${VALUES_PATH}" ]; then
+          echo "::error::Values file not found at ${VALUES_PATH} in ${ARGOCD_REPO}. Check the values-path input."
+          exit 1
+        fi
+        yq -i ".image.tag = strenv(IMAGE_TAG)" "${VALUES_PATH}"
+        yq -i ".image.digest = strenv(IMAGE_DIGEST)" "${VALUES_PATH}"
+        echo "Updated ${VALUES_PATH}:"
+        yq '.image' "${VALUES_PATH}"
+
+    - name: Commit and push branch
+      id: commit
+      shell: bash
+      working-directory: .argocd-repo
+      env:
+        APP_NAME: ${{ inputs.app-name }}
+        ENV: ${{ inputs.env }}
+        IMAGE_TAG: ${{ inputs.image-tag }}
+        GIT_USER_NAME: ${{ inputs.git-user-name }}
+        GIT_USER_EMAIL: ${{ inputs.git-user-email }}
+      run: |
+        set -euo pipefail
+        git config user.name "${GIT_USER_NAME}"
+        git config user.email "${GIT_USER_EMAIL}"
+
+        BRANCH="bump/${APP_NAME}-${ENV}-${IMAGE_TAG}"
+        git checkout -b "${BRANCH}"
+
+        if git diff --quiet; then
+          echo "::warning::No changes to commit — values file already at target tag/digest."
+          echo "branch=" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        git add -A
+        git commit -m "chore(${APP_NAME}/${ENV}): bump image to ${IMAGE_TAG}"
+        git push -u origin "${BRANCH}"
+        echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
+
+    - name: Open PR
+      id: open-pr
+      if: steps.commit.outputs.branch != ''
+      shell: bash
+      working-directory: .argocd-repo
+      env:
+        GH_TOKEN: ${{ inputs.bot-token }}
+        APP_NAME: ${{ inputs.app-name }}
+        ENV: ${{ inputs.env }}
+        IMAGE_TAG: ${{ inputs.image-tag }}
+        IMAGE_DIGEST: ${{ inputs.image-digest }}
+        BRANCH: ${{ steps.commit.outputs.branch }}
+        AUTO_MERGE: ${{ inputs.auto-merge }}
+        VALUES_PATH: ${{ steps.resolve.outputs.values-path }}
+        ARGOCD_REPO: ${{ inputs.argocd-repo }}
+        SOURCE_REPO: ${{ github.repository }}
+        SOURCE_SHA: ${{ github.sha }}
+        RUN_ID: ${{ github.run_id }}
+      run: |
+        set -euo pipefail
+        BODY=$(cat <<EOF
+        Automated image bump for **${APP_NAME}** in **${ENV}**.
+
+        - **Tag**: \`${IMAGE_TAG}\`
+        - **Digest**: \`${IMAGE_DIGEST}\`
+        - **Values file**: \`${VALUES_PATH}\`
+        - **Source**: ${SOURCE_REPO}@${SOURCE_SHA}
+        - **Run**: https://github.com/${SOURCE_REPO}/actions/runs/${RUN_ID}
+        EOF
+        )
+
+        PR_URL=$(gh pr create \
+          --title "chore(${APP_NAME}/${ENV}): bump image to ${IMAGE_TAG}" \
+          --body "${BODY}" \
+          --base main \
+          --head "${BRANCH}")
+
+        PR_NUMBER=$(echo "${PR_URL}" | grep -oE '[0-9]+$')
+        echo "pr-number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+        echo "pr-url=${PR_URL}" >> "$GITHUB_OUTPUT"
+
+        if [ "${AUTO_MERGE}" = "true" ]; then
+          gh pr edit "${PR_NUMBER}" --add-label "auto-merge" || \
+            echo "::warning::Could not add auto-merge label — verify it exists in ${ARGOCD_REPO}."
+        fi
