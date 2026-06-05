@@ -5,7 +5,7 @@
 # hard-code values. Consumed by `root.hcl` and (optionally) by individual
 # units that need access to project metadata or canonical tag sets.
 #
-# Mirrors qbiq-ai/infra `common.hcl`. Read via:
+# Mirrors infra `common.hcl`. Read via:
 #   locals {
 #     common = read_terragrunt_config(find_in_parent_folders("common.hcl"))
 #   }

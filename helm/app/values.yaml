@@ -105,6 +105,74 @@ service:
   # Shared: when true, load-balances across local AND remote pods simultaneously
   shared: false
 
+# --- Progressive delivery (Argo Rollouts canary) -----------------------------
+# Ported from argocd@c364c6c charts/app (2026-06 sync).
+#
+# rollout.enabled=false → a plain Deployment (templates/deployment.yaml).
+# rollout.enabled=true  → an Argo Rollouts canary Rollout replaces the
+#   Deployment. The Rollout uses a stableService (this app's Service, behind the
+#   HTTPRoute at 100%) plus a canaryService (the weighted fraction). The Gateway
+#   API plugin (argoproj-labs/gatewayAPI) shifts the HTTPRoute backendRef weights
+#   as the canary progresses; Cilium drains connections on each weight shift.
+#
+# Default is OFF for backward compatibility — existing releases keep their
+# Deployment unchanged. Kargo remains the planned promotion layer ABOVE this:
+# Kargo promotes verified artifacts between environments; this rollout block
+# governs the in-cluster canary once a new version lands in an environment.
+rollout:
+  enabled: false
+  # Seconds the canary ReplicaSet stays alive after an abort so in-flight
+  # requests (up to the app's own request timeout) drain before SIGKILL.
+  abortScaleDownDelaySeconds: 30
+  canary:
+    # Progressive weight ladder. List of integer weights; the template inserts
+    # an analysis gate between each weight (when analysis.enabled=true) and a
+    # final setWeight: 100. Default ladder: 10 → 30 → 50 → 100.
+    weights: [10, 30, 50]
+    # Full override: when non-empty, `weights` is ignored and these steps are
+    # rendered verbatim. Use for non-standard ladders (e.g. workers with no
+    # analysis gates).
+    customSteps: []
+  # Metric gate (Argo Rollouts AnalysisTemplate). ON by default for any app that
+  # uses the canary rollout. Only renders when rollout.enabled too, so pure
+  # workers with no HTTP metrics are unaffected. Set analysis.enabled: false for
+  # workers that expose no flask_http_request_* / latency metrics.
+  analysis:
+    enabled: true
+    # kube-prometheus-stack Service in the observability namespace. Adjust to the
+    # actual release-prefixed Service name for this platform.
+    prometheusAddress: "http://kube-prometheus-stack-prometheus.observability.svc:9090"
+    interval: 30s
+    count: 5
+    failureLimit: 1
+    # Queries are parametrised — {{args.service}} is the canary Service so stable
+    # traffic is not counted. Tune the label selectors to the real scrape labels.
+    errorRate:
+      successCondition: "result[0] < 0.01"   # <1% 5xx
+      query: |
+        sum(rate(flask_http_request_total{service="{{args.service}}",status=~"5.."}[1m]))
+        /
+        sum(rate(flask_http_request_total{service="{{args.service}}"}[1m]))
+    latencyP95:
+      successCondition: "result[0] < 0.5"     # p95 < 500ms
+      query: |
+        histogram_quantile(0.95,
+          sum(rate(flask_http_request_duration_seconds_bucket{service="{{args.service}}"}[1m])) by (le))
+
+# --- Internal ingress via Gateway API (Cilium) -------------------------------
+# Off by default. Required when rollout.enabled=true (the Gateway API plugin
+# shifts traffic by rewriting this HTTPRoute's backendRef weights). When the
+# Rollout is active, both the stable and canary Services are listed as
+# backendRefs. This is independent of the legacy `ingress` (Nginx/ALB) block.
+httpRoute:
+  enabled: false
+  gateway:
+    name: gw-internal
+    namespace: kube-system
+    sectionName: http
+  path: /
+  hostnames: []
+
 # --- Ingress ---
 ingress:
   enabled: false

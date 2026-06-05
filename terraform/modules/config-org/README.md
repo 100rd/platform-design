@@ -20,7 +20,7 @@ issue.
 
 ## Why a wrapper, not a rename?
 
-Issue #162 asks for `modules/config-org` mirroring qbiq-ai/infra naming.
+Issue #162 asks for `modules/config-org` mirroring infra naming.
 The existing `aws-config` module already creates the recorder, delivery
 channel, IAM role, CIS managed rules, and S3 bucket. Renaming would force
 state moves and break tests. The wrapper gives the canonical name without
