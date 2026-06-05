@@ -756,6 +756,37 @@ spec:
       property: admin-password
 ```
 
+This chart ships `templates/external-secrets.yaml`, which declares an
+`aws-secrets-manager` `ClusterSecretStore` plus `ExternalSecret`s for Grafana
+admin, **Grafana Google OAuth**, Alertmanager Slack, and Alertmanager PagerDuty.
+
+#### Grafana Google OAuth + Alertmanager Slack via ESO
+
+**Ported from `argocd@c364c6c` `apps/observability`, 2026-06 sync.**
+
+- **Grafana Google OAuth** - the `grafana-oauth-credentials` ExternalSecret pulls
+  `client_id` / `client_secret` from AWS Secrets Manager
+  (`platform/observability/grafana-oauth`) and exposes them as the env vars
+  `GF_AUTH_GENERIC_OAUTH_CLIENT_ID` / `GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET`. They
+  are injected into Grafana via `grafana.envFromSecret` and consumed by the
+  `grafana.ini` `auth.generic_oauth` block, which is **domain-restricted**
+  (`allowed_domains`) with an admin allow-list in `role_attribute_path`. Override
+  `allowed_domains`, the admin list, and `server.root_url` per environment.
+  Local-admin break-glass stays enabled (`oauth_auto_login: false`).
+- **Alertmanager Slack** - the `alertmanager-slack-secret` ExternalSecret pulls
+  the webhook URL from `platform/observability/alertmanager`. It is mounted into
+  the Alertmanager pods via `alertmanagerSpec.secrets` and read by the receiver
+  config through `slack_api_url_file`. No plaintext webhooks in Git.
+
+Populate the backing secrets (synthetic shapes shown):
+
+```bash
+aws secretsmanager put-secret-value --secret-id platform/observability/grafana-oauth \
+  --secret-string '{"client_id":"<id>","client_secret":"<secret>"}'
+aws secretsmanager put-secret-value --secret-id platform/observability/alertmanager \
+  --secret-string '{"slack-webhook-url":"https://hooks.slack.com/services/T.../B.../..."}'
+```
+
 ## Upgrade Guide
 
 ### Backup Before Upgrade

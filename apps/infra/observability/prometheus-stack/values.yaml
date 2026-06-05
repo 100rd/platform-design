@@ -239,11 +239,18 @@ kube-prometheus-stack:
     replicas: 1  # Stateless, can scale horizontally if needed
 
     # Admin credentials (use External Secrets in production)
-    # Admin password injected via ExternalSecret (see external-secrets/grafana-secrets.yaml)
+    # Admin password injected via ExternalSecret (see templates/external-secrets.yaml)
     admin:
       existingSecret: grafana-admin-credentials
       userKey: admin-user
       passwordKey: admin-password
+
+    # Google OAuth client credentials injected from the ESO ExternalSecret
+    # 'grafana-oauth-credentials' (templates/external-secrets.yaml) as the env
+    # vars GF_AUTH_GENERIC_OAUTH_CLIENT_ID / GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET,
+    # referenced below in grafana.ini auth.generic_oauth.
+    # Ported from argocd@c364c6c apps/observability, 2026-06 sync.
+    envFromSecret: grafana-oauth-credentials
 
     # Persistence disabled - dashboards as code via ConfigMaps
     persistence:
@@ -450,22 +457,45 @@ kube-prometheus-stack:
         x_content_type_options: true
         x_xss_protection: true
 
-      # Auth (example: OAuth with AWS Cognito)
-      # auth:
-      #   disable_login_form: false
-      #   oauth_auto_login: true
+      # --------------------------------------------------------------------
+      # Google OAuth (Google Workspace SSO), domain-restricted.
+      # Ported from argocd@c364c6c apps/observability, 2026-06 sync.
       #
-      # auth.generic_oauth:
-      #   enabled: true
-      #   name: AWS Cognito
-      #   allow_sign_up: true
-      #   client_id: $__file{/etc/secrets/oauth-client-id}
-      #   client_secret: $__file{/etc/secrets/oauth-client-secret}
-      #   scopes: openid profile email
-      #   auth_url: https://your-domain.auth.us-east-1.amazoncognito.com/oauth2/authorize
-      #   token_url: https://your-domain.auth.us-east-1.amazoncognito.com/oauth2/token
-      #   api_url: https://your-domain.auth.us-east-1.amazoncognito.com/oauth2/userInfo
-      #   role_attribute_path: "contains(cognito:groups[*], 'Admins') && 'Admin' || 'Viewer'"
+      # Client credentials come from the ESO ExternalSecret
+      # 'grafana-oauth-credentials' (templates/external-secrets.yaml), injected
+      # as env vars via grafana.envFromSecret above. No plaintext secrets here.
+      #
+      # Local admin break-glass stays available at /login (oauth_auto_login is
+      # OFF) so an OAuth misconfiguration cannot lock everyone out. Flip
+      # oauth_auto_login to true only after OAuth is verified end-to-end.
+      auth:
+        disable_login_form: false
+        oauth_auto_login: false
+
+      auth.generic_oauth:
+        enabled: true
+        name: Google
+        allow_sign_up: true
+        # Injected from the ESO secret as env vars (see grafana.envFromSecret).
+        client_id: "${GF_AUTH_GENERIC_OAUTH_CLIENT_ID}"
+        client_secret: "${GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET}"
+        scopes: "openid email profile"
+        auth_url: "https://accounts.google.com/o/oauth2/v2/auth"
+        token_url: "https://oauth2.googleapis.com/token"
+        api_url: "https://openidconnect.googleapis.com/v1/userinfo"
+        use_pkce: true
+        use_refresh_token: true
+        # Restrict login to a single Google Workspace domain. Override per
+        # environment (values-<env>.yaml) to match the org's domain.
+        allowed_domains: "example.com"
+        # Role mapping: grant Admin to an explicit allow-list of emails, Viewer
+        # to everyone else in the allowed domain. Extend the contains() list to
+        # add admins; override per environment.
+        role_attribute_path: >-
+          contains(['admin@example.com'], email) && 'Admin' || 'Viewer'
+        # redirect_uri is derived from root_url; set explicitly per environment
+        # if the external hostname differs from server.root_url.
+        redirect_uri: ""
 
       # Logging
       log:
@@ -490,6 +520,15 @@ kube-prometheus-stack:
     alertmanagerSpec:
       # HA Configuration - 3 replicas for quorum
       replicas: 3
+
+      # Mount the ESO-sourced K8s Secrets into the Alertmanager pods at
+      # /etc/alertmanager/secrets/<name>/ so the receiver config can read the
+      # Slack webhook URL (and PagerDuty service key) via *_file directives
+      # below. These Secrets are created by templates/external-secrets.yaml.
+      # Ported from argocd@c364c6c apps/observability, 2026-06 sync.
+      secrets:
+        - alertmanager-slack-secret
+        - alertmanager-pagerduty-secret
 
       # Resource limits
       resources:

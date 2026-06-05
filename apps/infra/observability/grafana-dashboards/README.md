@@ -422,6 +422,26 @@ kubectl get configmaps -n observability -l grafana_dashboard=1 -o yaml > dashboa
 kubectl apply -f dashboards-backup.yaml
 ```
 
+## Provenance
+
+The following dashboards were **ported from `argocd@c364c6c`
+`apps/observability`, 2026-06 sync**:
+
+- **`kubernetes-overview.json`** (uid `k8s-cluster-overview`) - node & pod
+  CPU/memory from node-exporter and kube-state-metrics.
+- **`aws-infra-overview.json`** (uid `aws-infra-overview`) - AWS infrastructure
+  fed by the YACE CloudWatch exporter (`yace` chart): EKS node CPU/mem, NLB
+  healthy/unhealthy hosts + active/new flows + processed bytes, S3 bucket
+  size/object count, EBS burst balance/IOPS. The ACM certificate-expiry row from
+  the source dashboard is intentionally omitted because the YACE config drops the
+  `AWS/CertificateManager` job (internal CA, not ACM).
+- **`argocd-platform-overview.json`** (uid `argocd-platform-overview`) - ArgoCD
+  app health/sync, application-controller reconciliation queue/duration,
+  repo-server git-fetch/RPC, and component CPU/memory.
+
+These are inlined into `templates/configmap-dashboards.yaml` as `data` keys,
+matching the existing dashboards in this chart.
+
 ## Resources
 
 - [Grafana Documentation](https://grafana.com/docs/)

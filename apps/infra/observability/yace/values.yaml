@@ -1,0 +1,164 @@
+# YACE (Yet Another CloudWatch Exporter) - shared defaults.
+# Ported from argocd@c364c6c apps/observability/yace (2026-06 sync) and
+# adapted to platform-design conventions (placeholder IRSA role/account, no
+# hardcoded org identifiers; eu-central-1 to match the prometheus-stack
+# ClusterSecretStore default region).
+#
+# IRSA dependency: the ServiceAccount below references an IAM role
+# (<PLACEHOLDER>) that must be created out-of-band (e.g. infra
+# modules/observability-irsa) with a trust policy on:
+#   sub = system:serviceaccount:observability:yace
+# Until that role exists, YACE starts but CloudWatch calls fail with
+# AccessDeniedException - non-fatal (metrics absent, no crashloop).
+#
+# Chart = nerdswords/yet-another-cloudwatch-exporter 0.38.0 (YACE app v0.61.2).
+# The chart renders `.Values.config` through `tpl` and expects a STRING - the
+# YACE config below is therefore a YAML block scalar (config: |-), NOT a mapping.
+#
+# Cost control: CloudWatch GetMetricData is billed per 1000 metrics requested.
+# Discovery jobs use period/length 300 (5-min resolution) with delay 120, so
+# YACE makes ~1 CW call per period window regardless of the 60s Prometheus
+# scrape interval (YACE caches results for the period).
+#
+# ARM64/Graviton: YACE 0.61.x ships a multi-arch manifest - no image override.
+
+yet-another-cloudwatch-exporter:
+  enabled: true
+
+  # ---- AWS region -------------------------------------------------------
+  # Override per-environment (values-<env>.yaml) where clusters live in a
+  # different region.
+  aws:
+    region: eu-central-1
+
+  # ---- Service account (IRSA) ------------------------------------------
+  # The role ARN is a PLACEHOLDER. Replace <AWS_ACCOUNT_ID> and the role name
+  # with the IRSA role provisioned for CloudWatch read access, or inject it
+  # per-environment via values-<env>.yaml / ApplicationSet generator.
+  # Trust policy on that role: sub = system:serviceaccount:observability:yace
+  serviceAccount:
+    create: true
+    name: yace
+    annotations:
+      eks.amazonaws.com/role-arn: "arn:aws:iam::<AWS_ACCOUNT_ID>:role/platform-observability-yace"
+
+  # ---- Resources --------------------------------------------------------
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+  # ---- Node affinity (Graviton / ARM64) ---------------------------------
+  nodeSelector:
+    kubernetes.io/arch: arm64
+
+  # ---- ServiceMonitor ---------------------------------------------------
+  # The prometheus-stack discovers ServiceMonitors carrying the
+  # `prometheus: kube-prometheus` label (serviceMonitorSelector). The upstream
+  # YACE chart lets us attach extra labels so the operator selects this monitor.
+  serviceMonitor:
+    enabled: true
+    interval: 60s
+    scrapeTimeout: 30s
+    additionalLabels:
+      prometheus: kube-prometheus
+
+  # ---- YACE configuration (STRING - rendered via tpl by the chart) ------
+  # period: 300  - 5-minute CloudWatch resolution
+  # length: 300  - fetch last 5 minutes per poll
+  # delay:  120  - start 2 minutes in the past (CloudWatch propagation lag)
+  # Metrics are scoped to key operational signals only, to bound CW API cost.
+  config: |-
+    apiVersion: v1alpha1
+    sts-region: eu-central-1
+    discovery:
+      jobs:
+        # NOTE: AWS/EKS is intentionally absent - YACE v0.61.2 does not support
+        # it as a discovery service (not in its known-services list). EKS
+        # cluster/node/pod CPU/memory are already collected in-cluster by the
+        # prometheus-stack (node-exporter, kube-state-metrics, kubelet), so
+        # CloudWatch AWS/EKS metrics would be redundant anyway.
+
+        # Network Load Balancer
+        - type: AWS/NetworkELB
+          regions: [eu-central-1]
+          roles: []
+          period: 300
+          length: 300
+          delay: 120
+          metrics:
+            - name: HealthyHostCount
+              statistics: [Minimum]
+            - name: UnHealthyHostCount
+              statistics: [Maximum]
+            - name: ActiveFlowCount
+              statistics: [Average]
+            - name: NewFlowCount
+              statistics: [Sum]
+            - name: ProcessedBytes
+              statistics: [Sum]
+
+        # Application Load Balancer
+        - type: AWS/ApplicationELB
+          regions: [eu-central-1]
+          roles: []
+          period: 300
+          length: 300
+          delay: 120
+          metrics:
+            - name: HealthyHostCount
+              statistics: [Minimum]
+            - name: UnHealthyHostCount
+              statistics: [Maximum]
+            - name: RequestCount
+              statistics: [Sum]
+            - name: TargetResponseTime
+              statistics: [Average, p99]
+            - name: HTTPCode_Target_5XX_Count
+              statistics: [Sum]
+
+        # S3 (24h resolution - daily aggregation)
+        - type: AWS/S3
+          regions: [eu-central-1]
+          roles: []
+          period: 86400
+          length: 86400
+          delay: 7200
+          metrics:
+            - name: BucketSizeBytes
+              statistics: [Average]
+            - name: NumberOfObjects
+              statistics: [Average]
+          dimensionNameRequirements: [BucketName, StorageType]
+
+        # EBS
+        - type: AWS/EBS
+          regions: [eu-central-1]
+          roles: []
+          period: 300
+          length: 300
+          delay: 120
+          metrics:
+            - name: BurstBalance
+              statistics: [Minimum]
+            - name: VolumeReadOps
+              statistics: [Sum]
+            - name: VolumeWriteOps
+              statistics: [Sum]
+            - name: VolumeQueueLength
+              statistics: [Average]
+
+        # NOTE: AWS/CertificateManager intentionally omitted - this platform uses
+        # an internal CA (cert-manager private issuer), not ACM, so there are no
+        # ACM certs to discover and YACE would log "No tagged resources" every
+        # scrape. Re-add a CertificateManager job if ACM certs are introduced.
+
+# ----------------------------------------------------------------------------
+# Wrapper-chart values (consumed by templates/ in THIS chart, not the subchart).
+# ----------------------------------------------------------------------------
+networkPolicy:
+  # NetworkPolicy restricting YACE egress to AWS APIs + DNS and ingress to
+  # Prometheus scrape. Disable on clusters without a CNI that enforces policy.
+  enabled: true
