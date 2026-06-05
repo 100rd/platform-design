@@ -1,0 +1,47 @@
+# -----------------------------------------------------------------------------
+# syft-sbom
+#
+# Mirrors qbiq-ai/platform-workflows@3bb35df .github/actions/syft-sbom
+# (2026-06 platform-workflows consolidation sync).
+# -----------------------------------------------------------------------------
+name: "Syft SBOM"
+description: "Generate a Software Bill of Materials (SBOM) for a container image using Syft. Uploads as a workflow artifact."
+
+inputs:
+  image-ref:
+    description: "Image reference to inspect (must be loaded in local daemon or accessible via registry)."
+    required: true
+  format:
+    description: "SBOM format. Common: `spdx-json`, `cyclonedx-json`, `syft-json`."
+    required: false
+    default: "spdx-json"
+  output-path:
+    description: "Output file path."
+    required: false
+    default: "sbom.spdx.json"
+  artifact-name:
+    description: "Workflow artifact name."
+    required: false
+    default: "sbom"
+  upload-artifact:
+    description: "Upload the SBOM as a workflow artifact."
+    required: false
+    default: "true"
+
+outputs:
+  output-path:
+    description: "Path to the generated SBOM file."
+    value: ${{ inputs.output-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Generate SBOM with Syft
+      # anchore/sbom-action v0.17.7
+      uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
+      with:
+        image: ${{ inputs.image-ref }}
+        format: ${{ inputs.format }}
+        output-file: ${{ inputs.output-path }}
+        upload-artifact: ${{ inputs.upload-artifact }}
+        artifact-name: ${{ inputs.artifact-name }}

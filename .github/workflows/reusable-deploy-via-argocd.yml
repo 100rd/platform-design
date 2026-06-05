@@ -1,0 +1,105 @@
+# -----------------------------------------------------------------------------
+# reusable-deploy-via-argocd.yml
+#
+# Open a PR in the argocd config repo (100rd/argocd) that bumps image.tag and
+# image.digest for an app in a target environment. Non-prod PRs are
+# auto-merge-labelled; prod PRs are left for human review (GitOps deploy gate).
+#
+# Mirrors qbiq-ai/platform-workflows@3bb35df reusable-deploy-via-argocd.yml
+# (2026-06 consolidation sync).
+#
+# Caller example:
+#
+#   jobs:
+#     deploy:
+#       uses: ./.github/workflows/reusable-deploy-via-argocd.yml
+#       with:
+#         app_name: hello-world
+#         env: dev
+#         image_tag: ${{ needs.build.outputs.image_tag }}
+#         image_digest: ${{ needs.build.outputs.image_digest }}
+#         values_path: envs/{env}/values/{app}.yaml
+#       secrets:
+#         argocd_bot_token: ${{ secrets.ARGOCD_BOT_TOKEN }}
+#
+# See: docs/ci-cd/README.md
+# -----------------------------------------------------------------------------
+
+name: reusable-deploy-via-argocd
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        description: "Application name."
+        type: string
+        required: true
+      env:
+        description: "Target environment: dev, stage, or prod."
+        type: string
+        required: true
+      image_tag:
+        description: "New image tag."
+        type: string
+        required: true
+      image_digest:
+        description: "Image content digest (sha256:...)."
+        type: string
+        required: true
+      values_path:
+        description: "Path to the values file inside the argocd repo. {app} and {env} are substituted. REQUIRED — no default. Examples: `envs/{env}/values/{app}.yaml` or `workloads/{app}/envs/{env}/values.yaml`."
+        type: string
+        required: true
+      argocd_repo:
+        description: "ArgoCD config repository."
+        type: string
+        required: false
+        default: "100rd/argocd"
+      auto_merge_override:
+        description: "Override auto-merge selection. Empty string keeps default (true for non-prod, false for prod)."
+        type: string
+        required: false
+        default: ""
+    secrets:
+      argocd_bot_token:
+        description: "Token with contents:write and pull-requests:write on the argocd repo."
+        required: true
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.app_name }} -> ${{ inputs.env }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve auto-merge flag
+        id: am
+        env:
+          ENV: ${{ inputs.env }}
+          OVERRIDE: ${{ inputs.auto_merge_override }}
+        run: |
+          set -euo pipefail
+          if [ -n "${OVERRIDE}" ]; then
+            FLAG="${OVERRIDE}"
+          elif [ "${ENV}" = "prod" ]; then
+            FLAG="false"
+          else
+            FLAG="true"
+          fi
+          echo "auto-merge=${FLAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Open argocd bump PR
+        uses: ./.github/actions/argocd-tag-bump
+        with:
+          app-name: ${{ inputs.app_name }}
+          env: ${{ inputs.env }}
+          image-tag: ${{ inputs.image_tag }}
+          image-digest: ${{ inputs.image_digest }}
+          values-path: ${{ inputs.values_path }}
+          argocd-repo: ${{ inputs.argocd_repo }}
+          bot-token: ${{ secrets.argocd_bot_token }}
+          auto-merge: ${{ steps.am.outputs.auto-merge }}

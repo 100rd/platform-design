@@ -1,0 +1,199 @@
+# -----------------------------------------------------------------------------
+# reusable-build-and-push.yml
+#
+# Reusable workflow: build a container image, scan with Trivy, generate an SBOM
+# with Syft, push to ECR, and SIGN the pushed image (cosign keyless) + attest
+# the SBOM. Composed from .github/actions/* composites in this repo.
+#
+# Mirrors qbiq-ai/platform-workflows@3bb35df reusable-build-and-push.yml
+# (2026-06 consolidation sync) and CLOSES the known gap in the source workflow:
+# the upstream reusable-build-and-push builds, scans and pushes but never signs.
+# Here the push job runs cosign-sign on the pushed digest before completing.
+#
+# Caller example:
+#
+#   jobs:
+#     build:
+#       uses: ./.github/workflows/reusable-build-and-push.yml
+#       permissions:
+#         id-token: write
+#         contents: read
+#         security-events: write
+#       with:
+#         app_name: hello-world
+#         ecr_repository: hello-world
+#         build_context: services/hello-world
+#
+# See: docs/ci-cd/README.md
+# -----------------------------------------------------------------------------
+
+name: reusable-build-and-push
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        description: "Application name. Used in image tag namespace, SBOM/SARIF naming, and cache keys."
+        type: string
+        required: true
+      ecr_repository:
+        description: "ECR repository name (without registry hostname). Example: hello-world."
+        type: string
+        required: true
+      build_context:
+        description: "Docker build context path."
+        type: string
+        required: false
+        default: "."
+      dockerfile_path:
+        description: "Path to Dockerfile (relative to build_context)."
+        type: string
+        required: false
+        default: "Dockerfile"
+      aws_region:
+        description: "AWS region of the ECR registry."
+        type: string
+        required: false
+        default: "eu-west-1"
+      tag:
+        description: "Image tag override. Defaults to the short git SHA."
+        type: string
+        required: false
+        default: ""
+      push:
+        description: "Push the image to ECR and sign it. Set false for build-only smoke tests."
+        type: boolean
+        required: false
+        default: true
+      sign:
+        description: "Sign the pushed image with cosign keyless and attest the SBOM. Only runs when push is true."
+        type: boolean
+        required: false
+        default: true
+      trivy_severity:
+        description: "Trivy severities that fail the build."
+        type: string
+        required: false
+        default: "CRITICAL,HIGH"
+      trivy_exit_code:
+        description: "Trivy exit code on findings."
+        type: string
+        required: false
+        default: "1"
+      sbom_format:
+        description: "SBOM format for syft (spdx-json, cyclonedx-json, syft-json)."
+        type: string
+        required: false
+        default: "spdx-json"
+    outputs:
+      image_uri:
+        description: "Full image URI (registry/repo:tag)."
+        value: ${{ jobs.build.outputs.image_uri }}
+      image_digest:
+        description: "Image content digest (sha256:...)."
+        value: ${{ jobs.build.outputs.image_digest }}
+      image_tag:
+        description: "Resolved image tag."
+        value: ${{ jobs.build.outputs.image_tag }}
+
+permissions: {}
+
+jobs:
+  build:
+    name: Build, scan, SBOM, push, sign
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      security-events: write
+    outputs:
+      image_uri: ${{ steps.meta.outputs.uri }}
+      image_digest: ${{ steps.push.outputs.digest }}
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        id: aws-creds
+        if: inputs.push && vars.ECR_PUSH_ROLE_ARN != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.ECR_PUSH_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        if: inputs.push && vars.ECR_PUSH_ROLE_ARN != ''
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Resolve image metadata
+        id: meta
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          REPO: ${{ inputs.ecr_repository }}
+          TAG_OVERRIDE: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -n "${TAG_OVERRIDE}" ]; then
+            TAG="${TAG_OVERRIDE}"
+          else
+            TAG="sha-$(git rev-parse --short HEAD)"
+          fi
+          REG="${REGISTRY:-local}"
+          URI="${REG}/${REPO}:${TAG}"
+          echo "registry=${REG}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "uri=${URI}" >> "$GITHUB_OUTPUT"
+          echo "Image URI: ${URI}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image (load for scan)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.build_context }}
+          file: ${{ inputs.build_context }}/${{ inputs.dockerfile_path }}
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.uri }}
+          cache-from: type=gha,scope=${{ inputs.app_name }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.app_name }}
+
+      - name: Trivy scan
+        uses: ./.github/actions/trivy-scan
+        with:
+          image-ref: ${{ steps.meta.outputs.uri }}
+          severity: ${{ inputs.trivy_severity }}
+          exit-code: ${{ inputs.trivy_exit_code }}
+          sarif-category: trivy-${{ inputs.app_name }}
+
+      - name: Generate SBOM (Syft)
+        uses: ./.github/actions/syft-sbom
+        with:
+          image-ref: ${{ steps.meta.outputs.uri }}
+          format: ${{ inputs.sbom_format }}
+          output-path: sbom.spdx.json
+          artifact-name: sbom-${{ inputs.app_name }}-${{ steps.meta.outputs.tag }}
+
+      - name: Build and push image
+        id: push
+        if: inputs.push && steps.ecr-login.outcome == 'success'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.build_context }}
+          file: ${{ inputs.build_context }}/${{ inputs.dockerfile_path }}
+          push: true
+          tags: ${{ steps.meta.outputs.uri }}
+          cache-from: type=gha,scope=${{ inputs.app_name }}
+
+      - name: Sign image + attest SBOM (cosign keyless)
+        # GAP CLOSED: the upstream reusable-build-and-push never signs. We sign
+        # the freshly pushed image BY DIGEST (immutable) and attach the SBOM as a
+        # signed attestation, all keyless via the job's GitHub OIDC identity.
+        if: inputs.push && inputs.sign && steps.push.outputs.digest != ''
+        uses: ./.github/actions/cosign-sign
+        with:
+          image-ref: ${{ steps.meta.outputs.registry }}/${{ inputs.ecr_repository }}@${{ steps.push.outputs.digest }}
+          sbom-path: sbom.spdx.json
+          sbom-type: spdxjson

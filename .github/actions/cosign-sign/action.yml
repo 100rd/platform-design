@@ -1,0 +1,176 @@
+# -----------------------------------------------------------------------------
+# cosign-sign
+#
+# Mirrors qbiq-ai/platform-workflows@3bb35df .github/actions/cosign-sign
+# (2026-06 platform-workflows consolidation sync).
+# -----------------------------------------------------------------------------
+name: "Cosign Sign (keyless)"
+description: "Sign a container image (and optionally attest an SBOM) using cosign keyless via Sigstore + GitHub OIDC. No key management; identity is bound to the GitHub workflow that ran. Signs by digest (immutable) — pass `<registry>/<repo>@sha256:...`."
+
+inputs:
+  image-ref:
+    description: "Fully qualified image reference WITH digest. Example: `<acct>.dkr.ecr.eu-west-1.amazonaws.com/hello-world@sha256:abc...`. Signing by tag is not supported because tags are mutable."
+    required: true
+  sbom-path:
+    description: "Optional path to an SBOM file. If set, the action attaches the SBOM as a signed cosign attestation (predicate-type SPDX or CycloneDX based on `sbom-type`)."
+    required: false
+    default: ""
+  sbom-type:
+    description: "Predicate type for SBOM attestation: `spdxjson` or `cyclonedx`."
+    required: false
+    default: "spdxjson"
+  cosign-version:
+    description: "cosign release version to install."
+    required: false
+    default: "v2.4.1"
+  advisory:
+    description: "If `true`, signing failures are downgraded to warnings (used during Sigstore Fulcio/Rekor incidents). Default `false` — sign failures fail the job."
+    required: false
+    default: "false"
+  rekor-url:
+    description: "Override Rekor transparency log URL. Empty string uses the public Sigstore Rekor."
+    required: false
+    default: ""
+  fulcio-url:
+    description: "Override Fulcio CA URL. Empty string uses the public Sigstore Fulcio."
+    required: false
+    default: ""
+
+outputs:
+  signature-ref:
+    description: "The image reference of the signature artifact in the registry."
+    value: ${{ steps.sign.outputs.signature-ref }}
+  rekor-log-entry:
+    description: "Rekor transparency log URL for the signature, when available."
+    value: ${{ steps.sign.outputs.rekor-log-entry }}
+  attestation-ref:
+    description: "The image reference of the SBOM attestation artifact, when sbom-path is provided."
+    value: ${{ steps.attest.outputs.attestation-ref }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate image reference includes digest
+      shell: bash
+      env:
+        IMAGE_REF: ${{ inputs.image-ref }}
+      run: |
+        set -euo pipefail
+        case "${IMAGE_REF}" in
+          *@sha256:*) ;;
+          *)
+            echo "::error::image-ref must include a digest. Got: ${IMAGE_REF}"
+            echo "::error::Pass <registry>/<repo>@sha256:... — tags are mutable and cannot be safely signed."
+            exit 1
+            ;;
+        esac
+
+    - name: Install cosign
+      # sigstore/cosign-installer v3.7.0
+      uses: sigstore/cosign-installer@1aa8e0f2454b781fbf0fbf306a4c9533a0c57409
+      with:
+        cosign-release: ${{ inputs.cosign-version }}
+
+    - name: Verify cosign install
+      shell: bash
+      run: |
+        set -euo pipefail
+        cosign version
+
+    - name: Sign image (keyless OIDC)
+      id: sign
+      shell: bash
+      env:
+        IMAGE_REF: ${{ inputs.image-ref }}
+        ADVISORY: ${{ inputs.advisory }}
+        REKOR_URL: ${{ inputs.rekor-url }}
+        FULCIO_URL: ${{ inputs.fulcio-url }}
+        COSIGN_YES: "true"
+        COSIGN_EXPERIMENTAL: "1"
+      run: |
+        set -uo pipefail
+
+        SIGN_ARGS=(sign --yes)
+        if [ -n "${REKOR_URL}" ]; then
+          SIGN_ARGS+=(--rekor-url "${REKOR_URL}")
+        fi
+        if [ -n "${FULCIO_URL}" ]; then
+          SIGN_ARGS+=(--fulcio-url "${FULCIO_URL}")
+        fi
+        SIGN_ARGS+=("${IMAGE_REF}")
+
+        set +e
+        cosign "${SIGN_ARGS[@]}"
+        RC=$?
+        set -e
+
+        # Derive the signature reference: same repo, tagged sha256-<digest>.sig (per OCI 1.1 / cosign convention).
+        DIGEST="${IMAGE_REF##*@sha256:}"
+        REPO="${IMAGE_REF%@*}"
+        SIG_REF="${REPO}:sha256-${DIGEST}.sig"
+        echo "signature-ref=${SIG_REF}" >> "$GITHUB_OUTPUT"
+
+        # Best-effort Rekor URL for the signature, searchable by image digest.
+        REKOR_BASE="${REKOR_URL:-https://rekor.sigstore.dev}"
+        echo "rekor-log-entry=${REKOR_BASE}/api/v1/log/entries (search by image digest ${DIGEST})" >> "$GITHUB_OUTPUT"
+
+        if [ "${RC}" -ne 0 ]; then
+          if [ "${ADVISORY}" = "true" ]; then
+            echo "::warning::cosign sign failed (advisory mode); image NOT signed."
+            exit 0
+          fi
+          echo "::error::cosign sign failed (rc=${RC})."
+          exit "${RC}"
+        fi
+        echo "Signed: ${IMAGE_REF}"
+        echo "Signature: ${SIG_REF}"
+
+    - name: Attest SBOM
+      id: attest
+      if: inputs.sbom-path != ''
+      shell: bash
+      env:
+        IMAGE_REF: ${{ inputs.image-ref }}
+        SBOM_PATH: ${{ inputs.sbom-path }}
+        SBOM_TYPE: ${{ inputs.sbom-type }}
+        ADVISORY: ${{ inputs.advisory }}
+        REKOR_URL: ${{ inputs.rekor-url }}
+        FULCIO_URL: ${{ inputs.fulcio-url }}
+        COSIGN_YES: "true"
+        COSIGN_EXPERIMENTAL: "1"
+      run: |
+        set -uo pipefail
+
+        if [ ! -s "${SBOM_PATH}" ]; then
+          echo "::warning::SBOM file not found at ${SBOM_PATH}; skipping attestation."
+          exit 0
+        fi
+
+        ATTEST_ARGS=(attest --yes --predicate "${SBOM_PATH}" --type "${SBOM_TYPE}")
+        if [ -n "${REKOR_URL}" ]; then
+          ATTEST_ARGS+=(--rekor-url "${REKOR_URL}")
+        fi
+        if [ -n "${FULCIO_URL}" ]; then
+          ATTEST_ARGS+=(--fulcio-url "${FULCIO_URL}")
+        fi
+        ATTEST_ARGS+=("${IMAGE_REF}")
+
+        set +e
+        cosign "${ATTEST_ARGS[@]}"
+        RC=$?
+        set -e
+
+        DIGEST="${IMAGE_REF##*@sha256:}"
+        REPO="${IMAGE_REF%@*}"
+        ATT_REF="${REPO}:sha256-${DIGEST}.att"
+        echo "attestation-ref=${ATT_REF}" >> "$GITHUB_OUTPUT"
+
+        if [ "${RC}" -ne 0 ]; then
+          if [ "${ADVISORY}" = "true" ]; then
+            echo "::warning::cosign attest failed (advisory mode); SBOM NOT attested."
+            exit 0
+          fi
+          echo "::error::cosign attest failed (rc=${RC})."
+          exit "${RC}"
+        fi
+        echo "SBOM attested as ${SBOM_TYPE}: ${ATT_REF}"
