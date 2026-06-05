@@ -2,7 +2,7 @@
 
 Per-module includes that fix the **module source**, **default inputs**, and
 **common dependency declarations** for every per-environment unit that
-deploys that module. Mirrors the `qbiq-ai/infra` skeleton and follows the
+deploys that module. Mirrors the `infra` skeleton and follows the
 [Terragrunt "keep your remote state configuration DRY"][1] +
 [`include` pattern][2] guidance.
 
