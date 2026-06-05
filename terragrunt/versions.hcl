@@ -2,7 +2,7 @@
 # Tool & Provider Version Pins
 # -----------------------------------------------------------------------------
 # Single source of truth for pinned versions across the platform-design repo.
-# Mirrors qbiq-ai/infra `versions.hcl`. Consumed by:
+# Mirrors infra `versions.hcl`. Consumed by:
 #   - root.hcl   (terraform/terragrunt version constraints + provider blocks)
 #   - CI checks  (matrix versions)
 #   - Tooling    (.terraform-version, .terragrunt-version — see issue #174)

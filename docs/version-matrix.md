@@ -116,4 +116,4 @@ Until that lands, drift is caught manually during PR review of bump PRs.
 - Issue #156 (introduced `versions.hcl`)
 - Issue #174 (introduced root tool-version files)
 - Issue #172 (CI consolidation; will add the drift check)
-- Source repo: `qbiq-ai/infra` issue #51
+- Source repo: `infra` issue #51

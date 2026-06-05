@@ -5,7 +5,7 @@
 # supports delegated administration and cross-region finding aggregation.
 #
 # Why a wrapper instead of renaming `security-hub`?
-#   - Issue #164 asks for `modules/securityhub-org` (mirroring qbiq-ai/infra
+#   - Issue #164 asks for `modules/securityhub-org` (mirroring infra
 #     naming).
 #   - The existing `security-hub` module already creates the account
 #     enablement, AWS Foundational + CIS + PCI-DSS standard subscriptions,
