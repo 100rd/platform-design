@@ -1,0 +1,71 @@
+---
+{{- /*
+  app.canarySteps: builds the canary steps list.
+  For each weight in rollout.canary.weights: setWeight(w), then an inline analysis
+  step (when rollout.analysis.enabled). A final setWeight: 100 is appended.
+  If rollout.canary.customSteps is non-empty it is rendered verbatim instead —
+  use it for non-standard ladders (e.g. workers without analysis gates).
+
+  Ported from qbiq-ai/argocd@c364c6c charts/qbiq-app (2026-06 sync), adapted to
+  platform-design's app.* helper templates and naming conventions.
+*/}}
+{{- define "app.canarySteps" -}}
+{{- if .Values.rollout.canary.customSteps }}
+{{- toYaml .Values.rollout.canary.customSteps }}
+{{- else }}
+{{- $fullname := include "app.fullname" . -}}
+{{- $analysisEnabled := .Values.rollout.analysis.enabled -}}
+{{- range .Values.rollout.canary.weights }}
+- setWeight: {{ . }}
+{{- if $analysisEnabled }}
+- analysis:
+    templates:
+      - templateName: {{ $fullname }}
+    args:
+      - name: service
+        value: {{ $fullname }}-canary
+{{- end }}
+{{- end }}
+- setWeight: 100
+{{- end }}
+{{- end }}
+{{- if .Values.rollout.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ include "app.fullname" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    {{- with .Values.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "app.selectorLabels" . | nindent 6 }}
+  template:
+    {{- include "app.podTemplateMeta" . | nindent 4 }}
+    spec:
+      {{- include "app.podSpec" . | nindent 6 }}
+  strategy:
+    canary:
+      # stableService receives 100% of production traffic; canaryService
+      # receives the weighted fraction while the canary ReplicaSet is live.
+      # The Gateway API plugin (argoproj-labs/gatewayAPI) adjusts the HTTPRoute
+      # backendRef weights — Envoy/Cilium drains connections on each shift.
+      stableService: {{ include "app.fullname" . }}
+      canaryService: {{ include "app.fullname" . }}-canary
+      # Graceful abort: if analysis fails, the canary ReplicaSet stays alive for
+      # this many seconds after abort so in-flight requests complete.
+      abortScaleDownDelaySeconds: {{ .Values.rollout.abortScaleDownDelaySeconds }}
+      trafficRouting:
+        plugins:
+          argoproj-labs/gatewayAPI:
+            httpRoute: {{ include "app.fullname" . }}
+            namespace: {{ .Release.Namespace }}
+      steps:
+        {{- include "app.canarySteps" . | trim | nindent 8 }}
+{{- end }}

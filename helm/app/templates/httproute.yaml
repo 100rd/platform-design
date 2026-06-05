@@ -1,0 +1,59 @@
+---
+{{- /*
+  Internal ingress via Gateway API (Cilium Gateway). Off by default. When the
+  Rollout is active, BOTH the stable and canary Services are listed as
+  backendRefs so the argoproj-labs/gatewayAPI plugin can shift weights between
+  them during a canary; Argo Rollouts owns those weights at runtime (ArgoCD
+  should ignore this path via ignoreDifferences on the Application). Without a
+  Rollout, a single backendRef points at the stable Service.
+
+  Ported from qbiq-ai/argocd@c364c6c charts/qbiq-app (2026-06 sync), adapted to
+  platform-design's app.* helpers.
+*/}}
+{{- if .Values.httpRoute.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "app.fullname" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ .Values.httpRoute.gateway.name }}
+      namespace: {{ .Values.httpRoute.gateway.namespace }}
+      sectionName: {{ .Values.httpRoute.gateway.sectionName }}
+  {{- with .Values.httpRoute.hostnames }}
+  hostnames:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ .Values.httpRoute.path | default "/" | quote }}
+      backendRefs:
+        {{- if .Values.rollout.enabled }}
+        # Both backendRefs must be present so the Gateway API plugin can adjust
+        # weights. Argo Rollouts owns these weights at runtime — configure ArgoCD
+        # to ignore this path via ignoreDifferences in the Application.
+        # Initial weights: stable=100, canary=0 (plugin sets them on rollout start).
+        - group: ""
+          kind: Service
+          name: {{ include "app.fullname" . }}
+          port: {{ .Values.service.port }}
+          weight: 100
+        - group: ""
+          kind: Service
+          name: {{ include "app.fullname" . }}-canary
+          port: {{ .Values.service.port }}
+          weight: 0
+        {{- else }}
+        - group: ""
+          kind: Service
+          name: {{ include "app.fullname" . }}
+          port: {{ .Values.service.port }}
+          weight: 1
+        {{- end }}
+{{- end }}
