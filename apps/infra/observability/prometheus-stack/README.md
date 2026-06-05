@@ -762,7 +762,7 @@ admin, **Grafana Google OAuth**, Alertmanager Slack, and Alertmanager PagerDuty.
 
 #### Grafana Google OAuth + Alertmanager Slack via ESO
 
-**Ported from `qbiq-ai/argocd@c364c6c` `apps/observability`, 2026-06 sync.**
+**Ported from `argocd@c364c6c` `apps/observability`, 2026-06 sync.**
 
 - **Grafana Google OAuth** - the `grafana-oauth-credentials` ExternalSecret pulls
   `client_id` / `client_secret` from AWS Secrets Manager

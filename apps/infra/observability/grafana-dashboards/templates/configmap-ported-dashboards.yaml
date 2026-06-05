@@ -1,5 +1,5 @@
 {{/*
-Ported Grafana dashboards (qbiq-ai/argocd@c364c6c apps/observability, 2026-06 sync).
+Ported Grafana dashboards (argocd@c364c6c apps/observability, 2026-06 sync).
 
 These dashboards are loaded with .Files.Get, which returns the raw file bytes
 WITHOUT running them through the Go template engine. This means Grafana

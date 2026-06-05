@@ -36,5 +36,5 @@ dependencies:
 annotations:
   category: observability
   licenses: Apache-2.0
-  # Ported from qbiq-ai/argocd@c364c6c apps/observability/yace, 2026-06 sync.
-  "platform.example.com/provenance": "qbiq-ai/argocd@c364c6c"
+  # Ported from argocd@c364c6c apps/observability/yace, 2026-06 sync.
+  "platform.example.com/provenance": "argocd@c364c6c"

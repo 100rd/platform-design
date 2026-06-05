@@ -26,7 +26,7 @@ dashboards:
     enabled: true
   argocdInventory:
     enabled: true
-  # Ported from qbiq-ai/argocd@c364c6c apps/observability, 2026-06 sync.
+  # Ported from argocd@c364c6c apps/observability, 2026-06 sync.
   kubernetesOverview:
     enabled: true
   awsInfraOverview:

@@ -50,7 +50,7 @@ period regardless of the 60s Prometheus scrape interval.
 
 ## Provenance
 
-Ported from `qbiq-ai/argocd@c364c6c` `apps/observability/yace`, 2026-06 sync.
+Ported from `argocd@c364c6c` `apps/observability/yace`, 2026-06 sync.
 Adapted to platform-design conventions: placeholder IRSA role/account (no
 hardcoded org identifiers), region `eu-central-1` to match the prometheus-stack
 ClusterSecretStore default.

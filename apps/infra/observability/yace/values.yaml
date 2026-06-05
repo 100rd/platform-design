@@ -1,5 +1,5 @@
 # YACE (Yet Another CloudWatch Exporter) - shared defaults.
-# Ported from qbiq-ai/argocd@c364c6c apps/observability/yace (2026-06 sync) and
+# Ported from argocd@c364c6c apps/observability/yace (2026-06 sync) and
 # adapted to platform-design conventions (placeholder IRSA role/account, no
 # hardcoded org identifiers; eu-central-1 to match the prometheus-stack
 # ClusterSecretStore default region).

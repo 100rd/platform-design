@@ -249,7 +249,7 @@ kube-prometheus-stack:
     # 'grafana-oauth-credentials' (templates/external-secrets.yaml) as the env
     # vars GF_AUTH_GENERIC_OAUTH_CLIENT_ID / GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET,
     # referenced below in grafana.ini auth.generic_oauth.
-    # Ported from qbiq-ai/argocd@c364c6c apps/observability, 2026-06 sync.
+    # Ported from argocd@c364c6c apps/observability, 2026-06 sync.
     envFromSecret: grafana-oauth-credentials
 
     # Persistence disabled - dashboards as code via ConfigMaps
@@ -459,7 +459,7 @@ kube-prometheus-stack:
 
       # --------------------------------------------------------------------
       # Google OAuth (Google Workspace SSO), domain-restricted.
-      # Ported from qbiq-ai/argocd@c364c6c apps/observability, 2026-06 sync.
+      # Ported from argocd@c364c6c apps/observability, 2026-06 sync.
       #
       # Client credentials come from the ESO ExternalSecret
       # 'grafana-oauth-credentials' (templates/external-secrets.yaml), injected
@@ -525,7 +525,7 @@ kube-prometheus-stack:
       # /etc/alertmanager/secrets/<name>/ so the receiver config can read the
       # Slack webhook URL (and PagerDuty service key) via *_file directives
       # below. These Secrets are created by templates/external-secrets.yaml.
-      # Ported from qbiq-ai/argocd@c364c6c apps/observability, 2026-06 sync.
+      # Ported from argocd@c364c6c apps/observability, 2026-06 sync.
       secrets:
         - alertmanager-slack-secret
         - alertmanager-pagerduty-secret

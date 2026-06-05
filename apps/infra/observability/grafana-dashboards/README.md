@@ -424,7 +424,7 @@ kubectl apply -f dashboards-backup.yaml
 
 ## Provenance
 
-The following dashboards were **ported from `qbiq-ai/argocd@c364c6c`
+The following dashboards were **ported from `argocd@c364c6c`
 `apps/observability`, 2026-06 sync**:
 
 - **`kubernetes-overview.json`** (uid `k8s-cluster-overview`) - node & pod
