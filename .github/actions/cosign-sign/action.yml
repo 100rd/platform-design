@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # cosign-sign
 #
-# Mirrors qbiq-ai/platform-workflows@3bb35df .github/actions/cosign-sign
+# Mirrors platform-workflows@3bb35df .github/actions/cosign-sign
 # (2026-06 platform-workflows consolidation sync).
 # -----------------------------------------------------------------------------
 name: "Cosign Sign (keyless)"

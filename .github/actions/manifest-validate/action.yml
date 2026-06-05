@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # manifest-validate
 #
-# Mirrors qbiq-ai/platform-workflows@3bb35df .github/actions/manifest-validate
+# Mirrors platform-workflows@3bb35df .github/actions/manifest-validate
 # (2026-06 platform-workflows consolidation sync).
 # -----------------------------------------------------------------------------
 name: "Manifest Validate"

@@ -1,6 +1,6 @@
 # CI/CD: platform-workflows consolidation model
 
-> **Provenance:** mirrors `qbiq-ai/platform-workflows@3bb35df` (2026-06 sync).
+> **Provenance:** mirrors `platform-workflows@3bb35df` (2026-06 sync).
 > This document and the accompanying `.github/actions/` composite actions and
 > `.github/workflows/reusable-*.yml` reusable workflows reflect the real-estate
 > consolidation into a single shared CI/CD repository. This is a **mock** —
@@ -14,7 +14,7 @@ container build, k8s/helm validation, security scans, etc.) with **no image
 signing, no SBOM, no reusable pipeline pattern**.
 
 In the real estate, the Tier-1 hardening building blocks were **consolidated
-out of `qbiq-ai/infra` into a shared `qbiq-ai/platform-workflows` repository** so
+out of `infra` into a shared `platform-workflows` repository** so
 every service repo composes the same audited actions instead of copy-pasting
 CI. This PR reflects that model inside platform-design:
 
@@ -27,7 +27,7 @@ CI. This PR reflects that model inside platform-design:
   signs** — this port closes that gap.
 
 In real consumer repos the reusables are referenced as
-`uses: qbiq-ai/platform-workflows/.github/workflows/<wf>.yml@<ref>`. In this
+`uses: platform-workflows/.github/workflows/<wf>.yml@<ref>`. In this
 mock they live in-repo and are referenced via local `./.github/...` paths.
 
 ## Tier-1 composite actions (`.github/actions/`)

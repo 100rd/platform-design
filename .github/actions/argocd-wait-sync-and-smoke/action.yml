@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # argocd-wait-sync-and-smoke
 #
-# Mirrors qbiq-ai/platform-workflows@3bb35df
+# Mirrors platform-workflows@3bb35df
 # .github/actions/argocd-wait-sync-and-smoke
 # (2026-06 platform-workflows consolidation sync).
 # -----------------------------------------------------------------------------

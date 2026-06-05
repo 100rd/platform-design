@@ -143,7 +143,7 @@ jobs:
       # generate an SBOM, push, then SIGN the pushed image by digest and attest
       # the SBOM — keyless via the job's GitHub OIDC identity. Closes the gap
       # where platform-design pushed unsigned images with no SBOM. Composite
-      # actions live in .github/actions/ (mirrors qbiq-ai/platform-workflows).
+      # actions live in .github/actions/ (mirrors platform-workflows).
       # ---------------------------------------------------------------------
       - name: Generate SBOM (Syft)
         uses: ./.github/actions/syft-sbom

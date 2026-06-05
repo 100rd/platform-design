@@ -5,7 +5,7 @@
 # Designed to run on tag-bump PRs created by reusable-deploy-via-argocd.yml, and
 # usable directly from any chart-owning repo.
 #
-# Mirrors qbiq-ai/platform-workflows@3bb35df reusable-manifest-validate.yml
+# Mirrors platform-workflows@3bb35df reusable-manifest-validate.yml
 # (2026-06 consolidation sync).
 #
 # Caller example:

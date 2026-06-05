@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # syft-sbom
 #
-# Mirrors qbiq-ai/platform-workflows@3bb35df .github/actions/syft-sbom
+# Mirrors platform-workflows@3bb35df .github/actions/syft-sbom
 # (2026-06 platform-workflows consolidation sync).
 # -----------------------------------------------------------------------------
 name: "Syft SBOM"

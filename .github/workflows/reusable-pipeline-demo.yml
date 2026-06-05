@@ -6,8 +6,8 @@
 #     -> reusable-deploy-via-argocd (open GitOps image-bump PR in 100rd/argocd)
 #
 # In the real estate these reusable workflows live in the shared
-# qbiq-ai/platform-workflows repo and are referenced as
-# `uses: qbiq-ai/platform-workflows/.github/workflows/<wf>.yml@<ref>`. In this
+# platform-workflows repo and are referenced as
+# `uses: platform-workflows/.github/workflows/<wf>.yml@<ref>`. In this
 # mock they live in-repo and are called via local `./.github/workflows/...`.
 #
 # Manual-only (workflow_dispatch) so it never runs unattended; it shows wiring,

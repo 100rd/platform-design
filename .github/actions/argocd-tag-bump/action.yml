@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # argocd-tag-bump
 #
-# Mirrors qbiq-ai/platform-workflows@3bb35df .github/actions/argocd-tag-bump
+# Mirrors platform-workflows@3bb35df .github/actions/argocd-tag-bump
 # (2026-06 platform-workflows consolidation sync). Adapted to platform-design's
 # argocd config repo (100rd/argocd) and bot identity.
 # -----------------------------------------------------------------------------

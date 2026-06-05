@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # trivy-scan
 #
-# Mirrors qbiq-ai/platform-workflows@3bb35df .github/actions/trivy-scan
+# Mirrors platform-workflows@3bb35df .github/actions/trivy-scan
 # (2026-06 platform-workflows consolidation sync).
 # Trivy action pinned to v0.35.0 to match platform-design's existing
 # container-build.yml usage.

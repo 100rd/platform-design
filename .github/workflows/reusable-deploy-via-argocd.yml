@@ -5,7 +5,7 @@
 # image.digest for an app in a target environment. Non-prod PRs are
 # auto-merge-labelled; prod PRs are left for human review (GitOps deploy gate).
 #
-# Mirrors qbiq-ai/platform-workflows@3bb35df reusable-deploy-via-argocd.yml
+# Mirrors platform-workflows@3bb35df reusable-deploy-via-argocd.yml
 # (2026-06 consolidation sync).
 #
 # Caller example:
