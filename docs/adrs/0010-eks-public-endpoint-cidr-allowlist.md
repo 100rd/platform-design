@@ -1,6 +1,11 @@
 # ADR-0010: EKS public API endpoint with a parameterised CIDR allow-list
 
 - Status: **Accepted** — decision is *adopted (live in source estate)*
+- platform-design status: **partial** — the CIDR allow-list is parameterised
+  (`catalog/units/eks/terragrunt.hcl` sets
+  `cluster_endpoint_public_access_cidrs`, defaulting to `["0.0.0.0/0"]`), so the
+  variable is first-class and never relies on the implicit default. The narrow
+  prod-tier allow-list / private-only endpoint remains a design-target.
 - Date: 2026-06-03
 - Authors: platform-team
 - Related issues: (ported)

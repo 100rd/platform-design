@@ -1,6 +1,9 @@
 # ADR-0004: Terragrunt over plain Terraform for multi-account orchestration
 
 - Status: **Accepted** — decision is *adopted (live in source estate)*
+- platform-design status: **synced** — Terragrunt is the orchestration layer
+  (`terragrunt/root.hcl`, `terragrunt/_envcommon/`, `catalog/units/` +
+  `catalog/stacks/`); modules under `terraform/modules/`.
 - Date: 2026-06-03
 - Authors: platform-team
 - Related issues: (ported)

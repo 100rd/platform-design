@@ -1,6 +1,9 @@
 # ADR-0014: Argo Rollouts canary with Gateway API traffic-routing and analysis
 
 - Status: **Accepted** — decision is *adopted (live in source estate)*
+- platform-design status: **synced** (#238) — the shared `helm/app` chart ships
+  `rollout.yaml` (canary + `gatewayAPI` traffic plugin), `analysistemplate.yaml`
+  (`error-rate` / `latency-p95`), and `service-canary.yaml`.
 - Date: 2026-06-03
 - Authors: platform-team
 - Related issues: (ported)

@@ -1,6 +1,9 @@
 # ADR-0005: Hub-and-spoke connectivity via AWS Transit Gateway
 
 - Status: **Accepted** — decision is *adopted (live in source estate)*
+- platform-design status: **synced** — TGW hub-and-spoke modules present
+  (`terraform/modules/transit-gateway`, `tgw-attachment`, `tgw-peering`);
+  network-account connectivity stack wires them.
 - Date: 2026-06-03
 - Authors: platform-team
 - Related issues: (ported)

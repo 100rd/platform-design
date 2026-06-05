@@ -1,6 +1,13 @@
 # ADR-0012: `cluster_role` label scheme for ArgoCD ApplicationSet selectors
 
 - Status: **Accepted** — decision is *adopted (live in source estate)*
+- platform-design status: **synced** — ApplicationSets select on a
+  `cluster-role` label (`argocd/bootstrap/applicationsets/role-apps-appset.yaml`
+  matchExpression + `apps/cluster-roles/{{cluster-role}}/*`; infra /
+  observability appsets and overlay kustomizations set the label). Concrete
+  role values here are `dex` / `backend` / `3rd-party` / `velocity` /
+  `listeners` rather than the ADR's illustrative `platform`/`app`/`data`, but
+  the label-driven selector scheme is the live decision.
 - Date: 2026-06-03
 - Authors: platform-team
 - Related issues: (ported)

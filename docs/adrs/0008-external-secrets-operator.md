@@ -1,6 +1,10 @@
 # ADR-0008: External Secrets Operator over native K8s secrets
 
 - Status: **Accepted** — decision is *adopted (live in source estate)*
+- platform-design status: **synced** — ESO present
+  (`apps/infra/cluster-secret-store/` with `ClusterSecretStore` +
+  parameter-store templates; `apps/infra/external-secrets`). The ESO IRSA
+  binding (`eso-irsa`) is in-flight WIP.
 - Date: 2026-06-03
 - Authors: platform-team
 - Related issues: (ported)

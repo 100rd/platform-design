@@ -4,6 +4,11 @@
   legacy-side return routes and the prod NACL backstop are tracked as
   cross-account follow-ups (see *Consequences*), so those sub-parts are
   *design-target*. Builds on ADR-0005 (hub-spoke TGW).
+- platform-design status: **pending** — the inter-VPC / Pritunl cross-estate
+  join model is not yet ported into this repo (no VPN-join / trust-sub-pool
+  wiring present); the underlying TGW primitives from ADR-0005 exist, but the
+  segmentation model itself is outstanding.
+- Tracked by: #243
 - Date: 2026-06-03
 - Authors: platform-team, security
 - Related issues: (ported)
