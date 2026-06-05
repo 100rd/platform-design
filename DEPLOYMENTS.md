@@ -43,6 +43,7 @@ Applications deployed via ArgoCD from `apps/infra/`
 | prometheus-stack | 1.1.0 | v0.70.0 | Production-ready Prometheus + Thanos + Grafana stack for lar |
 | pyroscope | 1.0.0 | 1.18.0 | Grafana Pyroscope continuous profiling for production gaming |
 | tempo | 1.0.0 | 2.3.1 | Production-ready distributed tracing stack with Tempo and Op |
+| yace | 0.1.0 | v0.61.2 | > |
 
 ## Helm Chart Dependencies
 
