@@ -1,0 +1,25 @@
+apiVersion: v2
+name: gateway-api-crds
+description: Gateway API standard channel CRDs v1.2.1 + Cilium GatewayClass (ADR-0009)
+version: 0.1.0
+type: application
+# No upstream chart dependency — CRDs are vendored directly in crds/ so ArgoCD
+# can apply them with ServerSideApply before any Gateway resource is created.
+# This chart MUST sync before charts that create Gateway/HTTPRoute resources
+# (apps/infra/gateways) and before the Cilium Helm release that enables
+# gatewayAPI. Ordering is enforced via argocd.argoproj.io/sync-wave annotations
+# on the rendered resources (CRDs/GatewayClass land at the earliest waves).
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - gateway-api
+  - ingress
+  - cilium
+  - networking
+
+annotations:
+  category: Networking
+  platform: Kubernetes
