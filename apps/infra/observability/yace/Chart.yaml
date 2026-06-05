@@ -1,0 +1,40 @@
+apiVersion: v2
+name: yace
+description: >
+  YACE (Yet Another CloudWatch Exporter) - polls AWS CloudWatch metrics and
+  exposes them in Prometheus format. Deployed to the observability namespace on
+  clusters where AWS IRSA is available. Feeds the "AWS Infrastructure Overview"
+  Grafana dashboard (NetworkELB / ApplicationELB / S3 / EBS).
+type: application
+version: 0.1.0
+appVersion: "v0.61.2"
+
+keywords:
+  - cloudwatch
+  - aws
+  - yace
+  - exporter
+  - observability
+  - metrics
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+# yet-another-cloudwatch-exporter - the canonical YACE chart published by the
+# upstream project at nerdswords/helm-charts. prometheus-community does NOT host
+# YACE (only the unrelated, older prometheus-cloudwatch-exporter), so the chart
+# must be pulled from the project's own Helm repo.
+# Chart 0.38.0 ships YACE app v0.61.2 - supports discovery jobs, decoupled
+# scraping, IRSA, and ARM64 multi-arch images.
+dependencies:
+  - name: yet-another-cloudwatch-exporter
+    version: "0.38.0"
+    repository: https://nerdswords.github.io/helm-charts
+    condition: yet-another-cloudwatch-exporter.enabled
+
+annotations:
+  category: observability
+  licenses: Apache-2.0
+  # Ported from qbiq-ai/argocd@c364c6c apps/observability/yace, 2026-06 sync.
+  "platform.example.com/provenance": "qbiq-ai/argocd@c364c6c"
