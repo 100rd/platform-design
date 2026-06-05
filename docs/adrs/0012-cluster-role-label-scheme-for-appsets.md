@@ -78,10 +78,10 @@ bug this ADR fixes.
 ## References
 
 - ArgoCD ApplicationSet cluster generator: <https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/>
-- Ported from `qbiq-ai/infra` ADR-011 (cluster_role label scheme) and the
-  `qbiq-ai/argocd` ApplicationSet selectors
+- Ported from `infra` ADR-011 (cluster_role label scheme) and the
+  `argocd` ApplicationSet selectors
 - Related: ADR-0006 (ArgoCD GitOps)
 
 ---
-*Ported from qbiq-ai/infra@572b54d (and argocd@c364c6c) during the 2026-06
+*Ported from infra@572b54d (and argocd@c364c6c) during the 2026-06
 platform-design sync. Decision status in the source estate: adopted (live).*

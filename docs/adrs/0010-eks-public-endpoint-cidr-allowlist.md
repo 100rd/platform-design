@@ -88,10 +88,10 @@ cannot be tightened without a module change. Externalising it is the whole point
 ## References
 
 - EKS endpoint access: <https://docs.aws.amazon.com/eks/latest/userguide/cluster-endpoint.html>
-- Ported from `qbiq-ai/infra` ADR-009 (EKS public endpoint + parameterised CIDR)
+- Ported from `infra` ADR-009 (EKS public endpoint + parameterised CIDR)
 - Related: ADR-0003 (Cilium CNI), ADR-0001 (OU split / tier separation)
 
 ---
-*Ported from qbiq-ai/infra@572b54d (and argocd@c364c6c) during the 2026-06
+*Ported from infra@572b54d (and argocd@c364c6c) during the 2026-06
 platform-design sync. Decision status in the source estate: adopted (live) for
 the shared/non-prod cluster; narrow prod allow-list is a design-target.*

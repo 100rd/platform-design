@@ -92,9 +92,9 @@ default (Alternative A) — same rejection.
 ## References
 
 - Cilium docs: <https://docs.cilium.io/>
-- Ported from `qbiq-ai/infra` ADR-001 (Cilium over aws-vpc-cni)
+- Ported from `infra` ADR-001 (Cilium over aws-vpc-cni)
 - Related: ADR-0009 (Cilium Gateway API ingress)
 
 ---
-*Ported from qbiq-ai/infra@572b54d (and argocd@c364c6c) during the 2026-06
+*Ported from infra@572b54d (and argocd@c364c6c) during the 2026-06
 platform-design sync. Decision status in the source estate: adopted (live).*

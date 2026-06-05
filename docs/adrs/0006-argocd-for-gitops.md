@@ -82,11 +82,11 @@ fails the self-healing / auditability requirement.
 ## References
 
 - ArgoCD docs: <https://argo-cd.readthedocs.io/>
-- Ported from `qbiq-ai/infra` ADR-004 (ArgoCD for GitOps) and `qbiq-ai/argocd`
+- Ported from `infra` ADR-004 (ArgoCD for GitOps) and `argocd`
   app-of-apps layout
 - Related: ADR-0008 (ESO), ADR-0012 (cluster-role labels), ADR-0014 (Argo
   Rollouts), ADR-0015 (reusable CI pipelines)
 
 ---
-*Ported from qbiq-ai/infra@572b54d (and argocd@c364c6c) during the 2026-06
+*Ported from infra@572b54d (and argocd@c364c6c) during the 2026-06
 platform-design sync. Decision status in the source estate: adopted (live).*

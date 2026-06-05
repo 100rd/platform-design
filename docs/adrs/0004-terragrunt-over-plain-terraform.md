@@ -81,9 +81,9 @@ pattern exists to eliminate; it does not scale to the account/region count above
 ## References
 
 - Terragrunt docs: <https://terragrunt.gruntwork.io/>
-- Ported from `qbiq-ai/infra` ADR-002 (Terragrunt over plain Terraform)
+- Ported from `infra` ADR-002 (Terragrunt over plain Terraform)
 - Related: ADR-0001 (OU split), ADR-0002 (Terraform-only state backend)
 
 ---
-*Ported from qbiq-ai/infra@572b54d (and argocd@c364c6c) during the 2026-06
+*Ported from infra@572b54d (and argocd@c364c6c) during the 2026-06
 platform-design sync. Decision status in the source estate: adopted (live).*

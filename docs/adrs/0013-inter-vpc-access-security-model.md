@@ -167,11 +167,11 @@ transitive path to prod is possible. The model must precede enabling routing.
 ## References
 
 - AWS TGW appliance-mode / Network Firewall: <https://docs.aws.amazon.com/network-firewall/latest/developerguide/>
-- Ported from `qbiq-ai/infra` ADR-012 (inter-VPC access security model)
+- Ported from `infra` ADR-012 (inter-VPC access security model)
 - Related: ADR-0005 (hub-spoke TGW), ADR-0001 (OU split)
 
 ---
-*Ported from qbiq-ai/infra@572b54d (and argocd@c364c6c) during the 2026-06
+*Ported from infra@572b54d (and argocd@c364c6c) during the 2026-06
 platform-design sync. Decision status in the source estate: in-repo enforcement
 adopted (live); legacy-side return routes and prod NACL backstop are
 cross-account design-targets.*

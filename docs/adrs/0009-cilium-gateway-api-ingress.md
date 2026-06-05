@@ -85,9 +85,9 @@ TLS termination, or host/path policy layer.
 ## References
 
 - Kubernetes Gateway API: <https://gateway-api.sigs.k8s.io/>
-- Ported from `qbiq-ai/infra` ADR-008 and `qbiq-ai/argocd` Gateway API usage
+- Ported from `infra` ADR-008 and `argocd` Gateway API usage
 - Related: ADR-0003 (Cilium CNI), ADR-0014 (Argo Rollouts canary)
 
 ---
-*Ported from qbiq-ai/infra@572b54d (and argocd@c364c6c) during the 2026-06
+*Ported from infra@572b54d (and argocd@c364c6c) during the 2026-06
 platform-design sync. Decision status in the source estate: adopted (live).*

@@ -114,11 +114,11 @@ CodeQL minutes become a problem.
 - cosign / Sigstore keyless: <https://docs.sigstore.dev/cosign/signing/overview/>
 - kubeconform: <https://github.com/yannh/kubeconform>; conftest:
   <https://www.conftest.dev/>
-- Ported from `qbiq-ai/infra` CI/CD ADR-002 (Tier 1 hardening)
+- Ported from `infra` CI/CD ADR-002 (Tier 1 hardening)
 - Related: ADR-0015 (reusable CI pipelines), ADR-0006 (ArgoCD), ADR-0014 (Argo
   Rollouts canary)
 
 ---
-*Ported from qbiq-ai/infra@572b54d (and argocd@c364c6c) during the 2026-06
+*Ported from infra@572b54d (and argocd@c364c6c) during the 2026-06
 platform-design sync. Decision status in the source estate: Proposed / rolling
 out (design-target).*

@@ -6,7 +6,7 @@ Alternatives considered → Consequences → Implementation notes → References
 
 ADRs 0001–0002 are native to platform-design. ADRs 0003–0016 were **ported during
 the 2026-06 platform-design sync** from the source-of-truth estate
-(`qbiq-ai/infra@572b54d` and `qbiq-ai/argocd@c364c6c`), with wording adapted to
+(`infra@572b54d` and `argocd@c364c6c`), with wording adapted to
 this transaction-analytics platform. Each ported ADR carries a provenance footer
 and is marked **adopted** (live in the source estate) or **design-target**
 (proposed / rolling out).
@@ -34,7 +34,7 @@ and is marked **adopted** (live in the source estate) or **design-target**
 
 ## Notes on the sync
 
-- **Multi-account strategy** (source `qbiq-ai/infra` ADR-007) is **not** a
+- **Multi-account strategy** (source `infra` ADR-007) is **not** a
   separate ADR here: it overlaps [ADR-0001](0001-ou-split.md) (the OU split). The
   account/OU rationale (blast-radius isolation, per-account cost allocation,
   OU-level SCP guardrails, Control Tower vending, separate Security/Log Archive

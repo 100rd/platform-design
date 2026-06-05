@@ -28,7 +28,7 @@ and ships a Prometheus stack — the prerequisites for metric-gated canary.
 ## Decision
 
 Use **Argo Rollouts** with a **canary** strategy for production workloads via the
-shared `qbiq-app` Helm chart. Traffic is shifted by the **Gateway API plugin**
+shared `app` Helm chart. Traffic is shifted by the **Gateway API plugin**
 (`argoproj-labs/gatewayAPI`) adjusting `HTTPRoute` backend weights between a
 stable and a canary Service; each weight step is gated by an inline **Analysis**
 (Prometheus `error-rate` and `latency-p95` queries against the canary Service
@@ -85,7 +85,7 @@ Same as Alternative A — rejected for the same reasons.
 
 ## Implementation notes
 
-- Shared chart `qbiq-app` templates: `rollout.yaml` (canary steps +
+- Shared chart `app` templates: `rollout.yaml` (canary steps +
   `trafficRouting.plugins.argoproj-labs/gatewayAPI`), `analysistemplate.yaml`
   (`error-rate`, `latency-p95`), `service-canary.yaml`, `httproute.yaml`.
 - Canary weights and analysis parameters are chart values per workload; analysis
@@ -95,9 +95,9 @@ Same as Alternative A — rejected for the same reasons.
 
 - Argo Rollouts: <https://argo-rollouts.readthedocs.io/>
 - Gateway API plugin: <https://github.com/argoproj-labs/rollouts-plugin-trafficrouter-gatewayapi>
-- Ported from `qbiq-ai/argocd` (`charts/qbiq-app` rollout + analysistemplate)
+- Ported from `argocd` (`charts/app` rollout + analysistemplate)
 - Related: ADR-0006 (ArgoCD), ADR-0009 (Cilium Gateway API)
 
 ---
-*Ported from qbiq-ai/infra@572b54d (and argocd@c364c6c) during the 2026-06
+*Ported from infra@572b54d (and argocd@c364c6c) during the 2026-06
 platform-design sync. Decision status in the source estate: adopted (live).*

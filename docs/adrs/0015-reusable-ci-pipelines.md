@@ -111,10 +111,10 @@ are needed.
 
 - GitHub reusable workflows: <https://docs.github.com/actions/using-workflows/reusing-workflows>
 - GitHub OIDC → AWS: <https://docs.github.com/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services>
-- Ported from `qbiq-ai/infra` CI/CD ADR-001 (reusable pipelines)
+- Ported from `infra` CI/CD ADR-001 (reusable pipelines)
 - Related: ADR-0004 (Terragrunt), ADR-0006 (ArgoCD), ADR-0016 (Tier 1 hardening)
 
 ---
-*Ported from qbiq-ai/infra@572b54d (and argocd@c364c6c) during the 2026-06
+*Ported from infra@572b54d (and argocd@c364c6c) during the 2026-06
 platform-design sync. Decision status in the source estate: Proposed / rolling
 out (design-target); the seed OIDC+ECR+Trivy build workflow is live.*

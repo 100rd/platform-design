@@ -83,9 +83,9 @@ connectivity, which does not meet the requirement.
 ## References
 
 - AWS Transit Gateway: <https://docs.aws.amazon.com/vpc/latest/tgw/>
-- Ported from `qbiq-ai/infra` ADR-003 (Hub-and-spoke via Transit Gateway)
+- Ported from `infra` ADR-003 (Hub-and-spoke via Transit Gateway)
 - Related: ADR-0001 (OU split), ADR-0013 (inter-VPC access security model)
 
 ---
-*Ported from qbiq-ai/infra@572b54d (and argocd@c364c6c) during the 2026-06
+*Ported from infra@572b54d (and argocd@c364c6c) during the 2026-06
 platform-design sync. Decision status in the source estate: adopted (live).*
