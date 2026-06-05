@@ -13,7 +13,7 @@ The platform-design repo originally created five Organizational Units:
 `Security`, `Infrastructure`, `Workloads/NonProd`, `Workloads/Prod`, plus a
 hard-coded `Suspended` OU inside the organisation Terraform module. This was
 adequate for the initial rollout but missed two pieces called out by AWS
-Control Tower best practice and the source-repo `qbiq-ai/infra` lineage:
+Control Tower best practice and the source-repo `infra` lineage:
 
 1. A `Deployments` OU to isolate AFT (Account Factory for Terraform) and
    CI/CD automation accounts from the workload data plane.
@@ -107,6 +107,6 @@ inherited ones. Top-level placement keeps the SCP attachment math clean.
 
 - Issue #158
 - `docs/ou-structure.md`
-- Source repo: `qbiq-ai/infra` issues #114-#117
+- Source repo: `infra` issues #114-#117
 - AWS Control Tower OU best practices:
   <https://docs.aws.amazon.com/controltower/latest/userguide/organizations.html>
