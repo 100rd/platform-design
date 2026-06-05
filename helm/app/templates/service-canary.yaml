@@ -7,7 +7,7 @@
   Service (templates/service.yaml) but is intentionally cluster-local (no Cilium
   global / ClusterMesh annotations — canary traffic stays in-cluster).
 
-  Ported from qbiq-ai/argocd@c364c6c charts/qbiq-app (2026-06 sync).
+  Ported from argocd@c364c6c charts/app (2026-06 sync).
 */}}
 {{- if .Values.rollout.enabled }}
 apiVersion: v1

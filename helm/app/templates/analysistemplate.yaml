@@ -9,7 +9,7 @@
   both scoped to the canary Service so stable traffic is not counted. Queries are
   parametrised on {{`{{args.service}}`}} (the canary Service, injected per-step).
 
-  Ported from qbiq-ai/argocd@c364c6c charts/qbiq-app (2026-06 sync), adapted to
+  Ported from argocd@c364c6c charts/app (2026-06 sync), adapted to
   platform-design's app.* helpers.
 */}}
 {{- if and .Values.rollout.enabled .Values.rollout.analysis.enabled }}

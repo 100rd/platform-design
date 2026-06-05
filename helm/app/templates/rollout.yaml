@@ -6,7 +6,7 @@
   If rollout.canary.customSteps is non-empty it is rendered verbatim instead —
   use it for non-standard ladders (e.g. workers without analysis gates).
 
-  Ported from qbiq-ai/argocd@c364c6c charts/qbiq-app (2026-06 sync), adapted to
+  Ported from argocd@c364c6c charts/app (2026-06 sync), adapted to
   platform-design's app.* helper templates and naming conventions.
 */}}
 {{- define "app.canarySteps" -}}

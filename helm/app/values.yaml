@@ -106,7 +106,7 @@ service:
   shared: false
 
 # --- Progressive delivery (Argo Rollouts canary) -----------------------------
-# Ported from qbiq-ai/argocd@c364c6c charts/qbiq-app (2026-06 sync).
+# Ported from argocd@c364c6c charts/app (2026-06 sync).
 #
 # rollout.enabled=false → a plain Deployment (templates/deployment.yaml).
 # rollout.enabled=true  → an Argo Rollouts canary Rollout replaces the

@@ -69,5 +69,5 @@ Consult the `values.yaml` file for the full list of configuration options.
 The progressive-delivery machinery (`rollout.yaml`, `service-canary.yaml`,
 `analysistemplate.yaml`, `httproute.yaml`, the `app.podSpec` shared helper, and
 the `rollout` / `httpRoute` values blocks) was **ported from
-`qbiq-ai/argocd@c364c6c` `charts/qbiq-app`, 2026-06 sync**, adapted to this
+`argocd@c364c6c` `charts/app`, 2026-06 sync**, adapted to this
 chart's `app.*` helper templates and naming conventions.

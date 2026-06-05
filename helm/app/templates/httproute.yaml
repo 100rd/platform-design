@@ -7,7 +7,7 @@
   should ignore this path via ignoreDifferences on the Application). Without a
   Rollout, a single backendRef points at the stable Service.
 
-  Ported from qbiq-ai/argocd@c364c6c charts/qbiq-app (2026-06 sync), adapted to
+  Ported from argocd@c364c6c charts/app (2026-06 sync), adapted to
   platform-design's app.* helpers.
 */}}
 {{- if .Values.httpRoute.enabled }}
