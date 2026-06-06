@@ -49,6 +49,19 @@ locals {
   # Network account reference
   network_account_id = "555555555555"
 
+  # ---------------------------------------------------------------------------
+  # Admin / operator CIDR allow-list (ADR-0010)
+  # Org-level reference for the trusted source ranges allowed to reach an EKS
+  # *public* API endpoint in restricted (prod-tier) environments. Each workload
+  # account composes its own narrow allow-list from these ranges in its own
+  # account.hcl instead of falling back to 0.0.0.0/0.
+  #
+  # TODO: replace the placeholder corp range below with the real office / VPN
+  # egress CIDRs (and any CI runner ranges) before enabling prod public access.
+  admin_cidr_allowlist = [
+    "10.0.0.0/8", # PLACEHOLDER: corporate / VPN egress range — DO NOT ship as-is
+  ]
+
   # SSO
   sso_instance_arn = "" # Populated after SSO setup
 }

@@ -1,11 +1,15 @@
 # ADR-0010: EKS public API endpoint with a parameterised CIDR allow-list
 
 - Status: **Accepted** — decision is *adopted (live in source estate)*
-- platform-design status: **partial** — the CIDR allow-list is parameterised
-  (`catalog/units/eks/terragrunt.hcl` sets
-  `cluster_endpoint_public_access_cidrs`, defaulting to `["0.0.0.0/0"]`), so the
-  variable is first-class and never relies on the implicit default. The narrow
-  prod-tier allow-list / private-only endpoint remains a design-target.
+- platform-design status: **synced** — the CIDR allow-list is parameterised
+  (`catalog/units/eks/terragrunt.hcl` wires `cluster_endpoint_public_access_cidrs`
+  from each account's `eks_public_access_cidrs`, with a fail-closed `[]` default —
+  no implicit `0.0.0.0/0`). The prod tier is now closed: `terragrunt/prod/account.hcl`
+  is private-endpoint-only (`eks_public_access = false`) and carries a restricted,
+  org-driven allow-list placeholder (`10.0.0.0/8` corp/VPN, mirroring
+  `terragrunt/_org/account.hcl` `admin_cidr_allowlist`) instead of `0.0.0.0/0`, so
+  enabling public access can never widen prod to the internet. Dev keeps
+  `0.0.0.0/0`; staging stays private-only.
 - Date: 2026-06-03
 - Authors: platform-team
 - Related issues: (ported)
@@ -85,10 +89,14 @@ cannot be tightened without a module change. Externalising it is the whole point
 
 ## Implementation notes
 
-- `cluster_endpoint_public_access_cidrs` plumbed through `_envcommon` → the EKS
-  `terragrunt.hcl` unit.
-- Shared/non-prod: `["0.0.0.0/0"]` (documented). Prod: narrow allow-list /
-  private — to be set when the prod cluster lands.
+- `cluster_endpoint_public_access_cidrs` plumbed from each account's
+  `eks_public_access_cidrs` local (`account.hcl`) into the catalog EKS unit
+  (`catalog/units/eks/terragrunt.hcl`); documented fail-closed `[]` default.
+- Dev: `["0.0.0.0/0"]` (documented, developer convenience). Staging: `[]`
+  (private-only). Prod: `eks_public_access = false` (private-only) plus a
+  restricted org-driven allow-list placeholder (`10.0.0.0/8` corp/VPN, mirroring
+  `_org/account.hcl` `admin_cidr_allowlist`) so any future public-access flip is
+  constrained — never `0.0.0.0/0`.
 
 ## References
 
