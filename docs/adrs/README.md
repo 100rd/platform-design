@@ -13,6 +13,11 @@ and is marked **adopted** (live in the source estate) or **design-target**
 Proposed to **Accepted — rolling out** once PR #241 implemented them in-repo
 (Tier-1 composite actions + reusable workflows + cosign signing).
 
+ADRs 0017–0022 are **research-backed** — formalized from the 2026 platform
+modernization deep-dives (grounded in `infra@572b54d` / `argocd@c364c6c`). They are
+all **Proposed** / **pending**: decisions to ratify, not yet implemented. They are
+tracked by ROADMAP Phase 8 under epic #252.
+
 Every ported ADR also carries a **platform-design status** (`synced` / `partial`
 / `pending`) recording whether the decision is actually wired into *this* repo —
 see the column in the index below. This makes the catalog a development driver:
@@ -45,6 +50,12 @@ decision.
 | [0014](0014-argo-rollouts-canary-progressive-delivery.md) | Argo Rollouts canary with Gateway API traffic-routing and analysis | Accepted | synced (#238) | ported · adopted |
 | [0015](0015-reusable-ci-pipelines.md) | Reusable CI/CD pipelines for the platform organisation | Accepted — rolling out | synced (#241) | ported · implemented by #241 |
 | [0016](0016-tier1-supply-chain-hardening.md) | Tier 1 CI/CD hardening — dep scan, secrets, SAST, signing, manifest validation, smoke | Accepted | synced (#241, #248) | ported · implemented by #241, #248 |
+| [0017](0017-resource-side-perimeter-and-declarative-org-controls.md) | Resource-side data perimeter and declarative org controls (RCPs, EC2 Declarative Policies, full-IAM SCPs) | Proposed | pending | research-backed |
+| [0018](0018-eks-pod-identity-as-default-workload-identity.md) | EKS Pod Identity as the default workload identity (IRSA becomes legacy) | Proposed | pending | research-backed |
+| [0019](0019-harvest-cilium-ebpf-capabilities.md) | Harvest unused Cilium / eBPF capabilities (OBI tracing, Hubble UI, Tetragon, ClusterMesh) | Proposed | pending | research-backed |
+| [0020](0020-kyverno-and-vap-policy-engine.md) | Kyverno + ValidatingAdmissionPolicy as the policy-engine layer | Proposed | pending | research-backed |
+| [0021](0021-kargo-gitops-promotion-layer.md) | Kargo as the GitOps environment-promotion layer | Proposed | pending | research-backed |
+| [0022](0022-ci-supply-chain-runtime-hardening.md) | CI supply-chain runtime hardening — Actions SAST + runner egress monitoring | Proposed | pending | research-backed |
 
 ## Notes on the sync
 

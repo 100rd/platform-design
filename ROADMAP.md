@@ -167,6 +167,26 @@ guard is the `partial` remainder). #176 stands up the ADR catalog itself
 
 ---
 
+## Phase 8 — 2026 Modernization (research-backed) (PLANNED)
+
+These items came from the **2026 platform-block research** deep-dives — formalized
+into six **Proposed** ADRs (0017–0022), all `pending` (decisions to ratify, not yet
+implemented). Tracked under epic [#252](https://github.com/100rd/platform-design/issues/252).
+
+| # | Title | Status | Governing ADR |
+|---|-------|--------|---------------|
+| #252 | Resource-side data perimeter + declarative org controls (RCPs, EC2 Declarative Policies, full-IAM SCPs, `CheckNoNewAccess` gate) | PLANNED | [ADR-0017](docs/adrs/0017-resource-side-perimeter-and-declarative-org-controls.md) |
+| #252 | EKS Pod Identity as default workload identity (IRSA → legacy, ABAC session tags) | PLANNED | [ADR-0018](docs/adrs/0018-eks-pod-identity-as-default-workload-identity.md) |
+| #252 | Harvest Cilium / eBPF capabilities (OBI→Tempo tracing, Hubble UI, Tetragon, ClusterMesh) | PLANNED | [ADR-0019](docs/adrs/0019-harvest-cilium-ebpf-capabilities.md) |
+| #252 | Kyverno + ValidatingAdmissionPolicy policy-engine layer (complements Gatekeeper) | PLANNED | [ADR-0020](docs/adrs/0020-kyverno-and-vap-policy-engine.md) |
+| #252 | Kargo GitOps environment-promotion layer (bump 1.2→1.9, Prometheus analysis gates) | PLANNED | [ADR-0021](docs/adrs/0021-kargo-gitops-promotion-layer.md) |
+| #252 | CI supply-chain runtime hardening (zizmor Actions SAST + Harden-Runner egress; spike #251) | PLANNED | [ADR-0022](docs/adrs/0022-ci-supply-chain-runtime-hardening.md) |
+
+**Phase exit criteria**: each ADR ratified (Proposed → Accepted) and its decision
+wired in-repo (`pending` → `synced`).
+
+---
+
 ## GATE umbrella issues
 
 | GATE | Issue | Children | Governing ADRs | Status |
