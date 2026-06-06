@@ -1,12 +1,14 @@
 # ADR-0011: Break-glass IAM user destroy protection
 
 - Status: **Accepted** — decision is *adopted (live in source estate)*
-- platform-design status: **partial** — break-glass access exists here via an
-  SSO permission set (`terragrunt/_org/_global/sso`), the `iam-baseline`
-  MFA-enforcement policy, and `docs/break-glass-procedure.md`, but the specific
-  guard this ADR mandates — `lifecycle { prevent_destroy = true }` on
-  `aws_iam_user.this` in a `modules/break-glass-user` — is not present (no such
-  module / IAM-user resource in this repo yet).
+- platform-design status: **synced** — the dedicated
+  `terraform/modules/break-glass-user` module now exists with the guard this ADR
+  mandates: `lifecycle { prevent_destroy = true }` plus `force_destroy = false`
+  on `aws_iam_user.this`, an MFA-enforcement inline policy, and a CloudWatch
+  alarm on break-glass usage. It is wired in the management account via
+  `terragrunt/_org/_global/break-glass-user` (and reusable via
+  `catalog/units/break-glass-user`), alongside the pre-existing SSO permission
+  set, `iam-baseline` MFA policy, and `docs/break-glass-procedure.md`.
 - Date: 2026-06-03
 - Authors: platform-team
 - Related issues: (ported)
