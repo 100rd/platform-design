@@ -37,14 +37,14 @@ decision.
 | [0006](0006-argocd-for-gitops.md) | ArgoCD for GitOps delivery of Kubernetes workloads | Accepted | synced | ported · adopted |
 | [0007](0007-karpenter-over-cluster-autoscaler.md) | Karpenter over Cluster Autoscaler for EKS node provisioning | Accepted | synced | ported · adopted |
 | [0008](0008-external-secrets-operator.md) | External Secrets Operator over native K8s secrets | Accepted | synced (eso-irsa WIP) | ported · adopted |
-| [0009](0009-cilium-gateway-api-ingress.md) | Cilium Gateway API as the cluster ingress controller | Accepted | partial (HTTPRoute scaffolding only; ingress still nlb-ingress) | ported · adopted |
-| [0010](0010-eks-public-endpoint-cidr-allowlist.md) | EKS public API endpoint with a parameterised CIDR allow-list | Accepted | partial (parameterised; prod allow-list pending) | ported · adopted (prod allow-list is a design-target) |
-| [0011](0011-break-glass-iam-destroy-protection.md) | Break-glass IAM user destroy protection | Accepted | partial (SSO/procedure model; no break-glass-user `prevent_destroy`) | ported · adopted |
+| [0009](0009-cilium-gateway-api-ingress.md) | Cilium Gateway API as the cluster ingress controller | Accepted | synced (#247) | ported · adopted |
+| [0010](0010-eks-public-endpoint-cidr-allowlist.md) | EKS public API endpoint with a parameterised CIDR allow-list | Accepted | synced (#245) | ported · adopted |
+| [0011](0011-break-glass-iam-destroy-protection.md) | Break-glass IAM user destroy protection | Accepted | synced (#246) | ported · adopted |
 | [0012](0012-cluster-role-label-scheme-for-appsets.md) | `cluster_role` label scheme for ArgoCD ApplicationSet selectors | Accepted | synced | ported · adopted |
-| [0013](0013-inter-vpc-access-security-model.md) | Inter-VPC access security model (TGW segmentation + cross-estate VPN join) | Accepted | pending (tracked by #243) | ported · adopted (legacy-side routes + prod NACL backstop are design-targets) |
+| [0013](0013-inter-vpc-access-security-model.md) | Inter-VPC access security model (TGW segmentation + cross-estate VPN join) | Accepted | synced (#249) | ported · adopted |
 | [0014](0014-argo-rollouts-canary-progressive-delivery.md) | Argo Rollouts canary with Gateway API traffic-routing and analysis | Accepted | synced (#238) | ported · adopted |
 | [0015](0015-reusable-ci-pipelines.md) | Reusable CI/CD pipelines for the platform organisation | Accepted — rolling out | synced (#241) | ported · implemented by #241 |
-| [0016](0016-tier1-supply-chain-hardening.md) | Tier 1 CI/CD hardening — dep scan, secrets, SAST, signing, manifest validation, smoke | Accepted — rolling out | synced (#241; dep-scan/SAST composites pending) | ported · implemented by #241 |
+| [0016](0016-tier1-supply-chain-hardening.md) | Tier 1 CI/CD hardening — dep scan, secrets, SAST, signing, manifest validation, smoke | Accepted | synced (#241, #248) | ported · implemented by #241, #248 |
 
 ## Notes on the sync
 
