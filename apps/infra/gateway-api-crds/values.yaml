@@ -1,0 +1,15 @@
+# Gateway API CRDs + Cilium GatewayClass (ADR-0009)
+#
+# There are no per-cluster configurable values for the CRD chart — the Gateway
+# API CRDs are cluster-scoped and identical on every cluster, and the Cilium
+# GatewayClass is static. CRDs are vendored under crds/ (standard channel,
+# v1.2.1) so ArgoCD applies them with ServerSideApply ahead of any Gateway,
+# HTTPRoute, or the Cilium gatewayAPI feature.
+#
+# controllerName for the GatewayClass must match the value Cilium registers
+# with (io.cilium/gateway-controller); it is set in templates/gatewayclass.yaml.
+gatewayClass:
+  # Name of the cluster-scoped GatewayClass that Gateways reference.
+  name: cilium
+  # Must match Cilium's registered Gateway API controller name.
+  controllerName: io.cilium/gateway-controller

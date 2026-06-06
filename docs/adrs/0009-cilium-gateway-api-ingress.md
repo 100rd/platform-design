@@ -1,12 +1,18 @@
 # ADR-0009: Cilium Gateway API as the cluster ingress controller
 
 - Status: **Accepted** — decision is *adopted (live in source estate)*
-- platform-design status: **partial** — only the per-workload `HTTPRoute`
-  scaffolding exists (`helm/app/templates/httproute.yaml`, `httpRoute.enabled`,
-  default-off, on the canary path). Cilium is **not** enabled as the cluster
-  ingress controller here (no `gatewayAPI.enabled=true`, no cluster-level
-  `Gateway`/`GatewayClass`); in-tree ingress is still `nlb-ingress` +
-  `aws-lb-controller` + `external-dns`.
+- platform-design status: **synced** — Cilium Gateway API is now the cluster
+  ingress controller in-tree. `apps/infra/cilium` enables `gatewayAPI.enabled=true`;
+  `apps/infra/gateway-api-crds` installs the Gateway API standard CRDs (v1.2.1)
+  and the Cilium `GatewayClass cilium`; `apps/infra/gateways` ships the
+  cluster-level `gw-external` (internet-facing NLB, HTTPS:443, TLS terminated)
+  and `gw-internal` (internal NLB) `Gateway` resources, a cert-manager
+  `Certificate` (`gw-external-tls`, self-signed issuer until DNS is wired), and
+  platform `HTTPRoute`s (Grafana, ArgoCD) — all auto-synced by the `infra`
+  ApplicationSet. The per-workload `helm/app/templates/httproute.yaml` canary
+  path is unchanged. `nlb-ingress` + `aws-lb-controller` + `external-dns` are
+  retained but `nlb-ingress` is demoted to legacy (it may still back
+  product-fiction workloads); it was not removed.
 - Date: 2026-06-03
 - Authors: platform-team
 - Related issues: (ported)

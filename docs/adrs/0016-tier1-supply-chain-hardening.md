@@ -1,17 +1,19 @@
 # ADR-0016: Tier 1 CI/CD hardening — dep scan, secrets, SAST, signing, manifest validation, smoke
 
-- Status: **Accepted** — rolling out. Extends ADR-0015; the signing /
-  manifest-validation / smoke controls are *implemented in this repo* by PR #241.
-  The dep-scan and SAST composite actions are not yet wired org-wide — that
-  remainder stays a *design-target*.
-- platform-design status: **synced** — image signing (`cosign-sign`, keyless,
-  wired into `reusable-build-and-push` after push by digest + SBOM attestation),
-  manifest validation (`manifest-validate` action + `reusable-manifest-validate`
-  workflow + `conftest-opa.yml`), and post-deploy smoke
-  (`argocd-wait-sync-and-smoke`) are present. Secrets scanning runs via the
-  standalone `secret-scan.yml`. Remaining design-target: the `python-dep-scan` /
-  `node-dep-scan` / `sast-codeql` composite actions are not yet packaged
-  org-wide.
+- Status: **Accepted** — implemented. Extends ADR-0015. The signing /
+  manifest-validation / smoke controls landed in PR #241; the remaining dep-scan
+  and SAST composites are now wired in, so the full Tier-1 set is in-repo.
+- platform-design status: **synced** — the complete Tier-1 set is present.
+  Dependency scanning (`python-dep-scan` = pip-audit + OSV; `node-dep-scan` =
+  npm audit + osv-scanner; gating on CRITICAL/HIGH with a `.audit-ignore`
+  allowlist, wired via `reusable-dep-scan`), SAST (`sast-codeql` =
+  CodeQL `security-and-quality`, SARIF → Code Scanning, advisory at the workflow
+  level / merge-blocking via branch protection, wired via `reusable-sast`),
+  image signing (`cosign-sign`, keyless, wired into `reusable-build-and-push`
+  after push by digest + SBOM attestation), manifest validation
+  (`manifest-validate` action + `reusable-manifest-validate` workflow +
+  `conftest-opa.yml`), and post-deploy smoke (`argocd-wait-sync-and-smoke`) are
+  all present. Secrets scanning runs via the standalone `secret-scan.yml`.
 - Implemented by: PR #241 (Tier-1 composite actions + reusable workflows +
   cosign signing; consolidated CI/CD).
 - Date: 2026-06-03
@@ -133,5 +135,6 @@ CodeQL minutes become a problem.
 ---
 *Ported from infra@572b54d (and argocd@c364c6c) during the 2026-06
 platform-design sync. Signing / manifest-validation / smoke implemented in
-platform-design by PR #241. Status: Accepted — rolling out; the dep-scan and
-SAST composite actions remain a design-target.*
+platform-design by PR #241; the dep-scan (`python-dep-scan` / `node-dep-scan`)
+and SAST (`sast-codeql`) composites + their `reusable-dep-scan` / `reusable-sast`
+wiring complete the Tier-1 set. Status: Accepted — implemented; fully synced.*

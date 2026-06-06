@@ -32,14 +32,22 @@ mock they live in-repo and are referenced via local `./.github/...` paths.
 
 ## Tier-1 composite actions (`.github/actions/`)
 
-| Action | Purpose |
-|--------|---------|
-| `cosign-sign` | Keyless image signing via Sigstore + GitHub OIDC, **by digest** (immutable). Optionally attaches the SBOM as a signed cosign attestation (SPDX/CycloneDX). `advisory: true` downgrades sign failures to warnings during Sigstore incidents. |
-| `syft-sbom` | Generate an SBOM (default `spdx-json`) for an image with Syft and upload it as a workflow artifact. |
-| `trivy-scan` | Scan an image with Trivy; the table scan is the **gate** (fails on `CRITICAL,HIGH`), the SARIF upload is best-effort reporting (tolerates repos without Advanced Security). |
-| `manifest-validate` | `helm lint --strict` + `helm template \| kubeconform -strict` + `conftest` against OPA/Rego policies. Catches bad apiVersions, missing values, and policy violations before ArgoCD syncs. |
-| `argocd-tag-bump` | Open a PR in the argocd config repo (`100rd/argocd`) bumping `image.tag` + `image.digest` in a values file. Labels non-prod PRs `auto-merge`. |
-| `argocd-wait-sync-and-smoke` | Post-deploy gate: wait for the ArgoCD app to reach Synced + Healthy, then HTTP-probe an endpoint for an expected 2xx. |
+The full Tier-1 set is now in-repo. The **dependency-scan and SAST composites
+(`python-dep-scan`, `node-dep-scan`, `sast-codeql`) were the remaining
+ADR-0016 design-target** and are added here — completing the set whose signing /
+SBOM / manifest-validation / smoke half landed in PR #241.
+
+| Action | Purpose | Gate |
+|--------|---------|------|
+| `python-dep-scan` | Scan Python deps for CVEs with `pip-audit` (PyPI Advisory DB + OSV). Post-filters the JSON report on `severity-threshold`, honours a `.audit-ignore` allowlist, emits SARIF. Catches application-dependency CVEs that the Trivy **image** scan (OS/system libs only) misses. | **Gating** — fails on `CRITICAL,HIGH` (set `exit-code: 0` for advisory). |
+| `node-dep-scan` | Scan Node deps for CVEs with `npm audit --audit-level=high` + `osv-scanner`. Honours `.audit-ignore`, uploads osv-scanner SARIF. | **Gating** — fails on `high`+ (set `exit-code: 0` for advisory). |
+| `sast-codeql` | GitHub CodeQL static analysis for one language (`security-and-quality` suite). SARIF → Code Scanning. Wraps `github/codeql-action`. | **Advisory** — findings surface in Code Scanning; merge-blocking is enforced by branch protection on that check, not by the job. |
+| `cosign-sign` | Keyless image signing via Sigstore + GitHub OIDC, **by digest** (immutable). Optionally attaches the SBOM as a signed cosign attestation (SPDX/CycloneDX). `advisory: true` downgrades sign failures to warnings during Sigstore incidents. | Gating (unless `advisory`). |
+| `syft-sbom` | Generate an SBOM (default `spdx-json`) for an image with Syft and upload it as a workflow artifact. | n/a |
+| `trivy-scan` | Scan an image with Trivy; the table scan is the **gate** (fails on `CRITICAL,HIGH`), the SARIF upload is best-effort reporting (tolerates repos without Advanced Security). | Gating. |
+| `manifest-validate` | `helm lint --strict` + `helm template \| kubeconform -strict` + `conftest` against OPA/Rego policies. Catches bad apiVersions, missing values, and policy violations before ArgoCD syncs. | Gating (conftest advisory in v1). |
+| `argocd-tag-bump` | Open a PR in the argocd config repo (`100rd/argocd`) bumping `image.tag` + `image.digest` in a values file. Labels non-prod PRs `auto-merge`. | n/a |
+| `argocd-wait-sync-and-smoke` | Post-deploy gate: wait for the ArgoCD app to reach Synced + Healthy, then HTTP-probe an endpoint for an expected 2xx. | Gating. |
 
 ## Reusable pipelines (`.github/workflows/`)
 
@@ -60,6 +68,20 @@ via `auto_merge_override`.
 ### `reusable-manifest-validate.yml`
 Wraps `manifest-validate`. Intended to run on the tag-bump PRs created by
 `reusable-deploy-via-argocd.yml`, and usable directly from any chart-owning repo.
+
+### `reusable-dep-scan.yml`
+Wraps `python-dep-scan` / `node-dep-scan` (selected by the `language` input).
+**Gating** by default (fails on `CRITICAL,HIGH` / `high`+); `advisory: true`
+flips it to reporting-only. Honours a per-repo `.audit-ignore` allowlist and
+uploads SARIF to GitHub Security. Run it as an upstream gate alongside language
+lint/test, before `reusable-build-and-push`.
+
+### `reusable-sast.yml`
+Wraps `sast-codeql` over a matrix of `languages` (CodeQL `security-and-quality`).
+**Advisory** at the workflow level — SARIF flows to Code Scanning and
+merge-blocking is enforced by branch protection on that check, not by failing the
+job (`continue-on-error` unless `fail_on_error: true`). SAST is the long pole;
+per ADR-0016 it can move to a scheduled scan if CI minutes blow up.
 
 ### `reusable-pipeline-demo.yml`
 Manual (`workflow_dispatch`) thin caller wiring `reusable-build-and-push` →
