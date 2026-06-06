@@ -1,0 +1,70 @@
+# -----------------------------------------------------------------------------
+# zizmor.yml
+#
+# Static analysis of THIS repo's own GitHub Actions workflows + composite actions
+# with zizmor (https://github.com/zizmorcore/zizmor). Findings are uploaded as
+# SARIF to GitHub Code Scanning, alongside the existing Trivy / CodeQL / gitleaks
+# surfaces (ADR-0016).
+#
+# Why: the Tier-1 set (ADR-0016) lints app code (CodeQL), scans images (Trivy),
+# scans deps (pip-audit/osv) and signs images (cosign) — but nothing ever lints
+# the CI workflows themselves. zizmor closes that gap: it catches unpinned
+# actions, dangerous `pull_request_target` + checkout patterns, template-injection
+# sinks, over-broad `GITHUB_TOKEN` permissions, and credential-persistence — the
+# exact class of weakness behind the 2025 tj-actions/changed-files compromise.
+#
+# Gating model (matches reusable-sast.yml / ADR-0016): ADVISORY at the workflow
+# level. With `advanced-security: true` zizmor does NOT fail the job on findings —
+# SARIF flows to Code Scanning and merge-blocking is enforced by branch protection
+# on the "zizmor" Code Scanning check, not by failing this job. The job only fails
+# on an internal zizmor error.
+# TODO(security): once findings are triaged to zero, add a branch-protection rule
+# requiring the zizmor Code Scanning check on `main` to make it merge-blocking.
+#
+# Third-party `uses:` are SHA-pinned with a version comment (the Renovate-comment
+# convention from ADR-0015 / the .github/actions composites).
+# -----------------------------------------------------------------------------
+
+name: zizmor (Actions SAST)
+
+on:
+  push:
+    branches: [main, feature/terragrunt]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+      - ".github/zizmor.yml"
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+      - ".github/zizmor.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  zizmor:
+    name: zizmor Actions static analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout
+      security-events: write # upload SARIF to Code Scanning
+      actions: read # read workflow metadata (private/internal repos)
+    steps:
+      - name: Checkout
+        # actions/checkout v4.2.2 (same pin used by .github/actions/argocd-tag-bump)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        # zizmorcore/zizmor-action v0.5.6
+        uses: zizmorcore/zizmor-action@5f14fd08f7cf1cb1609c1e344975f152c7ee938d
+        with:
+          # Lint the whole .github tree (workflows + composite actions).
+          inputs: .github/
+          # advanced-security: true (default) => zizmor uploads SARIF to Code
+          # Scanning itself and does NOT fail the job on findings (advisory).
+          # Honours an optional repo-local .github/zizmor.yml advisory config.
+          advanced-security: true
