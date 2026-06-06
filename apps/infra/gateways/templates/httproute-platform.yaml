@@ -1,0 +1,35 @@
+# HTTPRoutes for the platform's own UIs (ADR-0009).
+#
+# These attach to gw-external (the internet-facing Cilium Gateway) and route a
+# hostname to a backend Service. This is the documented primary ingress path for
+# platform services: new ingress is authored as Gateway API HTTPRoutes here, not
+# as Ingress objects or per-service ALBs (the legacy nlb-ingress Terraform
+# module is retained only for product-fiction workloads — see
+# terraform/modules/nlb-ingress/README.md).
+#
+# Routes are data-driven from .Values.httpRoutes so adding a UI is a values edit.
+{{- range .Values.httpRoutes }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .name }}
+  namespace: {{ .backend.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  parentRefs:
+    - name: gw-external
+      namespace: {{ $.Values.namespace }}
+      sectionName: https
+  hostnames:
+    - {{ .hostname | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ .backend.name }}
+          port: {{ .backend.port }}
+{{- end }}
