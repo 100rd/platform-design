@@ -79,6 +79,26 @@ cilium:
   k8sServicePort: 443
 
   # ---------------------------------------------------------------------------
+  # Gateway API (ADR-0009) — Cilium as the cluster ingress controller
+  # ---------------------------------------------------------------------------
+  # Enables Cilium's native Gateway API support. Cilium watches GatewayClass /
+  # Gateway / HTTPRoute objects and registers the controller name
+  # io.cilium/gateway-controller (matched by the `cilium` GatewayClass in
+  # apps/infra/gateway-api-crds). Cluster ingress is authored as Gateway API
+  # resources (apps/infra/gateways), not Ingress objects or per-service ALBs.
+  #
+  # Ordering: the Gateway API CRDs (apps/infra/gateway-api-crds) MUST be applied
+  # before this Helm release reconciles, or the Cilium operator fails to start
+  # the Gateway controller. ArgoCD sync-waves enforce CRDs-first.
+  gatewayAPI:
+    enabled: true
+    # Gateways expose a single shared LoadBalancer Service; the AWS Load
+    # Balancer Controller turns the Gateway's infrastructure annotations into
+    # an NLB (see apps/infra/gateways).
+    enableAlpn: false
+    enableAppProtocol: false
+
+  # ---------------------------------------------------------------------------
   # Hubble Observability
   # ---------------------------------------------------------------------------
   hubble:
