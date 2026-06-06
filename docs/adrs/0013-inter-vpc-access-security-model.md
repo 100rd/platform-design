@@ -4,11 +4,17 @@
   legacy-side return routes and the prod NACL backstop are tracked as
   cross-account follow-ups (see *Consequences*), so those sub-parts are
   *design-target*. Builds on ADR-0005 (hub-spoke TGW).
-- platform-design status: **pending** — the inter-VPC / Pritunl cross-estate
-  join model is not yet ported into this repo (no VPN-join / trust-sub-pool
-  wiring present); the underlying TGW primitives from ADR-0005 exist, but the
-  segmentation model itself is outstanding.
-- Tracked by: #243
+- platform-design status: **synced** — the inter-VPC / cross-estate join model
+  is now ported: `terraform/modules/remote-access-vpn` (Network-account VPN host
+  on AL2023, public NLB TCP_UDP, TGW join, ops/standard trust sub-pools) and
+  `terraform/modules/inter-vpc-security` (deny-by-default TGW route-table
+  segmentation, the legacy-side routes via the legacy admin-VPC attachment, the
+  asymmetric ops-only prod return routes, and the prod NACL backstop), wired
+  through `catalog/units/{remote-access-vpn,inter-vpc-security}` into the network
+  connectivity stack with the `enable_vpn_routing` / `enable_prod_nacl_backstop`
+  sequencing gates defaulting off. Genericised — no real account IDs / CIDRs /
+  attachment IDs (placeholders only); the cross-account legacy-side *return*
+  routes remain owned by legacy-ops out-of-repo as noted in *Consequences*.
 - Date: 2026-06-03
 - Authors: platform-team, security
 - Related issues: (ported)
