@@ -1,0 +1,58 @@
+---
+# argocd-cmd-params-cm — ArgoCD command-level parameter overrides.
+#
+# Enables two ADR-0024 capabilities on the running ArgoCD 3.3.6 (chart 9.5.1)
+# without any version upgrade:
+#
+#   1. Server-Side Diff / Server-Side Apply (controller.diff.server.side)
+#      The ArgoCD application-controller uses the Kubernetes API server to diff
+#      resources rather than computing diffs client-side. This makes the diff
+#      webhook/defaulting/mutation aware and eliminates spurious OutOfSync
+#      across the clusters-x-git matrix (ADR-0024 section 3).
+#      Field: controller.diff.server.side = "true"
+#
+#   2. Shallow git clone (reposerver.git.shallow)
+#      The repo-server fetches only the required commit(s) instead of full
+#      history, reducing memory and wall-clock on large repos (ADR-0024 section 2).
+#      Field: reposerver.git.shallow = "true"
+#      Note: shallow clone is only effective when revision is a concrete SHA or
+#      a branch/tag that resolves to one. HEAD on a rolling branch still fetches
+#      the tip commit only (depth=1), which is the desired behaviour here.
+#
+# Relationship to syncOptions.ServerSideApply=true in ApplicationSets:
+#   - syncOptions.ServerSideApply=true (per-Application) controls the APPLY
+#     mechanism (SSA field ownership).
+#   - controller.diff.server.side (this ConfigMap) controls the DIFF mechanism
+#     (server-side awareness during OutOfSync detection).
+#   Both are set to get the full "no spurious OutOfSync" benefit.
+#
+# application.namespaces is intentionally omitted here; it is set at chart level
+# to avoid accidental override of the Helm-managed value.
+#
+# Delivery: applied via argocd/config/kustomization.yaml, which is included in
+# the argocd/bootstrap kustomization and therefore managed by the bootstrap
+# ArgoCD Application (argocd/bootstrap/root-app.yaml -> argocd/bootstrap).
+#
+# References:
+#   - ADR-0024: docs/adrs/0024-argocd-operational-hardening.md
+#   - ArgoCD server-side diff: https://argo-cd.readthedocs.io/en/stable/user-guide/diff-strategies/
+#   - ArgoCD params reference: https://argo-cd.readthedocs.io/en/stable/operator-manual/argocd-cmd-params-cm/
+#
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cmd-params-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: argocd
+    app.kubernetes.io/component: application-controller
+data:
+  # --- Server-Side Diff (ADR-0024 section 3) ---
+  # Use the API server for diffing so webhook/defaulting mutations are included.
+  # Eliminates spurious OutOfSync caused by server-side field rewriting.
+  controller.diff.server.side: "true"
+
+  # --- Shallow git clone (ADR-0024 section 2) ---
+  # Fetch depth=1 (tip commit only) instead of full history.
+  # Reduces repo-server memory and clone latency on large repos.
+  reposerver.git.shallow: "true"
