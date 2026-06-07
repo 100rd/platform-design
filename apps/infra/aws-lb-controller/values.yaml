@@ -8,13 +8,16 @@ aws-load-balancer-controller:
   clusterName: ""  # Set via ArgoCD ApplicationSet or --set
 
   # Service account configuration
-  # Uses EKS Pod Identity (recommended for EKS 1.24+)
+  # Uses EKS Pod Identity (ADR-0018) - identity is bound by an
+  # aws_eks_pod_identity_association (catalog/units/pod-identity-lb-controller),
+  # NOT by an IRSA `eks.amazonaws.com/role-arn` annotation. Keep annotations empty:
+  # a ServiceAccount must never carry BOTH an IRSA annotation and a Pod Identity
+  # association (precedence is undocumented by AWS; ADR-0018 treats both as
+  # unsupported).
   serviceAccount:
     create: true
     name: aws-load-balancer-controller
     annotations: {}
-      # If using IRSA instead of Pod Identity:
-      # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/AmazonEKSLoadBalancerControllerRole
 
   # Replica count for HA
   replicaCount: 2

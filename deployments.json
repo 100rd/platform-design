@@ -1,4 +1,4 @@
-{"generated_at": "2026-06-05T21:32:58Z", "applications": [
+{"generated_at": "2026-06-07T19:38:57Z", "applications": [
 {
   "name": "aws-lb-controller",
   "chartVersion": "3.1.0",
@@ -64,6 +64,22 @@
 }
 ,
 {
+  "name": "gateway-api-crds",
+  "chartVersion": "0.1.0",
+  "appVersion": "",
+  "description": "Gateway API standard channel CRDs v1.2.1 + Cilium GatewayClass (ADR-0009)",
+  "path": "apps/infra/gateway-api-crds"
+}
+,
+{
+  "name": "gateways",
+  "chartVersion": "0.1.0",
+  "appVersion": "",
+  "description": "External and internal Cilium Gateways backed by AWS NLBs via the Gateway API (ADR-0009)",
+  "path": "apps/infra/gateways"
+}
+,
+{
   "name": "gpu-operator",
   "chartVersion": "1.0.0",
   "appVersion": "v26.3.0",
@@ -104,6 +120,14 @@
 }
 ,
 {
+  "name": "obi",
+  "chartVersion": "1.0.0",
+  "appVersion": "1.9.3",
+  "description": ">",
+  "path": "apps/infra/observability/obi"
+}
+,
+{
   "name": "otel-collector",
   "chartVersion": "1.0.0",
   "appVersion": "0.143.0",
@@ -141,6 +165,14 @@
   "appVersion": "v0.61.2",
   "description": ">",
   "path": "apps/infra/observability/yace"
+}
+,
+{
+  "name": "opencost",
+  "chartVersion": "1.0.0",
+  "appVersion": "1.113.0",
+  "description": ">-",
+  "path": "apps/infra/opencost"
 }
 ,
 {
