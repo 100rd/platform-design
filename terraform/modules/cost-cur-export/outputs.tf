@@ -66,3 +66,13 @@ output "opencost_irsa_role_name" {
   description = "IAM role name for the OpenCost IRSA role."
   value       = aws_iam_role.opencost.name
 }
+
+output "kms_key_arn" {
+  description = "ARN of the KMS CMK used for CUR + Athena SSE-KMS encryption (module-created or caller-supplied)."
+  value       = local.kms_key_arn
+}
+
+output "kms_key_alias" {
+  description = "Alias of the module-created KMS CMK. Empty string when kms_key_arn was supplied by the caller."
+  value       = var.kms_key_arn == "" ? aws_kms_alias.billing[0].name : ""
+}

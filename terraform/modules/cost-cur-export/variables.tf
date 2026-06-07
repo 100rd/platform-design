@@ -13,6 +13,33 @@ variable "aws_region" {
 }
 
 # ---------------------------------------------------------------------------
+# KMS encryption
+# ---------------------------------------------------------------------------
+
+variable "kms_key_arn" {
+  description = "ARN of an existing KMS CMK to use for CUR + Athena SSE-KMS encryption. When empty (default) the module creates a new CMK in the current account."
+  type        = string
+  default     = ""
+}
+
+variable "kms_alias_name" {
+  description = "KMS alias name (without the 'alias/' prefix) for the CMK created by this module. Ignored when kms_key_arn is supplied."
+  type        = string
+  default     = "opencost-cur-billing"
+}
+
+variable "kms_deletion_window_days" {
+  description = "Waiting period (7–30 days) before the CMK is permanently deleted after a destroy. Ignored when kms_key_arn is supplied."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.kms_deletion_window_days >= 7 && var.kms_deletion_window_days <= 30
+    error_message = "kms_deletion_window_days must be between 7 and 30."
+  }
+}
+
+# ---------------------------------------------------------------------------
 # CUR / S3
 # ---------------------------------------------------------------------------
 

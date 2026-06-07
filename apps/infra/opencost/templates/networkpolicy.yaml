@@ -25,11 +25,13 @@ spec:
     - Egress
 
   ingress:
-    # Prometheus scrapes metrics from OpenCost
+    # Prometheus scrapes metrics from OpenCost.
+    # Namespace label matches the observability namespace where kube-prometheus-stack
+    # is deployed (PR #255 migrated monitoring → observability).
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: monitoring
+              kubernetes.io/metadata.name: observability
           podSelector:
             matchLabels:
               app.kubernetes.io/name: prometheus
@@ -48,11 +50,12 @@ spec:
           port: 9003
 
   egress:
-    # Query Prometheus / Thanos for node metrics
+    # Query Prometheus / Thanos for node metrics.
+    # Targeting the observability namespace (kube-prometheus-stack post-migration).
     - to:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: monitoring
+              kubernetes.io/metadata.name: observability
       ports:
         - protocol: TCP
           port: 9090
@@ -60,14 +63,18 @@ spec:
         - protocol: TCP
           port: 10902
 
-    # Kubernetes API (RBAC, node/pod/service metadata)
+    # Kubernetes API (RBAC, node/pod/service metadata).
+    # namespaceSelector: {} selects all namespaces — necessary because the K8s API
+    # server endpoint is not bound to a specific namespace in standard CNI setups.
     - to:
         - namespaceSelector: {}
       ports:
         - protocol: TCP
           port: 443
 
-    # AWS service endpoints – Athena, S3, Glue (HTTPS only)
+    # AWS service endpoints – Athena, S3, Glue (HTTPS only).
+    # namespaceSelector: {} used here because AWS VPC endpoints / NAT egress does
+    # not traverse a specific namespace; traffic exits the node directly to AWS APIs.
     - to:
         - namespaceSelector: {}
       ports:

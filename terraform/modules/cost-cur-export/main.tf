@@ -4,7 +4,8 @@
 # Implements ADR-0027: OpenCost + AWS CUR/Athena cloud-integration.
 #
 # Resources created:
-#   1. S3 bucket           — CUR delivery destination (Parquet, hourly, versioned, encrypted)
+#   0. KMS key             — CMK for at-rest encryption of CUR and Athena data (CIS requirement)
+#   1. S3 bucket           — CUR delivery destination (Parquet, hourly, versioned, KMS-encrypted)
 #   2. S3 bucket policy    — allow billingreports.amazonaws.com to deliver reports
 #   3. AWS CUR report      — hourly, Parquet, resource IDs, ATHENA additional artifact
 #   4. Glue database       — schema-on-read over the Parquet CUR files
@@ -34,6 +35,105 @@ locals {
 
   # Glue table name: CUR report name with hyphens replaced by underscores.
   glue_table_name = replace(var.cur_report_name, "-", "_")
+
+  # Resolved KMS key ARN: use the caller-supplied key, or fall back to the CMK
+  # created by this module.  The conditional ensures the managed key resource is
+  # only consulted when no external ARN is provided.
+  kms_key_arn = var.kms_key_arn != "" ? var.kms_key_arn : aws_kms_key.billing[0].arn
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# 0. KMS Customer-Managed Key — encrypt CUR S3 bucket and Athena results at rest
+#    CIS AWS Foundations 2.3.1 / AWS Security Best Practice: CMK for billing data.
+#    Skipped when the caller supplies their own key ARN via var.kms_key_arn.
+# ---------------------------------------------------------------------------------------------------------------------
+
+resource "aws_kms_key" "billing" {
+  # Create one CMK only when no external key ARN is provided.
+  count = var.kms_key_arn == "" ? 1 : 0
+
+  description             = "CMK for OpenCost CUR + Athena results buckets (ADR-0027)"
+  deletion_window_in_days = var.kms_deletion_window_days
+  enable_key_rotation     = true
+
+  policy = data.aws_iam_policy_document.kms_key_policy.json
+
+  tags = merge(var.tags, {
+    Name    = "${var.cur_s3_bucket_name}-cmk"
+    Purpose = "opencost-cur-encryption"
+  })
+}
+
+resource "aws_kms_alias" "billing" {
+  count = var.kms_key_arn == "" ? 1 : 0
+
+  name          = "alias/${var.kms_alias_name}"
+  target_key_id = aws_kms_key.billing[0].key_id
+}
+
+# Key policy: allow the owning account full admin, and allow S3 + Athena service
+# principals to use the key on behalf of the account (required for SSE-KMS delivery).
+data "aws_iam_policy_document" "kms_key_policy" {
+  # Root account has full key administration rights.
+  statement {
+    sid    = "KeyAdminRoot"
+    effect = "Allow"
+
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+
+    actions   = ["kms:*"]
+    resources = ["*"]
+  }
+
+  # S3 needs GenerateDataKey + Decrypt to write and read SSE-KMS objects on behalf
+  # of the account (billingreports service uses the S3 service role).
+  statement {
+    sid    = "S3ServiceUse"
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["s3.amazonaws.com"]
+    }
+
+    actions = [
+      "kms:GenerateDataKey",
+      "kms:Decrypt",
+    ]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+
+  # Athena needs GenerateDataKey + Decrypt to write encrypted query results.
+  statement {
+    sid    = "AthenaServiceUse"
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["athena.amazonaws.com"]
+    }
+
+    actions = [
+      "kms:GenerateDataKey",
+      "kms:Decrypt",
+    ]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -63,8 +163,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "cur" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = local.kms_key_arn
     }
+    # S3 Bucket Keys reduce KMS API call volume and cost while preserving CMK control.
     bucket_key_enabled = true
   }
 }
@@ -116,7 +218,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "athena_results" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = local.kms_key_arn
     }
     bucket_key_enabled = true
   }
@@ -284,7 +387,8 @@ resource "aws_athena_workgroup" "opencost" {
       output_location = "s3://${aws_s3_bucket.athena_results.bucket}/results/"
 
       encryption_configuration {
-        encryption_option = "SSE_S3"
+        encryption_option = "SSE_KMS"
+        kms_key_arn       = local.kms_key_arn
       }
     }
 
@@ -300,7 +404,7 @@ resource "aws_athena_workgroup" "opencost" {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# 6. IAM Role — IRSA for OpenCost (least-privilege: read Athena/Glue/S3)
+# 6. IAM Role — IRSA for OpenCost (least-privilege: read Athena/Glue/S3 + KMS)
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "aws_iam_role" "opencost" {
@@ -420,5 +524,20 @@ data "aws_iam_policy_document" "opencost_permissions" {
       aws_s3_bucket.athena_results.arn,
       "${aws_s3_bucket.athena_results.arn}/*",
     ]
+  }
+
+  # KMS — allow OpenCost to decrypt CUR objects and encrypt/decrypt Athena
+  # results using the billing CMK.  Scoped to the resolved key ARN only
+  # (least-privilege: no cross-key access).
+  statement {
+    sid    = "KmsBillingKeyAccess"
+    effect = "Allow"
+
+    actions = [
+      "kms:Decrypt",
+      "kms:GenerateDataKey",
+    ]
+
+    resources = [local.kms_key_arn]
   }
 }

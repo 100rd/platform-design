@@ -47,6 +47,47 @@ run "cur_bucket_blocks_public_access" {
   }
 }
 
+run "cur_bucket_uses_kms_encryption" {
+  command = plan
+
+  assert {
+    condition     = aws_s3_bucket_server_side_encryption_configuration.cur.rule[0].apply_server_side_encryption_by_default[0].sse_algorithm == "aws:kms"
+    error_message = "CUR S3 bucket must use aws:kms SSE algorithm (CIS AWS Foundations 2.3.1)"
+  }
+
+  assert {
+    condition     = aws_s3_bucket_server_side_encryption_configuration.cur.rule[0].bucket_key_enabled == true
+    error_message = "S3 Bucket Keys must be enabled to reduce KMS API call volume"
+  }
+}
+
+run "athena_results_bucket_uses_kms_encryption" {
+  command = plan
+
+  assert {
+    condition     = aws_s3_bucket_server_side_encryption_configuration.athena_results.rule[0].apply_server_side_encryption_by_default[0].sse_algorithm == "aws:kms"
+    error_message = "Athena results S3 bucket must use aws:kms SSE algorithm"
+  }
+}
+
+run "athena_workgroup_uses_kms_encryption" {
+  command = plan
+
+  assert {
+    condition     = aws_athena_workgroup.opencost.configuration[0].result_configuration[0].encryption_configuration[0].encryption_option == "SSE_KMS"
+    error_message = "Athena workgroup must use SSE_KMS for query result encryption"
+  }
+}
+
+run "kms_key_created_by_default" {
+  command = plan
+
+  assert {
+    condition     = var.kms_key_arn == ""
+    error_message = "kms_key_arn should default to empty so the module creates its own CMK"
+  }
+}
+
 run "iam_role_scoped_to_opencost_serviceaccount" {
   command = plan
 

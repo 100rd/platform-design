@@ -69,13 +69,15 @@ opencost:
     # Prometheus / Thanos integration
     # -------------------------------------------------------------------------
     prometheus:
-      # Point at the kube-prometheus-stack Prometheus installed in monitoring/.
+      # Point at the kube-prometheus-stack Prometheus installed in observability/.
+      # PR #255 migrated the monitoring stack from the monitoring namespace to
+      # observability; update the service DNS accordingly.
       # In multi-cluster setups this will be a Thanos Query endpoint.
       internal:
         enabled: false
       external:
         enabled: true
-        url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+        url: http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090
 
     # -------------------------------------------------------------------------
     # ServiceMonitor – expose OpenCost metrics to Prometheus
@@ -85,7 +87,9 @@ opencost:
       # Must match the label the prometheus-stack Prometheus selects on.
       additionalLabels:
         prometheus: kube-prometheus
-      namespace: monitoring
+      # Deploy ServiceMonitor into the observability namespace so the
+      # kube-prometheus-stack Prometheus (post PR #255 migration) can discover it.
+      namespace: observability
       interval: 60s
       scrapeTimeout: 30s
 
