@@ -16,14 +16,32 @@ tetragon:
         maxUnavailable: 1
 
   # ---------------------------------------------------------------------------
-  # Container image
-  # Digest-pinning is enforced by the supply-chain policy (Kyverno ADR-0022).
-  # Pin the digest in the cluster overlay once images are promoted to ECR.
+  # Container image — digest-pinned for supply-chain integrity.
+  #
+  # The upstream cilium/tetragon chart (v1.3.0) renders the agent image via
+  # _container_tetragon.tpl using .Values.tetragon.image.override.  When this
+  # wrapper chart passes values to the subchart named "tetragon", Helm strips
+  # one level — so the parent key `tetragon.tetragon.image.override` maps to
+  # the subchart's `.Values.tetragon.image.override`.
+  #
+  # Digest resolved 2026-06-07 via quay.io registry v2 manifests API:
+  #   curl -sI \
+  #     -H 'Accept: application/vnd.oci.image.index.v1+json' \
+  #     https://quay.io/v2/cilium/tetragon/manifests/v1.3.0
+  #   → docker-content-digest:
+  #       sha256:d196a28172ba6140458e4955f1e3e7d0746e638490214624b756214e5b1809c2
+  # Multi-arch manifest list (index) covering linux/amd64 + linux/arm64.
+  # Cross-checked via `docker manifest inspect`: 2 platform manifests confirmed.
+  # When upgrading: bump override tag AND digest together in one PR.
   # ---------------------------------------------------------------------------
-  image:
-    repository: quay.io/cilium/tetragon
-    tag: v1.3.0
-    pullPolicy: IfNotPresent
+  tetragon:
+    image:
+      repository: quay.io/cilium/tetragon
+      tag: v1.3.0
+      # override replaces the full image ref (repository:tag) when non-empty.
+      # This makes the DaemonSet image reference immutable and auditable.
+      override: "quay.io/cilium/tetragon:v1.3.0@sha256:d196a28172ba6140458e4955f1e3e7d0746e638490214624b756214e5b1809c2"  # v1.3.0
+      pullPolicy: IfNotPresent
 
   # ---------------------------------------------------------------------------
   # Resource limits
@@ -99,9 +117,28 @@ tetragon:
 
   # ---------------------------------------------------------------------------
   # Tetragon operator — manages TracingPolicy lifecycle and CRD upgrades.
+  #
+  # The upstream chart renders the operator image via operator_deployment.yaml
+  # using .Values.tetragonOperator.image.override.  In the parent chart the
+  # path is tetragon.tetragonOperator.image.override.
+  #
+  # Digest resolved 2026-06-07 via quay.io registry v2 manifests API:
+  #   curl -sI \
+  #     -H 'Accept: application/vnd.oci.image.index.v1+json' \
+  #     https://quay.io/v2/cilium/tetragon-operator/manifests/v1.3.0
+  #   → docker-content-digest:
+  #       sha256:97a8e45a3896fa7fbe91e52d980c69ae2db099cf2ed2620eee7404613b3fa1b6
+  # When upgrading: bump override tag AND digest together in one PR.
   # ---------------------------------------------------------------------------
   tetragonOperator:
     enabled: true
+
+    image:
+      repository: quay.io/cilium/tetragon-operator
+      tag: v1.3.0
+      # override replaces the full image ref when non-empty.
+      override: "quay.io/cilium/tetragon-operator:v1.3.0@sha256:97a8e45a3896fa7fbe91e52d980c69ae2db099cf2ed2620eee7404613b3fa1b6"  # v1.3.0
+      pullPolicy: IfNotPresent
 
     resources:
       requests:
