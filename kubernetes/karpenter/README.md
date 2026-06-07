@@ -18,7 +18,7 @@ We have configured four specialized NodePools to handle different workload types
 | NodePool | Architecture | Instance Types | Capacity Type | Best For | Cost Savings |
 |----------|-------------|----------------|---------------|----------|--------------|
 | x86-general-purpose | x86/amd64 | M, C, R series | 80% spot, 20% on-demand | General workloads | ~60-70% |
-| arm64-graviton | ARM64 | Graviton (m7g, c7g, r7g) | 90% spot, 10% on-demand | Cost-sensitive workloads | ~70-80% |
+| arm64-graviton | ARM64 | Graviton4 (c8g/m8g/r8g, preferred) + Graviton3 (7g) fallback | 90% spot, 10% on-demand | Cost-sensitive workloads | ~70-80% |
 | c-series-compute | x86/amd64 | C series only | 70% spot, 30% on-demand | CPU-intensive tasks | ~50-60% |
 | spot-flexible | x86 + ARM64 | All M, C, R, T series | 100% spot | Interruption-tolerant | ~85-92% |
 
@@ -462,3 +462,35 @@ kubectl describe nodepool <name>
 # Describe EC2NodeClass
 kubectl describe ec2nodeclass <name>
 ```
+
+
+## Tier-1 Compute (doc-verified 2026-06-07)
+
+These NodePools were extended for the Tier-1 compute wins. All facts below were
+verified against AWS / Karpenter documentation on 2026-06-07.
+
+### Graviton4 (8g families)
+
+- Graviton4 instance families **C8g / M8g / R8g** (incl. `d`/`n` variants) are
+  **GA** and now lead the instance-family list on the `arm64-graviton` and
+  `spot-flexible` NodePools.
+- Graviton3 **7g** families are retained as **fallback** so Karpenter can still
+  provision when 8g capacity is unavailable in an AZ.
+- AL2023 EKS AMI now ships **kernel 6.12**, which fully supports Graviton4.
+- `karpenter.k8s.aws/instance-cpu` on the arm64 NodePool was widened (up to 192)
+  to allow the larger 8g sizes (e.g. `*8g.48xlarge`).
+
+### Node Auto-Repair (Karpenter NodeRepair)
+
+- Enabled via the **karpenter** Terraform module
+  (`settings.featureGates.nodeRepair`, exposed as `var.enable_node_repair`,
+  default `true`). NodeRepair is an **alpha** feature gate in Karpenter **v1.10**
+  (our pinned version).
+- Health signals come from the **EKS Node Monitoring Agent** managed addon
+  (`eks-node-monitoring-agent`), wired in the `minimal-platform-eks-addons`
+  catalog unit via the generic `eks-addons` module.
+- **Safety cap**: Karpenter limits node-repair disruption to a maximum of
+  **20% of each NodePool's nodes** at any one time (hard-coded upper bound,
+  independent of `disruption.budgets`). A NodePool's own disruption budgets still
+  apply on top of this cap. This prevents a correlated health-signal failure from
+  draining an entire NodePool.
