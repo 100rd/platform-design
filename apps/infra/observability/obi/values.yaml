@@ -1,5 +1,5 @@
-# OBI / Grafana Beyla — eBPF zero-code auto-instrumentation
-# ADR-0019: OBI/Beyla DaemonSet → OTLP → otel-collector gateway → Tempo
+# OBI / Grafana Beyla -- eBPF zero-code auto-instrumentation
+# ADR-0019: OBI/Beyla DaemonSet -> OTLP -> otel-collector gateway -> Tempo
 #
 # RED-metric source decision (ADR-0026):
 #   Tempo's metrics-generator is the chosen RED-metric source.
@@ -11,13 +11,23 @@
 #   is NOT a second RED metrics producer.
 
 image:
-  # grafana/beyla v1.9.3 — released 2025-05-13, latest stable as of 2026-06-07
+  # grafana/beyla v1.9.3 -- released 2025-05-13, latest stable as of 2026-06-07
   # https://github.com/grafana/beyla/releases/tag/v1.9.3
+  #
+  # Digest-pinned to the OCI image index (multi-arch manifest list) for v1.9.3.
+  # Resolved 2026-06-07 via Docker Hub registry API:
+  #   curl -sI -H "Accept: application/vnd.oci.image.index.v1+json" \
+  #     https://registry-1.docker.io/v2/grafana/beyla/manifests/1.9.3
+  #   docker-content-digest: sha256:4801cbc3fd7fb709958a94b653229c707f3baed426a5a71553f2ba68ff15105d
+  # When upgrading Beyla: update both tag AND digest together in one PR.
   repository: grafana/beyla
-  tag: "1.9.3"
+  tag: "1.9.3" # v1.9.3
+  # digest overrides tag when non-empty: image ref becomes repository@digest.
+  # This makes the image reference immutable and auditable (supply-chain HIGH).
+  digest: "sha256:4801cbc3fd7fb709958a94b653229c707f3baed426a5a71553f2ba68ff15105d" # v1.9.3
   pullPolicy: IfNotPresent
 
-# Replica/update strategy — DaemonSet, no replica count
+# Replica/update strategy -- DaemonSet, no replica count
 updateStrategy:
   type: RollingUpdate
   rollingUpdate:
@@ -30,9 +40,15 @@ otlpEndpoint: "http://otel-collector-gateway.observability.svc.cluster.local:431
 
 # Beyla environment configuration
 beyla:
-  # Auto-discover every process on the node (use selector to scope if needed)
+  # Auto-instrumentation scope.
+  # openPort: comma-separated TCP port list to restrict which processes Beyla
+  # instruments. Empty = all processes on the node (broadest eBPF scope).
+  # This is appropriate during initial roll-out to capture all traffic.
+  # Narrow to known workload ports (e.g. "8080,8443,9090") once the service
+  # inventory is stable -- reduces CPU overhead and trace cardinality.
+  # (ADR-0019 section 5 -- scope recommendation)
   openPort: ""
-  # Disable the Beyla Prometheus /metrics endpoint — Tempo metrics-generator
+  # Disable the Beyla Prometheus /metrics endpoint -- Tempo metrics-generator
   # is our RED source (ADR-0026 "pick ONE RED-metric source")
   metricsExporter: ""
 
@@ -56,10 +72,15 @@ hostNetwork: true
 # Host-PID: required for Beyla process discovery via eBPF
 hostPID: true
 
-# Privileged security context required for eBPF
-# CAP_BPF         — load/run BPF programs
-# CAP_SYS_PTRACE  — inspect process memory / uprobe attachment
-# CAP_NET_RAW     — raw socket access for network probes
+# Container security context -- required for eBPF operation.
+# privileged: false with explicit capability adds (not a fully privileged pod).
+# CAP_BPF         -- load/run BPF programs
+# CAP_SYS_PTRACE  -- inspect process memory / uprobe attachment
+# CAP_NET_RAW     -- raw socket access for network probes
+# CAP_PERFMON     -- perf_event_open (kernel >= 5.8)
+# seccompProfile Unconfined is required: RuntimeDefault blocks BPF syscalls.
+# Pairing "drop: ALL" + explicit adds is the correct minimization posture for
+# eBPF workloads -- limits blast radius relative to a fully privileged container.
 securityContext:
   privileged: false
   capabilities:
@@ -78,7 +99,7 @@ podSecurityContext:
   seccompProfile:
     type: Unconfined  # required: eBPF syscalls are blocked by RuntimeDefault
 
-# Resource budget — eBPF overhead is per-node; sized conservatively
+# Resource budget -- eBPF overhead is per-node; sized conservatively
 resources:
   requests:
     cpu: 100m
@@ -87,18 +108,37 @@ resources:
     cpu: 500m
     memory: 256Mi
 
-# Node selector — run on all nodes including arm64 (Graviton)
+# Node selector -- run on all linux nodes including arm64 (Graviton)
 nodeSelector: {}
-  # kubernetes.io/arch: arm64  # uncomment to restrict to arm64 only
+# kubernetes.io/arch: arm64  -- uncomment to restrict to arm64 only
 
-# Tolerations: run on all nodes including control-plane taints (optional)
-tolerations:
-  - operator: Exists
-    effect: NoSchedule
-  - operator: Exists
-    effect: NoExecute
+# Tolerations: EMPTY -- do NOT schedule on control-plane or etcd nodes.
+#
+# Security rationale (HIGH finding, ADR-0019 review 2026-06-07):
+# The previous blanket tolerations (operator: Exists, NoSchedule + NoExecute)
+# allowed this privileged eBPF DaemonSet to land on control-plane / etcd nodes.
+# A pod with hostPID + hostNetwork + CAP_SYS_PTRACE on a control-plane node
+# has the ability to inspect etcd and kube-apiserver processes -- unacceptable.
+#
+# Default behavior (empty tolerations): the DaemonSet lands only on worker nodes
+# that carry no special taints. This is the correct scope for application-layer
+# eBPF instrumentation.
+#
+# If your cluster uses custom taints on dedicated nodes (GPU, spot, inference)
+# that Beyla must also observe, add targeted tolerations here with explicit
+# key+value+effect instead of the blanket operator:Exists form:
+#   tolerations:
+#     - key: "dedicated"
+#       operator: "Equal"
+#       value: "gpu"
+#       effect: "NoSchedule"
+#     - key: "node.kubernetes.io/unreachable"
+#       operator: "Exists"
+#       effect: "NoExecute"
+#       tolerationSeconds: 300
+tolerations: []
 
-# PriorityClass — same as prometheus-stack for observability workloads
+# PriorityClass -- same as prometheus-stack for observability workloads
 priorityClassName: ""
 
 # Namespace to target for eBPF auto-discovery (empty = all namespaces)
@@ -112,7 +152,7 @@ serviceAccount:
   annotations: {}
 
 # ServiceMonitor for Beyla's internal /metrics (self-telemetry only,
-# NOT RED business metrics — those come from Tempo metrics-generator)
+# NOT RED business metrics -- those come from Tempo metrics-generator)
 serviceMonitor:
   enabled: true
   interval: 30s

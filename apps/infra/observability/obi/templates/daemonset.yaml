@@ -39,7 +39,10 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "obi.selectorLabels" . | nindent 8 }}
+        # obi.labels already includes the obi.selectorLabels keys
+        # (app.kubernetes.io/name + app.kubernetes.io/instance); do NOT
+        # render obi.selectorLabels again here — that produces duplicate
+        # keys which fail YAML-to-JSON unmarshalling in kubeconform.
         {{- include "obi.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
@@ -86,9 +89,17 @@ spec:
 
       containers:
         - name: beyla
-          # grafana/beyla v1.9.3 — latest stable 2026-06-07
-          # supports linux/amd64 and linux/arm64 (Graviton)
+          # grafana/beyla v1.9.3 -- digest-pinned multi-arch OCI image index
+          # Digest resolved 2026-06-07 via Docker Hub docker-content-digest header:
+          #   curl -sI -H "Accept: application/vnd.oci.image.index.v1+json" \
+          #     https://registry-1.docker.io/v2/grafana/beyla/manifests/1.9.3
+          # Pin by digest so the image reference is immutable and auditable.
+          # When upgrading Beyla: update image.tag + image.digest in values.yaml.
+          {{- if .Values.image.digest }}
+          image: "{{ .Values.image.repository }}@{{ .Values.image.digest }}"
+          {{- else }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          {{- end }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
 
           securityContext:
@@ -102,7 +113,7 @@ spec:
               value: "grpc"
 
             # ---- RED-metric source guard (ADR-0026) ----
-            # Disable Beyla's own metrics export — Tempo metrics-generator is
+            # Disable Beyla's own metrics export -- Tempo metrics-generator is
             # the single authoritative RED source.
             - name: OTEL_METRICS_EXPORTER
               value: "none"
@@ -111,9 +122,13 @@ spec:
             - name: OTEL_TRACES_EXPORTER
               value: "otlp"
 
-            # ---- Beyla auto-instrumentation config ----
-            # Empty BEYLA_OPEN_PORT = instrument all processes on the node.
-            # Set to a comma-separated port list to restrict scope.
+            # ---- Beyla auto-instrumentation scope ----
+            # BEYLA_OPEN_PORT: comma-separated port list restricting which
+            # processes Beyla instruments. Empty = all processes on the node
+            # (broadest eBPF scope). Set to e.g. "8080,8443,9090" to constrain
+            # to known service ports and reduce trace cardinality / CPU overhead.
+            # Recommendation: scope to workload ports once service inventory is
+            # stable (ADR-0019 section 5).
             - name: BEYLA_OPEN_PORT
               value: {{ .Values.beyla.openPort | quote }}
 
