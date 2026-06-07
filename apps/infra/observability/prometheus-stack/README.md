@@ -73,6 +73,44 @@ Production-ready Prometheus + Thanos + Grafana stack designed for large-scale Ku
    - Slack + PagerDuty integration
    - Intelligent alert routing
 
+## Breaking Changes (W4 — Prometheus 3.x + Thanos Pod Identity)
+
+This chart line introduces two breaking changes. Review before upgrading.
+
+### 1. kube-prometheus-stack 82.15.1 -> 86.2.0 (Prometheus 3.x)
+
+- The `kube-prometheus-stack` subchart moves to **86.2.0**, which ships
+  **prometheus-operator v0.91.0** and **Prometheus server v3.12.0** (the chart
+  `appVersion` now tracks the Prometheus *server* line: `v3.12.0`).
+- This is the first chart line on which the **native-histogram feature flags**
+  added in #261 (`native-histograms`, `scrape-native-histograms`, and the
+  `native-histograms` `scrapeClass`) are guaranteed to start cleanly —
+  Prometheus 3.x is **required** for those flags. On Prometheus 2.x they cause a
+  start-up error, so do not pin back below chart 67.x without removing the flags
+  in `values.yaml` (`kube-prometheus-stack.prometheus.prometheusSpec.enableFeatures`).
+- Prometheus 3.x carries upstream breaking changes (PromQL/UI/flag changes, TSDB
+  format). Snapshot/back up TSDB and Grafana dashboards before upgrading (see
+  "Backup Before Upgrade"); the upgrade is one-way for the on-disk TSDB.
+- CRDs are bundled with the bumped operator; ensure CRD updates are applied
+  (ArgoCD `skipCrds: false`, or `helm upgrade` with CRD upgrade enabled).
+
+### 2. Thanos S3 auth: IRSA -> EKS Pod Identity (ADR-0018)
+
+- The Thanos `ServiceAccount` **no longer carries the
+  `eks.amazonaws.com/role-arn` IRSA annotation**. S3 access is now granted by the
+  `pod-identity-thanos` Terraform module (#267) via an
+  `EksPodIdentityAssociation` for `(monitoring, thanos)`.
+- **Apply order:** apply the `pod-identity-thanos` catalog unit (with the real
+  per-env `cluster_name` and least-privilege `bucket_names`) **before/with** this
+  chart upgrade, so Thanos keeps S3 access across the cutover. Combining both
+  IRSA and Pod Identity on one SA is unsupported (ADR-0018: precedence-both).
+- The `argocd-application.yaml` `thanos.serviceAccount.annotations` role-arn
+  parameter and the `--set ...role-arn=...` install flag have been removed.
+- **Not done here:** retiring per-cluster OIDC / flipping `enable_irsa=false`
+  globally is the *final* ADR-0018 step and is intentionally **not** performed in
+  this change (other workloads may still depend on IRSA). It is tracked
+  separately and must only follow once all workloads are on Pod Identity.
+
 ## Scale Characteristics
 
 | Metric | Value | Notes |
@@ -91,7 +129,8 @@ Production-ready Prometheus + Thanos + Grafana stack designed for large-scale Ku
 ### Required Components
 
 1. **EKS Cluster** (v1.27+)
-   - IRSA (IAM Roles for Service Accounts) enabled
+   - EKS Pod Identity Agent installed (ADR-0018); IRSA OIDC no longer
+     required for Thanos S3 access
    - VPC CNI with prefix delegation
    - Karpenter for node scaling
 
@@ -161,7 +200,17 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "thanos" {
 }
 ```
 
-### 2. Create IAM Role for IRSA
+### 2. Grant Thanos S3 access via EKS Pod Identity (ADR-0018)
+
+Thanos S3 access is provisioned by the `pod-identity-thanos` Terraform
+module (`terraform/modules/pod-identity-thanos`, catalog unit
+`catalog/units/pod-identity-thanos`), which creates the IAM role (trusting
+`pods.eks.amazonaws.com`) and the EksPodIdentityAssociation for
+`monitoring/thanos`. The Thanos ServiceAccount carries **no**
+`eks.amazonaws.com/role-arn` annotation. The IRSA snippet below is kept only
+as historical reference for the permissions shape — prefer the module.
+
+<details><summary>Legacy IRSA IAM role (reference only)</summary>
 
 ```hcl
 # terraform/iam-thanos.tf
@@ -236,6 +285,8 @@ output "thanos_iam_role_arn" {
 }
 ```
 
+</details>
+
 ### 3. Install via Helm
 
 ```bash
@@ -253,7 +304,6 @@ helm upgrade --install prometheus-stack . \
   --values values.yaml \
   --values values-thanos.yaml \
   --set kube-prometheus-stack.prometheus.prometheusSpec.externalLabels.cluster=eks-us-east-1 \
-  --set thanos.serviceAccount.annotations."eks\.amazonaws\.io/role-arn"=arn:aws:iam::123456789012:role/thanos-s3-access \
   --wait \
   --timeout 10m
 ```
@@ -566,8 +616,11 @@ kubectl exec -n monitoring prometheus-stack-kube-prometheus-prometheus-0 -c prom
 # Check sidecar logs
 kubectl logs -n monitoring prometheus-stack-kube-prometheus-prometheus-0 -c thanos-sidecar
 
-# Verify IRSA permissions
+# Verify Pod Identity association (ADR-0018) — the SA has NO role-arn
+# annotation; check the EksPodIdentityAssociation instead:
 kubectl describe sa -n monitoring thanos
+aws eks list-pod-identity-associations --cluster-name <cluster> \
+  --namespace monitoring --service-account thanos
 
 # Test S3 access
 kubectl run -n monitoring aws-cli --rm -it --image amazon/aws-cli -- \
