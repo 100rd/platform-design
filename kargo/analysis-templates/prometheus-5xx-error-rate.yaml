@@ -1,0 +1,58 @@
+---
+# Prometheus-provider AnalysisTemplate: 5xx error-rate gate
+# Provenance: ADR-0021 (Kargo activation).
+# Queries Tempo metrics-generator RED metrics (ADR-0019 dependency).
+# Used as a stage verification gate in staging and prod Stages.
+# Argo Rollouts has no native OTel provider — Prometheus is the bridge
+# between Tempo spanmetrics and this analysis gate.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: prometheus-5xx-error-rate
+spec:
+  args:
+    - name: service
+      # Default to a broad selector; override per-Stage via analysisTemplates[].args
+      value: ".*"
+    - name: namespace
+      value: "default"
+    - name: prometheus-address
+      value: "http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090"
+  metrics:
+    - name: 5xx-error-rate
+      # Gate: 5xx rate must be below 1 % over the last 5 minutes.
+      # RED metrics produced by Tempo metrics-generator (span_name / service_name labels).
+      # Formula: sum(rate(http_server_request_errors_total[5m])) /
+      #            sum(rate(http_server_requests_total[5m]))
+      # Falls back gracefully when no traffic (or() vector defaults).
+      provider:
+        prometheus:
+          address: "{{args.prometheus-address}}"
+          query: |
+            (
+              sum(rate(
+                http_server_request_errors_total{
+                  service_name=~"{{args.service}}",
+                  namespace="{{args.namespace}}",
+                  http_response_status_code=~"5.."
+                }[5m]
+              ))
+              or on() vector(0)
+            )
+            /
+            (
+              sum(rate(
+                http_server_requests_total{
+                  service_name=~"{{args.service}}",
+                  namespace="{{args.namespace}}"
+                }[5m]
+              ))
+              or on() vector(1)
+            )
+      # Succeed when error rate stays below 1 % for the entire observation window.
+      successCondition: result[0] < 0.01
+      failureCondition: result[0] >= 0.05
+      failureLimit: 1
+      # 5-minute observation window sampled every 60 s = 5 data points.
+      interval: 60s
+      count: 5

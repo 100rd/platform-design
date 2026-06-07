@@ -1,0 +1,49 @@
+---
+# Prometheus-provider AnalysisTemplate: p95 latency gate
+# Provenance: ADR-0021 (Kargo activation).
+# Queries Tempo metrics-generator RED metrics (ADR-0019 dependency).
+# Used as a stage verification gate in staging and prod Stages.
+# Argo Rollouts has no native OTel provider — Prometheus is the bridge
+# between Tempo spanmetrics and this analysis gate.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: prometheus-p95-latency
+spec:
+  args:
+    - name: service
+      # Default to a broad selector; override per-Stage via analysisTemplates[].args
+      value: ".*"
+    - name: namespace
+      value: "default"
+    - name: prometheus-address
+      value: "http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090"
+    - name: latency-threshold-ms
+      # 500 ms p95 threshold; tune per environment via analysisTemplates[].args
+      value: "500"
+  metrics:
+    - name: p95-latency-ms
+      # Gate: p95 request latency must be below latency-threshold-ms milliseconds.
+      # Duration histogram produced by Tempo metrics-generator RED spans.
+      # histogram_quantile(0.95, ...) over the last 5 minutes, converted to ms.
+      provider:
+        prometheus:
+          address: "{{args.prometheus-address}}"
+          query: |
+            histogram_quantile(0.95,
+              sum by (le) (
+                rate(
+                  http_server_request_duration_seconds_bucket{
+                    service_name=~"{{args.service}}",
+                    namespace="{{args.namespace}}"
+                  }[5m]
+                )
+              )
+            ) * 1000
+      # Succeed when p95 is strictly below the configured threshold (in ms).
+      successCondition: result[0] < {{args.latency-threshold-ms}}
+      failureCondition: result[0] >= {{args.latency-threshold-ms}} * 2
+      failureLimit: 1
+      # 5-minute observation window sampled every 60 s = 5 data points.
+      interval: 60s
+      count: 5
