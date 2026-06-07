@@ -1,0 +1,158 @@
+# Envoy Gateway values
+# Upstream chart: oci://docker.io/envoyproxy/gateway-helm:v1.8.0
+# Provenance: ADR-0025 — secondary L7 GatewayClass alongside Cilium.
+# Cilium remains the CNI and primary GatewayClass (io.cilium/gateway-controller).
+# Envoy Gateway provides a SEPARATE Envoy data-plane (not a CNI) for capabilities
+# that Cilium Gateway API currently lacks: global rate-limiting, ext-proc, WASM filters,
+# and circuit-breaking via BackendTrafficPolicy.
+
+envoyGateway:
+  enabled: true
+
+  # Replica count — 2 for HA; increase for high-throughput environments.
+  replicaCount: 2
+
+  # Image — upstream chart pulls envoyproxy/gateway; digest pinned in Chart.lock
+  # after `helm dep update`.
+  image:
+    repository: docker.io/envoyproxy/gateway
+    tag: "v1.8.0"
+    # digest: sha256:  (populate after image is available in registry)
+    pullPolicy: IfNotPresent
+
+  # Envoy proxy image used for the data-plane pods provisioned by Gateway resources.
+  envoy:
+    image:
+      repository: docker.io/envoyproxy/envoy
+      # Envoy Gateway v1.8.0 ships with Envoy 1.33.x; pin to the exact tag the
+      # upstream chart defaults to — override only after intentional testing.
+      tag: "v1.33.0"
+      pullPolicy: IfNotPresent
+
+  # Resource requests/limits for the Envoy Gateway controller pods.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Security context — hardened per platform baseline.
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    fsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  # Pod anti-affinity so controller replicas land on different nodes.
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                    - envoy-gateway
+            topologyKey: kubernetes.io/hostname
+
+  tolerations:
+    - key: CriticalAddonsOnly
+      operator: Exists
+
+  priorityClassName: system-cluster-critical
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  # Prometheus metrics — scraped by the ServiceMonitor below.
+  metrics:
+    enabled: true
+    port: 19001
+
+  logging:
+    level: info
+
+# -----------------------------------------------------------------------
+# Gateway API objects managed by this chart's templates (not by the
+# upstream envoy-gateway dependency — those are separate CRDs/controller).
+# -----------------------------------------------------------------------
+
+# GatewayClass — the single cluster-scoped object that declares this
+# controller.  controllerName MUST differ from Cilium's
+# "io.cilium/gateway-controller" to avoid conflicts.
+gatewayClass:
+  enabled: true
+  name: envoy-gateway
+  # controllerName must match the Envoy Gateway controller deployment.
+  # Cilium uses io.cilium/gateway-controller — this MUST be different.
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  description: >-
+    Envoy Gateway secondary L7 GatewayClass (ADR-0025). Provides global
+    rate-limiting, ext-proc, WASM filters, and circuit-breaking via
+    BackendTrafficPolicy. Cilium remains the CNI and primary GatewayClass.
+  parametersRef: {}  # Optional: reference an EnvoyProxy resource for customisation
+
+# Example Gateway — demonstrates how teams declare an Envoy-backed listener.
+# Remove or move to a workload chart once a real workload adopts this class.
+exampleGateway:
+  enabled: true
+  name: envoy-l7
+  namespace: envoy-gateway
+  gatewayClassName: envoy-gateway
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: envoy-l7-tls
+            kind: Secret
+
+# BackendTrafficPolicy — global rate-limit example (the primary ADR-0025 rationale).
+# Attaches to the exampleGateway above.
+backendTrafficPolicy:
+  enabled: true
+  name: global-rate-limit-example
+  # Rate-limit: 1000 req/min per distinct remote IP address.
+  # Backed by the envoy-gateway rate-limit service (Redis-backed by default).
+  rateLimit:
+    type: Global
+    global:
+      rules:
+        - clientSelectors:
+            - headers:
+                - name: x-forwarded-for
+                  type: Distinct
+          limit:
+            requests: 1000
+            unit: Minute
+
+# NetworkPolicy — restrict controller pod traffic.
+networkPolicy:
+  enabled: true
+
+# ServiceMonitor — scrape Envoy Gateway controller metrics into Prometheus.
+serviceMonitor:
+  enabled: true
+  namespace: observability
+  interval: 30s
+  scrapeTimeout: 10s
+  labels:
+    prometheus: kube-prometheus
