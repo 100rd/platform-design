@@ -24,9 +24,12 @@ Applications deployed via ArgoCD from `apps/infra/`
 | external-dns | 1.0.0 | 0.15.1 | ExternalDNS - Synchronize Kubernetes resources with DNS prov |
 | external-secrets | 1.3.1 | v0.14.1 | Install the External Secrets Operator using the official cha |
 | gatekeeper | 3.18.2 | v3.18.2 | OPA Gatekeeper for Kubernetes policy enforcement |
+| gateway-api-crds | 0.1.0 |  | Gateway API standard channel CRDs v1.2.1 + Cilium GatewayCla |
+| gateways | 0.1.0 |  | External and internal Cilium Gateways backed by AWS NLBs via |
 | gpu-operator | 1.0.0 | v26.3.0 | NVIDIA GPU Operator - Automated GPU driver, toolkit, and dev |
 | kargo | 0.1.0 | 1.2.0 | Kargo progressive delivery controller |
 | kyverno | 1.0.0 | 1.13.4 | Kyverno - Kubernetes Native Policy Management |
+| opencost | 1.0.0 | 1.113.0 | >- |
 | otel-operator | 0.1.0 |  | OpenTelemetry Operator with auto-instrumentation for Go appl |
 | rabbitmq-operator | 1.0.0 | 2.12.0 | RabbitMQ Cluster Operator - Kubernetes-native RabbitMQ lifec |
 | velero | 1.1.0 | 1.15.0 | Velero - Kubernetes backup and disaster recovery |
@@ -39,6 +42,7 @@ Applications deployed via ArgoCD from `apps/infra/`
 |-----------|---------------|-------------|-------------|
 | grafana-dashboards | 1.0.0 | 1.0 | Unified Grafana dashboards for platform observability |
 | loki-stack | 1.0.0 | 3.0 | Production Loki + Fluent Bit logging stack for gaming platfo |
+| obi | 1.0.0 | 1.9.3 | > |
 | otel-collector | 1.0.0 | 0.143.0 | OpenTelemetry Collector - Central telemetry pipeline for gam |
 | prometheus-stack | 1.1.0 | v0.70.0 | Production-ready Prometheus + Thanos + Grafana stack for lar |
 | pyroscope | 1.0.0 | 1.18.0 | Grafana Pyroscope continuous profiling for production gaming |

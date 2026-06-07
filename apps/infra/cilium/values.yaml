@@ -128,6 +128,10 @@ cilium:
                 topologyKey: kubernetes.io/hostname
 
     ui:
+      # Explicitly enabled as part of ADR-0019 runtime-security slice.
+      # Hubble UI provides a visual overlay of network flows alongside Tetragon
+      # process-execution events. Access via port-forward to hubble-ui Service
+      # or an HTTPRoute referencing the cilium GatewayClass (ADR-0009).
       enabled: true
       replicas: 2
 
