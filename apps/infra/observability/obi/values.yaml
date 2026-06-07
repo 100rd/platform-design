@@ -1,0 +1,131 @@
+# OBI / Grafana Beyla — eBPF zero-code auto-instrumentation
+# ADR-0019: OBI/Beyla DaemonSet → OTLP → otel-collector gateway → Tempo
+#
+# RED-metric source decision (ADR-0026):
+#   Tempo's metrics-generator is the chosen RED-metric source.
+#   OBI/Beyla exports TRACES ONLY (otelTraces pipeline); OTEL_METRICS_EXPORTER
+#   is explicitly disabled to prevent duplicate RED metrics in Prometheus.
+#   Rationale: Tempo's metrics-generator derives RED metrics from every span it
+#   ingests (including those from SDK-instrumented services), giving a
+#   single consistent cardinality budget. OBI adds the eBPF trace lane but
+#   is NOT a second RED metrics producer.
+
+image:
+  # grafana/beyla v1.9.3 — released 2025-05-13, latest stable as of 2026-06-07
+  # https://github.com/grafana/beyla/releases/tag/v1.9.3
+  repository: grafana/beyla
+  tag: "1.9.3"
+  pullPolicy: IfNotPresent
+
+# Replica/update strategy — DaemonSet, no replica count
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
+# OTLP export: send to the otel-collector gateway which handles batching,
+# tail-sampling, and fan-out to Tempo. Direct-to-Tempo (port 4317) is
+# the fallback if the gateway is unavailable.
+otlpEndpoint: "http://otel-collector-gateway.observability.svc.cluster.local:4317"
+
+# Beyla environment configuration
+beyla:
+  # Auto-discover every process on the node (use selector to scope if needed)
+  openPort: ""
+  # Disable the Beyla Prometheus /metrics endpoint — Tempo metrics-generator
+  # is our RED source (ADR-0026 "pick ONE RED-metric source")
+  metricsExporter: ""
+
+  # Sampling: 10 % of successful spans + 100 % of errors (keep interesting)
+  sampling:
+    samplingRatio: 0.10
+
+  # Attribute enrichment
+  attributes:
+    kubernetes:
+      enable: true
+    instanceId:
+      dns: true
+
+  # Additional resource attributes set via OTEL_RESOURCE_ATTRIBUTES below
+  resourceAttributes:
+    deployment_environment: production
+
+# Host-network: required for eBPF to observe all node sockets
+hostNetwork: true
+# Host-PID: required for Beyla process discovery via eBPF
+hostPID: true
+
+# Privileged security context required for eBPF
+# CAP_BPF         — load/run BPF programs
+# CAP_SYS_PTRACE  — inspect process memory / uprobe attachment
+# CAP_NET_RAW     — raw socket access for network probes
+securityContext:
+  privileged: false
+  capabilities:
+    add:
+      - CAP_BPF
+      - CAP_SYS_PTRACE
+      - CAP_NET_RAW
+      - CAP_PERFMON
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: false
+  runAsUser: 0
+
+podSecurityContext:
+  seccompProfile:
+    type: Unconfined  # required: eBPF syscalls are blocked by RuntimeDefault
+
+# Resource budget — eBPF overhead is per-node; sized conservatively
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# Node selector — run on all nodes including arm64 (Graviton)
+nodeSelector: {}
+  # kubernetes.io/arch: arm64  # uncomment to restrict to arm64 only
+
+# Tolerations: run on all nodes including control-plane taints (optional)
+tolerations:
+  - operator: Exists
+    effect: NoSchedule
+  - operator: Exists
+    effect: NoExecute
+
+# PriorityClass — same as prometheus-stack for observability workloads
+priorityClassName: ""
+
+# Namespace to target for eBPF auto-discovery (empty = all namespaces)
+# Scope to a namespace label to reduce cardinality on large clusters
+targetNamespace: ""
+
+# ServiceAccount
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# ServiceMonitor for Beyla's internal /metrics (self-telemetry only,
+# NOT RED business metrics — those come from Tempo metrics-generator)
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  labels:
+    release: prometheus
+
+# Extra pod labels (matches sibling chart convention)
+podLabels:
+  app: beyla
+  environment: production
+  team: platform
+  adr: "adr-0019"
+
+podAnnotations:
+  prometheus.io/scrape: "false"  # scraped via ServiceMonitor, not annotation

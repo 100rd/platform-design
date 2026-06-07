@@ -1,0 +1,20 @@
+---
+# Headless Service used by ServiceMonitor for Prometheus discovery.
+# Beyla runs as a DaemonSet; the service selects all Beyla pods by label
+# so Prometheus can discover and scrape each node's Beyla self-metrics.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "obi.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "obi.labels" . | nindent 4 }}
+spec:
+  clusterIP: None  # headless — one endpoint per pod for per-node scraping
+  selector:
+    {{- include "obi.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP

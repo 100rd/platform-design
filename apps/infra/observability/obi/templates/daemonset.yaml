@@ -1,0 +1,191 @@
+---
+# OBI / Grafana Beyla DaemonSet
+# eBPF auto-instrumentation: captures HTTP/gRPC spans at the kernel layer
+# and exports OTLP traces → otel-collector gateway → Tempo (ADR-0019).
+#
+# Privileges required:
+#   hostNetwork + hostPID — observe all node sockets and processes
+#   CAP_BPF              — load eBPF programs
+#   CAP_SYS_PTRACE       — uprobe attachment / process memory inspection
+#   CAP_NET_RAW          — raw socket access for network probes
+#   CAP_PERFMON          — perf_event_open (kernel >= 5.8 alternative to CAP_SYS_ADMIN)
+#   seccompProfile: Unconfined — RuntimeDefault blocks eBPF syscalls
+#
+# RED-metric source: Tempo metrics-generator (NOT Beyla).
+#   OTEL_METRICS_EXPORTER=none disables Beyla's Prometheus scrape endpoint so
+#   there is exactly one RED source (ADR-0026).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "obi.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "obi.labels" . | nindent 4 }}
+    {{- with .Values.podLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"  # after otel-collector (wave 15) and tempo (wave 10)
+spec:
+  selector:
+    matchLabels:
+      {{- include "obi.selectorLabels" . | nindent 6 }}
+  updateStrategy:
+    type: {{ .Values.updateStrategy.type }}
+    {{- if eq .Values.updateStrategy.type "RollingUpdate" }}
+    rollingUpdate:
+      maxUnavailable: {{ .Values.updateStrategy.rollingUpdate.maxUnavailable }}
+    {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "obi.selectorLabels" . | nindent 8 }}
+        {{- include "obi.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "obi.serviceAccountName" . }}
+
+      # hostNetwork + hostPID are REQUIRED for eBPF process discovery
+      hostNetwork: {{ .Values.hostNetwork }}
+      hostPID: {{ .Values.hostPID }}
+
+      # seccompProfile must be Unconfined — RuntimeDefault blocks BPF syscalls
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      # arm64 / multi-arch: grafana/beyla ships linux/amd64 + linux/arm64 images
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - linux
+
+      containers:
+        - name: beyla
+          # grafana/beyla v1.9.3 — latest stable 2026-06-07
+          # supports linux/amd64 and linux/arm64 (Graviton)
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+
+          env:
+            # ---- OTLP trace export ----
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.otlpEndpoint | quote }}
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "grpc"
+
+            # ---- RED-metric source guard (ADR-0026) ----
+            # Disable Beyla's own metrics export — Tempo metrics-generator is
+            # the single authoritative RED source.
+            - name: OTEL_METRICS_EXPORTER
+              value: "none"
+
+            # ---- Traces only ----
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"
+
+            # ---- Beyla auto-instrumentation config ----
+            # Empty BEYLA_OPEN_PORT = instrument all processes on the node.
+            # Set to a comma-separated port list to restrict scope.
+            - name: BEYLA_OPEN_PORT
+              value: {{ .Values.beyla.openPort | quote }}
+
+            # ---- Kubernetes attribute enrichment ----
+            - name: BEYLA_KUBE_METADATA_ENABLE
+              value: {{ .Values.beyla.attributes.kubernetes.enable | toString | quote }}
+
+            # ---- Sampling (head-based, 10 % successful + 100 % errors) ----
+            # Errors are always sampled; tail-sampling happens in the collector.
+            - name: BEYLA_SAMPLER_NAME
+              value: "parentbased_traceidratio"
+            - name: BEYLA_SAMPLER_ARG
+              value: {{ .Values.beyla.sampling.samplingRatio | toString | quote }}
+
+            # ---- Resource attributes ----
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "deployment.environment={{ .Values.beyla.resourceAttributes.deployment_environment }},k8s.cluster.name=gaming-platform-prod"
+
+            # ---- Node/pod identity injected from downward API ----
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: K8S_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: K8S_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          # Beyla exposes a health endpoint on 6060 (self-telemetry)
+          ports:
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 6060
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 6060
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # eBPF programs need access to /sys/kernel/debug and /proc
+          volumeMounts:
+            - name: proc
+              mountPath: /proc
+              readOnly: true
+            - name: sys
+              mountPath: /sys
+              readOnly: true
+
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
