@@ -18,12 +18,12 @@ Applications deployed via ArgoCD from `apps/infra/`
 |-------------|---------------|-------------|-------------|
 | aws-lb-controller | 3.1.0 | 3.1.0 | AWS Load Balancer Controller - manages ALB and NLB for Kuber |
 | cert-manager | 1.2.0 | 1.20.1 | cert-manager - Automatic TLS certificate management for Kube |
-| cilium | 1.0.0 | 1.17.1 | Cilium CNI with Hubble observability for Kubernetes networki |
+| cilium | 1.1.0 | 1.19.4 | Cilium CNI with Hubble observability for Kubernetes networki |
 | cluster-secret-store | 1.0.0 | 1.0.0 | ClusterSecretStore for AWS Secrets Manager — deployed per  |
 | dcgm-exporter | 1.0.0 | 4.5.0 | NVIDIA DCGM Exporter - GPU health metrics and auto-taint for |
 | envoy-gateway | 1.0.0 | v1.8.0 | Envoy Gateway - secondary L7 GatewayClass alongside Cilium ( |
 | external-dns | 1.0.0 | 0.15.1 | ExternalDNS - Synchronize Kubernetes resources with DNS prov |
-| external-secrets | 1.3.1 | v0.14.1 | Install the External Secrets Operator using the official cha |
+| external-secrets | 1.4.0 | v2.6.0 | Install the External Secrets Operator using the official cha |
 | gatekeeper | 3.18.2 | v3.18.2 | OPA Gatekeeper for Kubernetes policy enforcement |
 | gateway-api-crds | 0.2.0 |  | Gateway API standard channel CRDs v1.4.0 + Cilium GatewayCla |
 | gateways | 0.2.0 |  | External and internal Cilium Gateways + BackendTLSPolicy (AD |
@@ -47,7 +47,7 @@ Applications deployed via ArgoCD from `apps/infra/`
 | loki-stack | 1.0.0 | 3.0 | Production Loki + Fluent Bit logging stack for gaming platfo |
 | obi | 1.0.0 | 1.9.3 | > |
 | otel-collector | 1.0.0 | 0.143.0 | OpenTelemetry Collector - Central telemetry pipeline for gam |
-| prometheus-stack | 1.1.0 | v0.70.0 | Production-ready Prometheus + Thanos + Grafana stack for lar |
+| prometheus-stack | 1.2.0 | v3.12.0 | Production-ready Prometheus + Thanos + Grafana stack for lar |
 | pyroscope | 1.0.0 | 1.18.0 | Grafana Pyroscope continuous profiling for production gaming |
 | tempo | 1.0.0 | 2.3.1 | Production-ready distributed tracing stack with Tempo and Op |
 | yace | 0.1.0 | v0.61.2 | > |
