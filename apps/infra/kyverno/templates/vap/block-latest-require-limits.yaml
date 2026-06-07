@@ -17,10 +17,9 @@
 # CEL checks to VAP (in-process, no webhook) while Gatekeeper retains its
 # existing mature templates.
 #
-# Binding: validationActions: [Audit] initially.
-#   TODO(ops): change to [Deny] once audit shows no false positives in prod.
-#   [Audit, Warn] is also useful — surfaces violations as API warnings without
-#   blocking, good for a graduated rollout.
+# Binding: validationActions: [Deny] — graduated from Audit after clean soak
+# window (W3/ADR-0020).
+# Rollback: set validationActions back to [Audit] and re-apply.
 #
 # References:
 #   https://kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/
@@ -39,11 +38,10 @@ metadata:
       Block :latest image tags and require CPU/memory limits on all containers.
       In-process CEL validation (no webhook). Owned by VAP layer per ADR-0020.
 spec:
-  # failurePolicy: controls what happens when the CEL expression itself errors
-  # (e.g. a type error against an unusual object). Fail = block on expression
-  # error (safe default for prod). Ignore = allow through on expression error.
-  # TODO(ops): switch to Fail in prod once expressions are validated in Audit.
-  failurePolicy: Ignore
+  # failurePolicy: Fail — block admission when the CEL expression itself errors
+  # (e.g. a type error against an unusual object). Aligned with Enforce posture
+  # post-soak (W3/ADR-0020). Rollback: set back to Ignore if needed.
+  failurePolicy: Fail
 
   matchConstraints:
     resourceRules:
@@ -127,8 +125,7 @@ spec:
             - kube-public
             - kube-node-lease
 
-  # TODO(ops): change to [Deny] (or [Deny, Warn]) after audit window shows
-  # no false positives. Warn surfaces violations as API server warnings
-  # without blocking — useful for graduated rollout.
+  # W3/ADR-0020: graduated from Audit to Deny after clean soak window.
+  # Rollback: set back to [Audit] and re-apply (see README Rollback section).
   validationActions:
-    - Audit
+    - Deny
