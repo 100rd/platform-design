@@ -29,6 +29,15 @@ jobs:
     outputs:
       services: ${{ steps.changes.outputs.services }}
     steps:
+      # Runtime egress monitoring — MUST be the first step so the agent is
+      # installed before anything else runs. Audit mode: observe-only, never
+      # blocks the build. See .github/actions/harden-runner for the flip-to-block
+      # rollout and docs/ci-cd/supply-chain-runtime.md.
+      - name: Harden runner (audit)
+        uses: ./.github/actions/harden-runner
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
@@ -71,6 +80,14 @@ jobs:
       matrix:
         service: ${{ fromJson(needs.detect-changes.outputs.services) }}
     steps:
+      # Runtime egress monitoring — first step (before checkout / AWS / buildx)
+      # so it can baseline this job's outbound traffic to ECR, the GitHub API,
+      # Sigstore (cosign) and the buildx cache. Audit mode: never blocks.
+      - name: Harden runner (audit)
+        uses: ./.github/actions/harden-runner
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@v4
 
       - name: Configure AWS credentials

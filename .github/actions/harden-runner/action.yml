@@ -1,0 +1,68 @@
+# -----------------------------------------------------------------------------
+# harden-runner
+#
+# Runtime security monitoring for GitHub-hosted runners via StepSecurity
+# Harden-Runner (https://github.com/step-security/harden-runner). Wrap this as
+# the VERY FIRST step of a CI job so it installs its eBPF agent before any other
+# step runs — it then records every outbound network connection, file write, and
+# spawned process for that job.
+#
+# Why (ADR-0016 follow-up): the Tier-1 set is entirely STATIC / build-time
+# (CodeQL, Trivy, pip-audit/osv, gitleaks, cosign). It gives ZERO runtime egress
+# visibility on the runner itself — so a compromised or typo-squatted action that
+# exfiltrates secrets at run time (the 2025 tj-actions/changed-files class of
+# attack) would leave no trace. Harden-Runner is the missing runtime layer: it
+# baselines and (optionally) blocks runner egress.
+#
+# Rollout model — START IN AUDIT, FLIP TO BLOCK LATER:
+#   * `egress-policy: audit` (default here) — observe only. Every connection is
+#     logged to the StepSecurity insights page linked in the job summary; nothing
+#     is blocked, so it CANNOT break a build. Run it across CI for a few weeks to
+#     learn the legitimate endpoint set.
+#   * Then flip to `egress-policy: block` and pass the learned endpoints via
+#     `allowed-endpoints` (newline-separated `host:port`). Example:
+#         egress-policy: block
+#         allowed-endpoints: >
+#           github.com:443
+#           api.github.com:443
+#           objects.githubusercontent.com:443
+#           *.ecr.eu-west-1.amazonaws.com:443
+#           ghcr.io:443
+#     In block mode any connection outside the allowlist is denied and surfaced
+#     as a job annotation.
+#
+# Third-party `uses:` is SHA-pinned with a version comment (the Renovate-comment
+# convention from ADR-0015 / the .github/actions composites).
+# -----------------------------------------------------------------------------
+name: "Harden Runner"
+description: "Install StepSecurity Harden-Runner as the first job step for runtime egress / file / process monitoring (audit by default; flip to block when the egress baseline is known)."
+
+inputs:
+  egress-policy:
+    description: "`audit` (observe only, never blocks — default) or `block` (deny anything outside allowed-endpoints)."
+    required: false
+    default: "audit"
+  allowed-endpoints:
+    description: "Newline-separated `host:port` allowlist. Only consulted when egress-policy is `block`. Empty in audit mode."
+    required: false
+    default: ""
+  disable-sudo:
+    description: "Disallow sudo on the runner for the rest of the job. Keep false unless a job is known not to need it."
+    required: false
+    default: "false"
+  disable-telemetry:
+    description: "Disable Harden-Runner telemetry to StepSecurity (set true on private/internal repos that must not egress run data)."
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Harden runner
+      # step-security/harden-runner v2.19.4
+      uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+      with:
+        egress-policy: ${{ inputs.egress-policy }}
+        allowed-endpoints: ${{ inputs.allowed-endpoints }}
+        disable-sudo: ${{ inputs.disable-sudo }}
+        disable-telemetry: ${{ inputs.disable-telemetry }}
