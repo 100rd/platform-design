@@ -1,0 +1,134 @@
+{{- if .Values.networkPolicy.enabled }}
+---
+# NetworkPolicy: Pyrra operator
+# Allows:
+#   ingress  — Prometheus scraping on :8080 (operator /metrics)
+#   egress   — Kubernetes API (watch/create PrometheusRules + ServiceLevelObjectives),
+#              DNS
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pyrra-operator
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: pyrra
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/part-of: observability
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pyrra
+      app.kubernetes.io/component: operator
+
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Prometheus scrapes operator metrics from port 8080.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 8080
+
+  egress:
+    # Kubernetes API - operator needs to watch ServiceLevelObjective CRs and
+    # create/patch PrometheusRule objects cluster-wide.
+    # namespaceSelector: {} is required because the K8s API server is not bound
+    # to a namespace in standard CNI topologies.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+
+    # DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# NetworkPolicy: Pyrra UI/API
+# Allows:
+#   ingress  — Cilium Gateway / internal consumers on :9099 (UI); Prometheus on :9099
+#   egress   — Prometheus query API on :9090, Kubernetes API, DNS
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pyrra-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: pyrra
+    app.kubernetes.io/component: api
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/part-of: observability
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pyrra
+      app.kubernetes.io/component: api
+
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Pyrra UI served to internal users via Gateway/ALB ingress or kubectl port-forward.
+    # Opened to any namespace to allow cross-namespace tooling (e.g. Grafana sidecar).
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 9099
+
+  egress:
+    # Query Prometheus for SLO metric evaluation.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
+
+    # Kubernetes API - UI reads PrometheusRule objects to render SLO status.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+
+    # DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+{{- end }}
