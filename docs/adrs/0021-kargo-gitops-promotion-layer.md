@@ -1,7 +1,8 @@
 # ADR-0021: Kargo as the GitOps environment-promotion layer
 
-- Status: **Proposed** — research-backed; decision to ratify, not yet
+- Status: **Accepted** — research-backed + doc-verified; ratified, not yet
   implemented.
+- Ratified: 2026-06-07 by platform owner.
 - platform-design status: **pending** — Kargo is scaffolded (Warehouse → Stage →
   Freight graph) but not activated; the bootstrap App pins the old chart.
 - Date: 2026-06-06
@@ -42,6 +43,27 @@ layer sitting above Argo Rollouts canaries.
   metrics-generator RED metrics** — which **couples this ADR to ADR-0019** (the OBI/
   Beyla → Tempo wiring is what produces those RED metrics; without 0019 the gates
   have nothing to read).
+
+### Sub-decision: OTel SLO-gating (generalize beyond the flask-specific gate)
+
+Today the gate query is tied to **`flask_http_request_*`** series — it only works
+for Flask services. To gate **any** OTel-instrumented service, add an OTel
+SLO-gating path:
+
+- The **OTel Collector `spanmetrics` connector (alpha)** derives RED-style request
+  metrics from spans and exports them to **Prometheus**.
+- Argo Rollouts' **Prometheus-provider `AnalysisTemplate`** then queries those
+  metrics — because **Argo Rollouts has NO native OTel metrics provider**;
+  **Prometheus is the bridge** between OTel spanmetrics and the Rollouts analysis
+  gate.
+- This **generalizes** the existing `flask_http_request_*` 5xx / p95 gate to any
+  OTel service, regardless of language or framework.
+
+**Where this actually runs:** the Rollouts-based analysis applies to the **real
+`argocd` estate's Argo Rollouts** (the `charts/qbiq-app` canary). **platform-design
+has no Rollouts**, so here it is tracked as a **design-target**, not wired in — and
+it does not change the fact that *in this repo* Kargo promotes Argo CD Applications
+directly (below).
 
 A **separate future ADR may introduce Argo Rollouts canary BELOW Kargo** (Kargo
 promotes between environments; a Rollout would canary *within* an environment).
@@ -101,7 +123,12 @@ environment-promotion layer; a future ADR can add Rollouts below.
 - Add Prometheus-provider `AnalysisTemplate`s: `error-rate` (5xx) and
   `latency-p95`, querying Tempo metrics-generator RED metrics (ADR-0019).
 - Replace the job-probe verification on each Stage with the AnalysisTemplate gate.
-- Out of scope / future ADR: Argo Rollouts canary **below** Kargo.
+- **OTel SLO-gating (design-target here; live in the `argocd` estate's
+  `charts/qbiq-app` Rollouts):** OTel Collector `spanmetrics` connector (alpha) →
+  Prometheus → Rollouts Prometheus-provider AnalysisTemplate. Generalizes the
+  `flask_http_request_*` gate to any OTel service. Argo Rollouts has no native OTel
+  provider — Prometheus is the bridge.
+- Out of scope / future ADR: Argo Rollouts canary **below** Kargo (in platform-design).
 
 Effort: **M**.
 
@@ -110,11 +137,15 @@ Effort: **M**.
 - Kargo: <https://docs.kargo.io/>
 - Kargo verification / AnalysisTemplates:
   <https://docs.kargo.io/concepts#verifications>
+- OTel Collector `spanmetrics` connector:
+  <https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/connector/spanmetricsconnector>
+- Argo Rollouts Prometheus analysis (the OTel bridge):
+  <https://argo-rollouts.readthedocs.io/en/stable/features/analysis/#prometheus>
 - Related: ADR-0006 (ArgoCD — Kargo promotes its Applications), ADR-0019 (Tempo RED
   metrics feeding the gates), ADR-0014 (Argo Rollouts — concept; a future ADR may
   place Rollouts below Kargo)
 
 ---
-*Research-backed — 2026 platform modernization; grounded in infra@572b54d /
-argocd@c364c6c. Proposed: decision to ratify, not yet implemented in
-platform-design.*
+*Research-backed + doc-verified 2026-06-07 (Context7 + official AWS/vendor docs) —
+2026 platform modernization; grounded in infra@572b54d / argocd@c364c6c. Accepted,
+ratified 2026-06-07 by platform owner; not yet implemented in platform-design.*

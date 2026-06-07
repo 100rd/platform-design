@@ -1,7 +1,8 @@
 # ADR-0019: Harvest unused Cilium / eBPF capabilities (OBI tracing, Hubble UI, Tetragon, ClusterMesh)
 
-- Status: **Proposed** — research-backed; decision to ratify, not yet
+- Status: **Accepted** — research-backed + doc-verified; ratified, not yet
   implemented.
+- Ratified: 2026-06-07 by platform owner.
 - platform-design status: **pending** — Cilium 1.19 is deployed but none of the
   capabilities below are turned on in this repo.
 - Date: 2026-06-06
@@ -39,16 +40,26 @@ pilot, and which to defer.
    `enable_clustermesh = false`**. Pilot it **once a second cluster exists**, with a
    **distinct cluster id/name**, a **shared CA**, and **non-overlapping PodCIDRs**
    routed over the existing Transit Gateway (ADR-0005).
+5. **netkit device mode — ADOPT (pilot).** The earlier "deferred — kernel too old"
+   reasoning was **wrong**: netkit needs **kernel ≥ 6.8**, and the **current
+   EKS-optimized AL2023 standard AMI ships kernel 6.12** (verified against the
+   `awslabs/amazon-eks-ami` CHANGELOG), while **Bottlerocket `aws-k8s-1.33+` ships
+   6.12** as well — both are **above** the 6.8 floor. netkit is therefore **not
+   blocked**. Pilot it: it is **beta**, and requires **eBPF host-routing**
+   (`Host Routing: BPF`), **native routing**, and **`kubeProxyReplacement`** — all
+   of which the Cilium data plane already runs. **There is no in-place veth → netkit
+   conversion** — switching a node's device mode means **rolling new nodes**, so the
+   pilot is a fresh node group, not an in-place flip.
 
 **Deferred** (explicitly not now):
-- **netkit** — needs **kernel ≥ 6.8**; nodes are **AL2023 (kernel 6.1)**. Revisit
-  on a kernel bump.
 - **SPIFFE mutual auth** — **WireGuard already covers transit encryption**, so the
   marginal benefit does not justify the operational cost today.
 
 A reviewer can check conformance by confirming the Beyla/OBI DaemonSet exports OTLP
-to Tempo, `enable_hubble_ui = true`, a Tetragon DaemonSet runs in observe mode, and
-ClusterMesh stays off until a second cluster is provisioned.
+to Tempo, `enable_hubble_ui = true`, a Tetragon DaemonSet runs in observe mode,
+ClusterMesh stays off until a second cluster is provisioned, and netkit is piloted
+on a **fresh** node group (host-routing BPF + native routing + kubeProxyReplacement,
+kernel ≥ 6.8) rather than flipped in place.
 
 ## Alternatives considered
 
@@ -90,6 +101,9 @@ changes; SDK instrumentation can layer on later where deeper spans are needed.
   instrumented namespaces.
 - ClusterMesh with overlapping PodCIDRs would break routing. Mitigated by the
   explicit non-overlapping-CIDR + shared-CA + distinct-id pilot checklist.
+- netkit is **beta** and has **no in-place migration** path. Mitigated by piloting
+  on a fresh, isolated node group and validating host-routing/native-routing/
+  kubeProxyReplacement there before any wider roll.
 
 ## Implementation notes
 
@@ -100,8 +114,10 @@ changes; SDK instrumentation can layer on later where deeper spans are needed.
   flip to **enforce** per policy after tuning.
 - **ClusterMesh:** keep `enable_clustermesh = false` until cluster #2; then distinct
   cluster id/name, shared CA, non-overlapping PodCIDRs over TGW.
-- **Deferred:** netkit (kernel ≥ 6.8 vs AL2023 6.1); SPIFFE mutual auth (WireGuard
-  already encrypts transit).
+- **netkit:** pilot on a **fresh** node group (no in-place veth→netkit). Prereqs:
+  kernel ≥ 6.8 (AL2023 standard AMI = 6.12, Bottlerocket `aws-k8s-1.33+` = 6.12),
+  `Host Routing: BPF`, native routing, `kubeProxyReplacement`. Beta.
+- **Deferred:** SPIFFE mutual auth (WireGuard already encrypts transit).
 
 Effort: **L–M**.
 
@@ -112,10 +128,14 @@ Effort: **L–M**.
 - Tetragon: <https://tetragon.io/>
 - Cilium ClusterMesh:
   <https://docs.cilium.io/en/stable/network/clustermesh/clustermesh/>
+- Cilium netkit device mode:
+  <https://docs.cilium.io/en/stable/operations/performance/tuning/#netkit>
+- EKS-optimized AL2023 AMI kernel (CHANGELOG):
+  <https://github.com/awslabs/amazon-eks-ami/blob/main/CHANGELOG.md>
 - Related: ADR-0003 (Cilium CNI), ADR-0005 (Transit Gateway), ADR-0009 (Cilium
   Gateway API), ADR-0021 (Kargo — consumes the Tempo RED metrics)
 
 ---
-*Research-backed — 2026 platform modernization; grounded in infra@572b54d /
-argocd@c364c6c. Proposed: decision to ratify, not yet implemented in
-platform-design.*
+*Research-backed + doc-verified 2026-06-07 (Context7 + official AWS/vendor docs) —
+2026 platform modernization; grounded in infra@572b54d / argocd@c364c6c. Accepted,
+ratified 2026-06-07 by platform owner; not yet implemented in platform-design.*

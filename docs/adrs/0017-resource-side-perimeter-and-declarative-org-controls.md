@@ -1,7 +1,8 @@
 # ADR-0017: Resource-side data perimeter and declarative org controls (RCPs, EC2 Declarative Policies, full-IAM SCPs)
 
-- Status: **Proposed** — research-backed; decision to ratify, not yet
+- Status: **Accepted** — research-backed + doc-verified; ratified, not yet
   implemented.
+- Ratified: 2026-06-07 by platform owner.
 - platform-design status: **pending** — no RCPs, EC2 Declarative Policies, or
   full-IAM-language SCP refactor are wired into this repo yet.
 - Date: 2026-06-06
@@ -36,7 +37,22 @@ AWS has since shipped the primitives that close all three gaps.
 
 ## Decision
 
-Adopt four complementary org-control primitives:
+Adopt five complementary org-control primitives:
+
+0. **Account Factory for Terraform (AFT) as the account-vending mechanism.** Stand
+   up account vending with **AFT** — the Control-Tower-team Terraform module that
+   provisions a GitOps account-vending pipeline (CodePipeline / CodeBuild /
+   DynamoDB / Step Functions) driven by **four repos**:
+   `aft-account-request`, `aft-global-customizations`,
+   `aft-account-customizations`, and `aft-provisioning-customizations`. New
+   accounts are requested as Terraform in `aft-account-request`; global and
+   per-account customizations layer Terraform/Terragrunt on top after Control
+   Tower lands the account. Chosen over **AFC (Account Factory for Customizations,
+   the Service-Catalog / CloudFormation-blueprint path)** because this estate is
+   **Terraform/Terragrunt-first** — AFT keeps account vending in the same IaC
+   language and review flow as the rest of the platform, where AFC would introduce
+   a parallel CloudFormation-blueprint surface. AFT is the engine that attaches the
+   RCPs / EC2 Declarative Policies / SCPs below as part of account customization.
 
 1. **Resource Control Policies (RCPs).** A new `RESOURCE_CONTROL_POLICY` policy
    type that applies a *resource-side* perimeter to S3, STS, KMS, SecretsManager,
@@ -51,21 +67,39 @@ Adopt four complementary org-control primitives:
    policies the platform enforces at the API layer, replacing the brittle
    deny-SCP + Config-rule pairs. This **retires the `require_imdsv2` SCP** and its
    companion Config rule, returning an SCP slot.
-3. **Full-IAM-language SCPs (Sept 2025).** SCPs now support the full IAM policy
-   language (richer conditions, `NotAction`/`NotResource` semantics). Refactor the
-   coarse `deny + ArnNotLike` exemption lists into **tag/condition-scoped**
-   statements — fewer hard-coded exception ARNs, easier to audit.
-4. **Access Analyzer `CheckNoNewAccess` as a CI gate.** Wire IAM Access Analyzer's
-   `CheckNoNewAccess` into `terraform-checks.yml` so every SCP/RCP change is
-   machine-checked to prove it does not grant new effective access before merge —
-   replacing review-by-eye.
+3. **Full-IAM-language SCPs (GA 2025-09-19).** SCPs now support the full IAM policy
+   language (richer conditions, `NotAction`/`NotResource` semantics) — this reached
+   **general availability on 2025-09-19**. Refactor the coarse `deny + ArnNotLike`
+   exemption lists into **tag/condition-scoped** statements — fewer hard-coded
+   exception ARNs, easier to audit.
+4. **Access Analyzer custom policy checks (`CheckNoNewAccess` /
+   `CheckAccessNotGranted`) as a CI gate.** Wire IAM Access Analyzer's **paid**
+   custom policy checks into `terraform-checks.yml` so every SCP/RCP change is
+   machine-checked before merge — replacing review-by-eye. These are **paid
+   Access-Analyzer CLI checks**, and the gate must read the structured **JSON
+   `result` field** (`PASS` / `FAIL`), **not** the shell exit code (the CLI can
+   exit 0 on a `FAIL` result). The old and new policy JSON fed to the check is
+   extracted from the Terraform plan via `terraform show -json` (decode the old vs
+   proposed policy document). `CheckNoNewAccess` proves a change does not grant new
+   effective access; `CheckAccessNotGranted` proves a named sensitive
+   action/resource stays denied.
 
-A reviewer can check conformance by confirming `modules/rcps` exists and is
-attached at the root/OU, that `require_imdsv2` is now an EC2 Declarative Policy
-(not an SCP), and that `terraform-checks.yml` runs `CheckNoNewAccess` against
-policy diffs.
+A reviewer can check conformance by confirming AFT is the account-vending engine
+(four `aft-*` repos + the CodePipeline/Step-Functions pipeline), that
+`modules/rcps` exists and is attached at the root/OU, that `require_imdsv2` is now
+an EC2 Declarative Policy (not an SCP), and that `terraform-checks.yml` runs the
+Access-Analyzer custom checks gating on the JSON `result` field against
+`terraform show -json` policy diffs.
 
 ## Alternatives considered
+
+### Alternative 0: AFC (Account Factory for Customizations) for account vending
+Vend and customize accounts with AFC's Service-Catalog / CloudFormation blueprints
+instead of AFT.
+Rejected because: the estate is Terraform/Terragrunt-first; AFC would graft a
+parallel CloudFormation-blueprint surface (separate language, review flow, and
+state model) onto an otherwise-Terraform platform. AFT keeps account vending in the
+same IaC and PR flow as everything else.
 
 ### Alternative A: Status quo — principal-side SCPs + Config only
 Keep enforcing only on the caller side and rely on Config rules for resource
@@ -112,8 +146,12 @@ window), and free SCP slots.
 
 Migration order (each step independently revertible):
 
-1. Land the `CheckNoNewAccess` CI gate (advisory) so subsequent policy edits are
-   measured from the start.
+0. Stand up **AFT**: deploy the AFT framework module and the four `aft-*` repos;
+   move new-account creation onto the AFT request pipeline so RCPs / declarative
+   policies / SCPs below can be attached as account customizations.
+1. Land the Access-Analyzer custom-check CI gate (advisory) — gating on the JSON
+   `result` field from old-vs-new policy JSON (`terraform show -json`) — so
+   subsequent policy edits are measured from the start.
 2. Enable the `RESOURCE_CONTROL_POLICY` and EC2 declarative policy types in the
    org.
 3. **Stage the RCP in a `Policy-Staging` OU** (a small test account set) and verify
@@ -128,15 +166,22 @@ Effort: **M**.
 
 ## References
 
+- Account Factory for Terraform (AFT):
+  <https://docs.aws.amazon.com/controltower/latest/userguide/aft-overview.html>
+- AFT pipeline / four-repo customization model:
+  <https://docs.aws.amazon.com/controltower/latest/userguide/aft-account-provisioning-customizations.html>
 - Resource Control Policies (RCPs):
   <https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_rcps.html>
 - EC2 Declarative Policies:
   <https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_declarative.html>
-- IAM Access Analyzer custom policy checks (`CheckNoNewAccess`):
+- Full IAM policy language in SCPs (GA 2025-09-19):
+  <https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_scps.html>
+- IAM Access Analyzer custom policy checks
+  (`CheckNoNewAccess` / `CheckAccessNotGranted`, paid):
   <https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-custom-policy-checks.html>
 - Related: ADR-0001 (OU split), ADR-0011 (break-glass IAM)
 
 ---
-*Research-backed — 2026 platform modernization; grounded in infra@572b54d /
-argocd@c364c6c. Proposed: decision to ratify, not yet implemented in
-platform-design.*
+*Research-backed + doc-verified 2026-06-07 (Context7 + official AWS/vendor docs) —
+2026 platform modernization; grounded in infra@572b54d / argocd@c364c6c. Accepted,
+ratified 2026-06-07 by platform owner; not yet implemented in platform-design.*
