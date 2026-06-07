@@ -58,7 +58,15 @@ apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sBlockLatestTag
 metadata:
   name: block-latest-tag
+  annotations:
+    # Graduation (W3/ADR-0017): promoted warn -> deny after the audit-log soak
+    # confirmed no legitimate workload violations remained.
+    policy.qbiq.io/enforcement-graduation: "warn->deny (W3)"
 spec:
+  # enforcementAction: deny — graduated from warn (W3). ROLLBACK/ESCAPE: set this
+  # to `dryrun` to log violations in audit without blocking admissions (safest,
+  # keeps the violation signal), or to `warn` to admit with a warning. Reverting
+  # is a one-line, per-constraint change with no template change.
   enforcementAction: deny
   match:
     kinds:

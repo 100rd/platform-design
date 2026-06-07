@@ -4,7 +4,7 @@ variable "organization_id" {
 }
 
 variable "target_ou_ids" {
-  description = "List of OU (or root) IDs to attach the org-perimeter RCP to. Per ADR-0017 staged rollout, wire ONLY the Policy-Staging OU id first; switch to the root id to promote once staging is verified clean."
+  description = "List of OU (or root) IDs to attach the org-perimeter RCP to. ADR-0017 staged rollout → root promotion: STAGE by wiring ONLY the Policy-Staging OU id first; PROMOTE by appending the organization root id once staging is verified clean. The attachment is a for_each set, so adding the root id is additive (Policy-Staging stays attached) and removing it cleanly reverts to staged-only."
   type        = list(string)
   default     = []
 }

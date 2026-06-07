@@ -2,7 +2,9 @@ mock_provider "aws" {}
 
 variables {
   organization_id = "o-testorg12345"
-  target_ou_ids   = ["ou-policy-staging-mock"]
+  # ADR-0017 step 4: promoted to root — both the Policy-Staging OU and the org
+  # root are attached. for_each makes the root addition additive/reversible.
+  target_ou_ids = ["ou-policy-staging-mock", "r-rootmock"]
   tags = {
     Environment = "test"
     Team        = "security"
@@ -52,13 +54,25 @@ run "rcp_matches_org_id_and_carves_out_aws_service" {
     condition     = strcontains(aws_organizations_policy.org_perimeter.content, "aws:PrincipalIsAWSService")
     error_message = "RCP must carve out AWS service principals to avoid breaking log delivery / cross-service calls"
   }
-}
-
-run "attaches_to_provided_targets" {
-  command = plan
 
   assert {
-    condition     = length(aws_organizations_policy_attachment.org_perimeter) == 1
-    error_message = "RCP should attach to exactly the one staged target OU"
+    condition     = strcontains(aws_organizations_policy.org_perimeter.content, "StringNotEqualsIfExists")
+    error_message = "Carve-out must use *IfExists semantics so unresolved-context calls do not false-trip"
+  }
+}
+
+run "promoted_to_root_additively" {
+  command = plan
+
+  # ADR-0017 step 4: attached to BOTH staging and root (root promotion is
+  # additive — Policy-Staging stays attached alongside the new root target).
+  assert {
+    condition     = length(aws_organizations_policy_attachment.org_perimeter) == 2
+    error_message = "Post-promotion the RCP should attach to both the Policy-Staging OU and the org root"
+  }
+
+  assert {
+    condition     = contains([for a in aws_organizations_policy_attachment.org_perimeter : a.target_id], "r-rootmock")
+    error_message = "RCP must be attached to the organization root after promotion (ADR-0017 step 4)"
   }
 }

@@ -19,9 +19,9 @@
 #   RCPs evaluate AFTER identity-based, SCP, and resource-based policy. An
 #   explicit Deny here is final. The seed RCP below is an *org-perimeter* deny
 #   with an AWS-service carve-out — mis-scoping it could deny legitimate
-#   cross-service / log-delivery access, which is exactly why this module is
+#   cross-service / log-delivery access, which is exactly why this module was
 #   STAGED in the Policy-Staging OU first (ADR-0017 Implementation notes step 3)
-#   and only promoted to root once staging is verified clean.
+#   and only promoted to root once staging was verified clean (step 4).
 #
 # CARVE-OUTS (mirrors the principal-side SCP exemption philosophy):
 #   - aws:PrincipalIsAWSService = true  — first-party AWS service principals
@@ -74,14 +74,23 @@ resource "aws_organizations_policy" "org_perimeter" {
 # ---------------------------------------------------------------------------------------------------------------------
 # Policy Attachment
 # ---------------------------------------------------------------------------------------------------------------------
-# Staged rollout (ADR-0017 Implementation notes):
-#   step 3 — attach to the Policy-Staging OU first, verify no legitimate access
-#            breaks (a small test-account set).
-#   step 4 — promote to root once staging is clean.
+# GRADUATION — staged rollout → root promotion (ADR-0017 Implementation notes):
+#   step 3 (done)  — attached to the Policy-Staging OU first, verified no
+#                    legitimate access breaks (a small test-account set).
+#   step 4 (now)   — promoted to root, post-soak. The terragrunt unit
+#                    `_org/_global/rcps` now passes BOTH the Policy-Staging OU id
+#                    and the organization root id in `target_ou_ids`.
 #
-# This module is parameterized by `target_ou_ids`: wire it to the Policy-Staging
-# OU now; switch the terragrunt input to the root id to promote. The attachment
-# is for_each over the targets so promotion is an additive, revertible change.
+# This module is parameterized by `target_ou_ids` (a for_each set). Because the
+# attachment iterates the targets, adding the root id is ADDITIVE — the
+# Policy-Staging attachment is retained alongside the new root attachment, and
+# the org-perimeter policy resource itself is unchanged.
+#
+# ROLLBACK: remove the root id from `target_ou_ids` (in the terragrunt unit) and
+# re-plan/apply. Terraform destroys only the root attachment instance; the
+# policy and the Policy-Staging attachment survive, reverting cleanly to
+# staged-only. Emptying `target_ou_ids` detaches everywhere while leaving the
+# policy defined-but-unattached (the lowest-risk full disable).
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "aws_organizations_policy_attachment" "org_perimeter" {
