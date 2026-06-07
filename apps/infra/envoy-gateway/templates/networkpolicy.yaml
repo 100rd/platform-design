@@ -1,0 +1,73 @@
+{{- if .Values.networkPolicy.enabled }}
+---
+# NetworkPolicy for the Envoy Gateway controller pods.
+# Restricts ingress/egress to the minimum required for operation and observability.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "envoy-gateway.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "envoy-gateway.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "envoy-gateway.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Allow Prometheus scraping of controller metrics (port 19001).
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 19001
+
+    # Allow health/readiness probes from kubelet (any namespace).
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8081
+
+  egress:
+    # Allow DNS resolution.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+
+    # Allow Kubernetes API server access (controller watches Gateway/HTTPRoute resources).
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+
+    # Allow controller to communicate with Envoy proxy data-plane pods
+    # (xDS port 18000 used for ADS/xDS config delivery).
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/managed-by: envoy-gateway
+      ports:
+        - protocol: TCP
+          port: 18000
+        # gRPC metrics from Envoy proxy -> controller
+        - protocol: TCP
+          port: 18001
+{{- end }}

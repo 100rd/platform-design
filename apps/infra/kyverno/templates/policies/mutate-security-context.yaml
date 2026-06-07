@@ -1,0 +1,118 @@
+---
+# ClusterPolicy — mutate securityContext (secure-by-default injection)
+#
+# ADR-0020: Kyverno mutates workloads to be secure by default.
+# Injects hardened securityContext into every container that does not already
+# set the fields, so teams get safe defaults without opting in manually.
+#
+# Injected fields (only when absent — + prefix = strategic merge / add-if-missing):
+#   runAsNonRoot: true          — prevent UID 0
+#   seccompProfile.type: RuntimeDefault — enable default seccomp filter
+#   capabilities.drop: [ALL]   — drop all Linux capabilities
+#
+# The mutation uses patchStrategicMerge + the + (add-if-missing) operator so
+# it does NOT overwrite values that workloads explicitly set. Workloads that
+# need elevated capabilities must set them explicitly (override is preserved).
+#
+# failureAction: Audit — start in Audit; promote to Enforce after clean window.
+#   TODO(ops): promote validationFailureAction to Enforce in prod.
+#
+# Kyverno JMESPath expressions are wrapped in backtick raw-string Helm actions
+# so Helm passes them through verbatim instead of interpreting them as Go templates.
+#
+# References:
+#   https://kyverno.io/docs/policy-types/cluster-policy/mutate/
+#   ADR-0020 section: mutate — inject runAsNonRoot/seccompProfile/drop-ALL
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: mutate-securitycontext-defaults
+  annotations:
+    policies.kyverno.io/title: Inject hardened securityContext defaults
+    policies.kyverno.io/category: Pod Security
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Injects secure securityContext defaults (runAsNonRoot, RuntimeDefault
+      seccomp, drop ALL capabilities) into containers that do not already
+      set these fields. Workloads that explicitly set these fields are not
+      overwritten (strategic merge preserves explicit values).
+    adr: ADR-0020
+spec:
+  # TODO(ops): change to Enforce after a clean Audit window in each env.
+  validationFailureAction: Audit
+
+  background: true  # Apply mutations to existing resources during background scan
+
+  rules:
+    # -----------------------------------------------------------------------
+    # Rule 1 — inject pod-level seccompProfile when absent
+    # -----------------------------------------------------------------------
+    - name: inject-pod-seccomp
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      # Only patch when pod-level seccompProfile is not already present.
+      preconditions:
+        all:
+          - key: "{{`{{ request.object.spec.securityContext.seccompProfile.type || '' }}`}}"
+            operator: Equals
+            value: ""
+      mutate:
+        patchStrategicMerge:
+          spec:
+            securityContext:
+              +(seccompProfile):
+                type: RuntimeDefault
+
+    # -----------------------------------------------------------------------
+    # Rule 2 — inject container-level securityContext defaults when absent
+    # -----------------------------------------------------------------------
+    - name: inject-container-security-defaults
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      mutate:
+        foreach:
+          - list: "request.object.spec.containers"
+            patchStrategicMerge:
+              spec:
+                containers:
+                  - name: "{{`{{ element.name }}`}}"
+                    securityContext:
+                      # + means "add only if key is absent"; existing value wins.
+                      +(runAsNonRoot): true
+                      +(capabilities):
+                        drop:
+                          - ALL
+
+    # -----------------------------------------------------------------------
+    # Rule 3 — same injection for initContainers (when present)
+    # -----------------------------------------------------------------------
+    - name: inject-init-container-security-defaults
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      preconditions:
+        all:
+          - key: "{{`{{ request.object.spec.initContainers | length(@) }}`}}"
+            operator: GreaterThanOrEquals
+            value: "1"
+      mutate:
+        foreach:
+          - list: "request.object.spec.initContainers"
+            patchStrategicMerge:
+              spec:
+                initContainers:
+                  - name: "{{`{{ element.name }}`}}"
+                    securityContext:
+                      +(runAsNonRoot): true
+                      +(capabilities):
+                        drop:
+                          - ALL
