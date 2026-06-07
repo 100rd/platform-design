@@ -42,13 +42,18 @@ internal:
 # Hostnames use the placeholder *.platform.internal domain (matches the
 # gw-external TLS cert); swap for the real domain once DNS is wired.
 httpRoutes:
-  # Grafana — modeled by apps/infra/observability/prometheus-stack
-  # (kube-prometheus-stack grafana subchart, Service on port 80 in `monitoring`).
+  # Grafana — kube-prometheus-stack grafana subchart (apps/infra/observability/
+  # prometheus-stack). Service `kube-prometheus-stack-grafana` lives in the
+  # `observability` namespace (migrated from `monitoring` per ADR-0026 / PR #255).
+  # Port 80 routes plaintext HTTP to the Gateway listener; BackendTLSPolicy
+  # (templates/backendtlspolicy-grafana.yaml) encrypts the gateway->backend hop
+  # independently of the HTTPRoute port. Follow-up: once Grafana is switched to
+  # HTTPS in apps/infra/observability, change port here to 443 (see README.md).
   - name: grafana
     hostname: grafana.platform.internal
     backend:
       name: kube-prometheus-stack-grafana
-      namespace: monitoring
+      namespace: observability
       port: 80
   # ArgoCD UI — the GitOps control plane Service (argocd-server) in `argocd`.
   - name: argocd

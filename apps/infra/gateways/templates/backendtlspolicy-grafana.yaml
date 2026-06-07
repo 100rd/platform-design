@@ -28,11 +28,13 @@
 #
 # 4. grafana-backend-ca-cm ConfigMap (wave 3)
 #    BackendTLSPolicy spec.validation.caCertificateRefs requires a ConfigMap
-#    (group: "", kind: ConfigMap) containing the key ca.crt. This resource
-#    is populated by an ExternalSecret or a manual copy of ca.crt from the CA
-#    Secret. In this mock platform the ca.crt value below is a placeholder;
-#    in production use an ESO ExternalSecret (cluster-secret-store) to sync
-#    grafana-backend-ca-secret.ca.crt into this ConfigMap automatically.
+#    (group: "", kind: ConfigMap) containing the key ca.crt. The ConfigMap is
+#    bootstrapped empty and populated automatically by cert-manager's cainjector
+#    via the annotation `cert-manager.io/inject-ca-from: gateways/grafana-backend-ca`
+#    (the <namespace>/<Certificate-name> reference). cainjector watches for this
+#    annotation and injects ca.crt from the named Certificate's CA bundle as soon
+#    as the Certificate is issued -- no manual copy or ESO sync required.
+#    Prerequisite: apps/infra/cert-manager with cainjector.enabled=true (default).
 #
 # 5. grafana BackendTLSPolicy (wave 4)
 #    Targets the kube-prometheus-stack-grafana Service in the observability
@@ -141,15 +143,14 @@ spec:
 # (group: "", kind: ConfigMap) with key `ca.crt`. The ConfigMap must be in
 # the same namespace as the targetRef Service (observability -- see step 4b).
 # This copy in the `gateways` namespace is kept for operational convenience
-# (kubectl inspection, ESO sync source).
+# (kubectl inspection, cross-namespace CA bundle reference).
 #
-# Bootstrap procedure (run once after cert-manager issues the CA):
-#   kubectl get secret grafana-backend-ca-secret -n gateways \
-#     -o jsonpath='{.data.ca\.crt}' | base64 -d | \
-#   kubectl create configmap grafana-backend-ca-cm \
-#     --from-file=ca.crt=/dev/stdin -n gateways --dry-run=client -o yaml | \
-#   kubectl apply -f -
-# In production: use an ESO ExternalSecret targeting cluster-secret-store.
+# CA injection: cert-manager's cainjector populates `ca.crt` automatically once
+# grafana-backend-ca is issued. The annotation below instructs cainjector to watch
+# the Certificate `grafana-backend-ca` in the `gateways` namespace and inject its
+# CA bundle into this ConfigMap. No manual bootstrap or ESO sync is needed.
+# Both ConfigMaps (4a + 4b) stay in sync automatically on CA renewal.
+# Prerequisite: apps/infra/cert-manager cainjector.enabled=true (see values.yaml).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -157,12 +158,10 @@ metadata:
   namespace: {{ .Values.namespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "3"
-    # PLACEHOLDER -- sync actual ca.crt from Secret grafana-backend-ca-secret
-    # before BackendTLSPolicy can enforce TLS validation.
-data:
-  # Placeholder -- replace with the real CA cert after cert-manager issues
-  # the grafana-backend-ca Certificate (see bootstrap comment above).
-  ca.crt: ""
+    # cert-manager cainjector: inject ca.crt from the named Certificate as soon
+    # as it is issued. Format: <namespace>/<Certificate-name>.
+    cert-manager.io/inject-ca-from: {{ .Values.namespace }}/grafana-backend-ca
+data: {}
 
 ---
 # Step 4b -- CA ConfigMap in observability namespace (required by BackendTLSPolicy)
@@ -172,8 +171,9 @@ data:
 # (migrated from `monitoring` per ADR-0026 / PR #255), so this ConfigMap must
 # also be in `observability`.
 #
-# In production: use a Kyverno ClusterPolicy or ESO ExternalSecret to keep
-# both ConfigMaps (gateways + observability) in sync with the CA Secret.
+# CA injection: same cainjector mechanism as step 4a. cainjector injects ca.crt
+# from `gateways/grafana-backend-ca` into this ConfigMap automatically.
+# Both ConfigMaps receive the same CA bundle and stay in sync on cert renewal.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -181,11 +181,10 @@ metadata:
   namespace: observability
   annotations:
     argocd.argoproj.io/sync-wave: "3"
-    # PLACEHOLDER -- mirrors grafana-backend-ca-cm in the gateways namespace.
-    # Sync actual ca.crt from Secret grafana-backend-ca-secret.ca.crt.
-data:
-  # Placeholder -- replace with the real CA cert (same value as step 4a).
-  ca.crt: ""
+    # cert-manager cainjector: inject ca.crt from Certificate grafana-backend-ca
+    # in the gateways namespace. Kept in sync automatically on CA renewal.
+    cert-manager.io/inject-ca-from: {{ .Values.namespace }}/grafana-backend-ca
+data: {}
 
 ---
 # Step 5 -- BackendTLSPolicy
@@ -223,5 +222,5 @@ spec:
       - group: ""
         kind: ConfigMap
         # ConfigMap must be in the same namespace as the targetRef Service.
-        # Populated from grafana-backend-ca-secret.ca.crt (step 4b above).
+        # Populated automatically by cert-manager cainjector (step 4b above).
         name: grafana-backend-ca-cm
