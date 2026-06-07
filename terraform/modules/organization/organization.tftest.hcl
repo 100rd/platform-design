@@ -35,3 +35,29 @@ run "empty_member_accounts_by_default" {
     error_message = "No member accounts should be defined by default"
   }
 }
+
+run "creates_policy_staging_ou" {
+  command = plan
+
+  assert {
+    condition     = aws_organizations_organizational_unit.policy_staging.name == "Policy-Staging"
+    error_message = "Policy-Staging OU should be created for ADR-0017 staged RCP rollout"
+  }
+}
+
+run "supports_resource_control_policy_type" {
+  command = plan
+
+  variables {
+    enabled_policy_types = [
+      "SERVICE_CONTROL_POLICY",
+      "TAG_POLICY",
+      "RESOURCE_CONTROL_POLICY",
+    ]
+  }
+
+  assert {
+    condition     = contains(var.enabled_policy_types, "RESOURCE_CONTROL_POLICY")
+    error_message = "RESOURCE_CONTROL_POLICY must be enable-able for the RCP module (ADR-0017)"
+  }
+}
