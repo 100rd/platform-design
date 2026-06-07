@@ -24,6 +24,19 @@ spec:
         app.kubernetes.io/part-of: observability
         cluster-role: '{{.metadata.labels.cluster-role}}'
         env: '{{.metadata.labels.env}}'
+      annotations:
+        # Sync-wave ordering for trace-lane activation (ADR-0019/ADR-0026):
+        #   tempo-stack     -> wave 10  (storage backend first)
+        #   otel-collector  -> wave 15  (pipeline before producers)
+        #   obi             -> wave 20  (eBPF producer last)
+        #   everything else -> wave  5  (infra/platform tooling)
+        #
+        # goTemplate note: ApplicationSet does not support dynamic per-app
+        # wave assignment via template conditionals. The default wave here
+        # applies to all AppSet-generated Applications. For ordered
+        # bootstrapping of the trace lane use the explicit argocd-application.yaml
+        # files inside each chart directory: kubectl apply -f <chart>/argocd-application.yaml
+        argocd.argoproj.io/sync-wave: "5"
     spec:
       project: default
       source:
