@@ -1,5 +1,24 @@
 # Cilium CNI Configuration for EKS with Bottlerocket
 # https://docs.cilium.io/en/stable/
+#
+# ---------------------------------------------------------------------------
+# WAVE PROVENANCE
+# ---------------------------------------------------------------------------
+# W4 (2026-06-07): Cilium 1.17.1 → 1.19.4
+#   Breaking-changes summary (see docs/runbooks/cilium-upgrade-1.19.md):
+#     - `routingMode: native` + ENI: no functional change; field remains valid.
+#     - `kubeProxyReplacement: false` → string field now; no migration needed.
+#     - bpf.datapathMode defaults changed — explicit value required for netkit (see W5 block).
+#     - clustermesh.apiserver TLS bootstrap flow changed; shared-CA rotation doc updated.
+#     - Minimal kernel requirement unchanged at 5.10 for base install.
+#   Rollback: revert Chart.yaml appVersion + Chart.lock to 1.17.1; re-run ArgoCD sync.
+#
+# W5 (PILOT, gated — see ## ClusterMesh and ## netkit sections below):
+#   ClusterMesh scaffold: cluster.name + cluster.id assigned; apiserver disabled
+#     until 2nd cluster is provisioned. Gate: platform team sign-off + shared-CA rotation.
+#   netkit datapath: bpf.datapathMode: netkit commented out, requires kernel >=6.8
+#     (Bottlerocket 6.12 per ADR-0030). BETA feature, needs coordinated node replacement.
+# ---------------------------------------------------------------------------
 
 cilium:
   enabled: true
@@ -70,8 +89,10 @@ cilium:
 
   # ---------------------------------------------------------------------------
   # kube-proxy Replacement
-  # Start with false for safer migration, enable after validation
   # ---------------------------------------------------------------------------
+  # Base clusters: false for safer migration; enable after node validation.
+  # W5/netkit pilot clusters: set true (required by netkit datapath, see ## netkit).
+  # GPU clusters: overridden to true in values-gpu-inference.yaml.
   kubeProxyReplacement: false
 
   # Cluster API server (set via ArgoCD values override)
@@ -79,7 +100,81 @@ cilium:
   k8sServicePort: 443
 
   # ---------------------------------------------------------------------------
-  # Gateway API (ADR-0009) — Cilium as the cluster ingress controller
+  # ## ClusterMesh — W5 PILOT (gated until 2nd cluster is provisioned)
+  # ---------------------------------------------------------------------------
+  # ClusterMesh enables cross-cluster service discovery and global network
+  # policies. This scaffold assigns permanent cluster identity values and
+  # enables the apiserver component. The apiserver itself is DISABLED here
+  # until a second cluster is ready; flip `clustermesh.apiserver.enabled: true`
+  # (and the matching `cluster.id`/`cluster.name` on the peer cluster) once
+  # the 2nd cluster exists.
+  #
+  # Shared-CA requirement: both clusters MUST share the same Cilium CA
+  # (clustermesh-apiserver-ca-cert secret). Rotate via:
+  #   cilium clustermesh connect --context <cluster-a> --destination-context <cluster-b>
+  # Full procedure: docs/runbooks/cilium-clustermesh-ca-rotation.md
+  #
+  # Gate: platform-team approval + shared-CA secret in both clusters + ADR update.
+  # Rollback: set clustermesh.apiserver.enabled: false + remove cluster.id/cluster.name
+  #           overrides on both sides; no data loss for existing same-cluster policies.
+  #
+  # cluster.id: integer 1-255 (unique per mesh, never reuse across meshes)
+  # cluster.name: must be unique and DNS-label-safe within the mesh
+  cluster:
+    name: "primary"   # PILOT: set per-cluster before enabling apiserver
+    id: 1             # PILOT: assign 1=primary, 2=secondary, etc.
+
+  clustermesh:
+    useAPIServer: false  # flip to true only after 2nd cluster is provisioned
+    apiserver:
+      enabled: false   # PILOT -- disabled until 2nd cluster exists
+      # When enabled: expose via internal NLB (no public endpoint).
+      # Annotate the Service with service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+      # and service.beta.kubernetes.io/aws-load-balancer-scheme: "internal".
+      service:
+        type: LoadBalancer
+        annotations:
+          service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+          service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
+          service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+      # TLS: shared CA must be pre-populated as clustermesh-apiserver-ca-cert
+      # in kube-system on both clusters before apiserver is enabled.
+      tls:
+        auto:
+          enabled: true
+          method: helm
+
+  # ---------------------------------------------------------------------------
+  # ## netkit datapath -- W5 PILOT (BETA, REQUIRES kernel >=6.8 per ADR-0030)
+  # ---------------------------------------------------------------------------
+  # netkit is a new veth alternative that uses BPF-native virtual device
+  # types, removing the need for tc BPF programs and reducing per-packet
+  # overhead. It requires:
+  #   - kernel >=6.8 (Bottlerocket 6.12 satisfies this per ADR-0030)
+  #   - routingMode: native (already set above)
+  #   - kubeProxyReplacement: true (override in per-cluster values for pilot nodes)
+  #   - bpf.masquerade: true (set in bpf block below)
+  #
+  # STATUS: BETA -- do NOT enable on all nodes simultaneously.
+  # Pilot: replace one node group at a time with Bottlerocket 6.12 nodes,
+  # validate with `cilium connectivity test`, then proceed.
+  # To activate: uncomment bpf.datapathMode below AND set kubeProxyReplacement: true
+  # in the per-cluster ArgoCD values override.
+  # Rollback: bpf.datapathMode: veth (default prior to netkit); rolling node replacement
+  #   required because datapathMode change needs agent restart with clean BPF map state
+  #   (rolling restart sufficient, no persistent data loss).
+  #
+  # REQUIRES kernel >=6.8 (ADR-0030: Bottlerocket 6.12). Do NOT enable on
+  # AL2/AL2023 nodes or Bottlerocket <6.8 -- agent will fail to start.
+  bpf:
+    # datapathMode: netkit   # W5 PILOT -- uncomment after node groups replaced with BR 6.12
+    masquerade: true
+    clockProbe: false
+    preallocateMaps: true
+    tproxy: true
+
+  # ---------------------------------------------------------------------------
+  # Gateway API (ADR-0009) -- Cilium as the cluster ingress controller
   # ---------------------------------------------------------------------------
   # Enables Cilium's native Gateway API support. Cilium watches GatewayClass /
   # Gateway / HTTPRoute objects and registers the controller name
@@ -90,12 +185,17 @@ cilium:
   # Ordering: the Gateway API CRDs (apps/infra/gateway-api-crds) MUST be applied
   # before this Helm release reconciles, or the Cilium operator fails to start
   # the Gateway controller. ArgoCD sync-waves enforce CRDs-first.
+  #
+  # enableAlpn: W4 -- enables ALPN negotiation on Gateway API backend connections,
+  #   required for BackendTLSPolicy support (issue #264). Cilium 1.16+ only.
+  #   Enables h2/http1.1 ALPN on upstream TLS connections; safe to enable
+  #   alongside existing Gateways. No downtime required.
   gatewayAPI:
     enabled: true
     # Gateways expose a single shared LoadBalancer Service; the AWS Load
     # Balancer Controller turns the Gateway's infrastructure annotations into
     # an NLB (see apps/infra/gateways).
-    enableAlpn: false
+    enableAlpn: true        # W4: enabled for BackendTLSPolicy (issue #264)
     enableAppProtocol: false
 
   # ---------------------------------------------------------------------------
@@ -224,15 +324,6 @@ cilium:
   # Bottlerocket-specific cgroup path
   cgroup:
     hostRoot: /sys/fs/cgroup
-
-  # ---------------------------------------------------------------------------
-  # BPF Settings
-  # ---------------------------------------------------------------------------
-  bpf:
-    masquerade: true
-    clockProbe: false
-    preallocateMaps: true
-    tproxy: true
 
   # Bandwidth manager for QoS
   bandwidthManager:
