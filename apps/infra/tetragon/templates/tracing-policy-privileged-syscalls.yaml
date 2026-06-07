@@ -1,0 +1,86 @@
+# TracingPolicy: Privileged Syscall Detection — OBSERVE MODE
+# ADR-0019: Detects privilege-escalation and container-escape patterns at the
+# syscall level. Observes: ptrace (process inspection/injection), setuid/setgid
+# (privilege change), and mount (namespace/filesystem manipulation).
+#
+# Graduate to enforce-mode when ready:
+#   1. Run in observe-mode for >=2 weeks to baseline which workloads legitimately
+#      call these syscalls (e.g. containerd uses mount; node-problem-detector uses ptrace).
+#   2. Build per-binary allowlists with matchBinaries selectors.
+#   3. Add Sigkill action for unexpected callers. Example (do NOT enable now):
+#        selectors:
+#          - matchBinaries:
+#              - operator: "NotIn"
+#                values: ["/usr/bin/strace", "/usr/bin/gdb"]
+#            matchActions:
+#              - action: Sigkill
+#   4. Update ADR-0019 status to "enforced" and record the enforcement PR.
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: privileged-syscall-tracing
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: tetragon
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: tetragon
+    tetragon.io/policy-mode: observe
+    adr: "0019"
+  annotations:
+    tetragon.io/description: "Observe privileged syscalls: ptrace, setuid, setgid, mount"
+    tetragon.io/observe-only: "true"
+spec:
+  kprobes:
+    # ptrace — process inspection and injection. Primary container-escape vector
+    # when an attacker breaks out of one container into a co-located container.
+    # Legitimate callers: debuggers, strace, node-problem-detector.
+    - call: "sys_ptrace"
+      syscall: true
+      args:
+        - index: 0
+          type: "int"   # request (PTRACE_ATTACH=16, PTRACE_SEIZE=0x4206, etc.)
+        - index: 1
+          type: "int"   # pid of tracee
+      selectors:
+        # Observe all ptrace requests initially.
+        # Narrow to PTRACE_ATTACH/SEIZE if event volume is too high.
+        - matchCapabilities: []
+
+    # setuid — allows a process to change its user identity.
+    # Unexpected setuid(0) from non-system binaries indicates privilege escalation.
+    - call: "sys_setuid"
+      syscall: true
+      args:
+        - index: 0
+          type: "int"   # uid
+      selectors:
+        - matchCapabilities: []
+
+    # setgid — same pattern as setuid but for group identity.
+    - call: "sys_setgid"
+      syscall: true
+      args:
+        - index: 0
+          type: "int"   # gid
+      selectors:
+        - matchCapabilities: []
+
+    # mount — filesystem and namespace manipulation.
+    # Container escapes often pivot by remounting /proc or /sys in a new mount namespace.
+    # Legitimate callers: container runtime (containerd/runc), kubelet, systemd.
+    - call: "sys_mount"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"  # source device or path
+        - index: 1
+          type: "string"  # target mount point
+        - index: 2
+          type: "string"  # filesystemtype
+        - index: 3
+          type: "uint32"  # mountflags (MS_BIND=4096, MS_MOVE=8192, MS_REC=16384)
+      selectors:
+        # Observe all mounts initially. Narrow to non-privileged namespaces
+        # once containerd/kubelet mount patterns are baselisted.
+        - matchCapabilities: []
