@@ -21,17 +21,20 @@ Applications deployed via ArgoCD from `apps/infra/`
 | cilium | 1.0.0 | 1.17.1 | Cilium CNI with Hubble observability for Kubernetes networki |
 | cluster-secret-store | 1.0.0 | 1.0.0 | ClusterSecretStore for AWS Secrets Manager — deployed per  |
 | dcgm-exporter | 1.0.0 | 4.5.0 | NVIDIA DCGM Exporter - GPU health metrics and auto-taint for |
+| envoy-gateway | 1.0.0 | v1.8.0 | Envoy Gateway - secondary L7 GatewayClass alongside Cilium ( |
 | external-dns | 1.0.0 | 0.15.1 | ExternalDNS - Synchronize Kubernetes resources with DNS prov |
 | external-secrets | 1.3.1 | v0.14.1 | Install the External Secrets Operator using the official cha |
 | gatekeeper | 3.18.2 | v3.18.2 | OPA Gatekeeper for Kubernetes policy enforcement |
-| gateway-api-crds | 0.1.0 |  | Gateway API standard channel CRDs v1.2.1 + Cilium GatewayCla |
-| gateways | 0.1.0 |  | External and internal Cilium Gateways backed by AWS NLBs via |
+| gateway-api-crds | 0.2.0 |  | Gateway API standard channel CRDs v1.4.0 + Cilium GatewayCla |
+| gateways | 0.2.0 |  | External and internal Cilium Gateways + BackendTLSPolicy (AD |
 | gpu-operator | 1.0.0 | v26.3.0 | NVIDIA GPU Operator - Automated GPU driver, toolkit, and dev |
-| kargo | 0.1.0 | 1.2.0 | Kargo progressive delivery controller |
-| kyverno | 1.0.0 | 1.13.4 | Kyverno - Kubernetes Native Policy Management |
+| kargo | 0.2.0 | 1.9.0 | Kargo progressive delivery controller |
+| kyverno | 1.1.0 | 1.18.1 | Kyverno - Kubernetes Native Policy Management (ADR-0020) |
 | opencost | 1.0.0 | 1.113.0 | >- |
 | otel-operator | 0.1.0 |  | OpenTelemetry Operator with auto-instrumentation for Go appl |
+| pyrra | 1.0.0 | 0.10.0 | SLO operator and UI (Pyrra) — emits PrometheusRules from S |
 | rabbitmq-operator | 1.0.0 | 2.12.0 | RabbitMQ Cluster Operator - Kubernetes-native RabbitMQ lifec |
+| tetragon | 1.0.0 | 1.3.0 | | |
 | velero | 1.1.0 | 1.15.0 | Velero - Kubernetes backup and disaster recovery |
 | victoriametrics | 1.0.0 | 0.68.0 | VictoriaMetrics Operator - High-performance monitoring for G |
 | volcano | 1.0.0 | 1.8.0 | Volcano - Kubernetes-native batch and GPU-aware scheduler |

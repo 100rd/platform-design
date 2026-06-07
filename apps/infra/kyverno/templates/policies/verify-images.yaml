@@ -19,16 +19,15 @@
 #   rekor   — https://rekor.sigstore.dev  (public Sigstore transparency log)
 #   mutateDigest: true — rewrites tag reference to the verified digest so the
 #     admitted pod is pinned to the exact verified image (not just the tag).
-#   failureAction: Audit — start in Audit; flip to Enforce after clean window.
-#     TODO(ops): promote validationFailureAction to Enforce once audit shows
-#       no false positives in prod.
+#   failureAction: Enforce — graduated from Audit after clean soak window (W3/ADR-0020).
+#     Rollback: set validationFailureAction back to Audit and re-apply.
 #
 # Scope: first-party images in our ECR registry (*.dkr.ecr.*.amazonaws.com/*).
 #   Third-party / upstream images (registry.k8s.io, quay.io, ghcr.io, etc.)
 #   are NOT included — they are not signed by our GitHub Actions identity and
-#   would generate spurious Audit findings or block admission when promoted
-#   to Enforce. Upstream images are covered separately by vulnerability
-#   scanning (Trivy) and digest-pinning (Gatekeeper block-latest-tag policy).
+#   would generate spurious Audit findings or block admission.
+#   Upstream images are covered separately by vulnerability scanning (Trivy)
+#   and digest-pinning (Gatekeeper block-latest-tag policy).
 #   public.ecr.aws (AWS-managed pause/CNI images) is also excluded for the
 #   same reason.
 #
@@ -58,8 +57,9 @@ metadata:
       mutateDigest rewrites the tag reference to the verified digest.
     adr: ADR-0020
 spec:
-  # TODO(ops): change to Enforce after a clean Audit window in each env.
-  validationFailureAction: Audit
+  # W3/ADR-0020: graduated from Audit to Enforce after clean soak window.
+  # Rollback: set this back to Audit and re-apply (see README Rollback section).
+  validationFailureAction: Enforce
 
   # Image verification is admission-time only; background scan not applicable.
   background: false
@@ -81,8 +81,8 @@ spec:
             #   - registry.k8s.io       (upstream Kubernetes images)
             #   - quay.io / ghcr.io     (upstream third-party images)
             # Those registries are not signed by our GitHub Actions identity;
-            # including them would cause spurious Audit hits today and block
-            # admission when this policy is promoted to Enforce.
+            # including them in this policy would block admission for unsigned
+            # upstream images.
             - "*.dkr.ecr.*.amazonaws.com/*"
 
           # Rewrite the admitted tag reference to the verified digest.
