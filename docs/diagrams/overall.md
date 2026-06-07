@@ -28,6 +28,7 @@ graph LR
   end
   subgraph network["network"]
     network__global_iam["network/_global/iam<br/>(iam)"]
+    network_eu_west_1_lattice_resource["network/eu-west-1/lattice-resource<br/>(vpc-lattice-resource)"]
     network_eu_west_1_transit_gateway["network/eu-west-1/transit-gateway<br/>(transit-gateway)"]
   end
   subgraph prod["prod"]
@@ -51,6 +52,7 @@ graph LR
   _org__global_sso -->|depends on| _org__global_sso__dep__organization(organization)
   dev_eu_west_1_tgw_attachment -->|depends on| dev_eu_west_1_tgw_attachment__dep__tgw(tgw)
   dev_eu_west_1_tgw_attachment -->|depends on| dev_eu_west_1_tgw_attachment__dep__vpc(vpc)
+  network_eu_west_1_lattice_resource -->|depends on| network_eu_west_1_lattice_resource__dep__vpc(vpc)
   prod__global_clustermesh_connect -->|depends on| prod__global_clustermesh_connect__dep__cilium_euc1_platform(cilium_euc1_platform)
   prod__global_clustermesh_connect -->|depends on| prod__global_clustermesh_connect__dep__cilium_euw1_gpu_inference(cilium_euw1_gpu_inference)
   prod__global_clustermesh_connect -->|depends on| prod__global_clustermesh_connect__dep__cilium_euw1_platform(cilium_euw1_platform)
