@@ -1,3 +1,19 @@
+---
+# ApplicationSet — cluster-role × git directory fan-out.
+#
+# Deploys role-specific apps to every cluster whose `cluster-role` label matches
+# one of the values below (dex, backend, 3rd-party, velocity, listeners).
+#
+# Progressive/RollingSync (ADR-0024):
+#   Applications are promoted in three ordered steps keyed on the `env` label:
+#     Step 1 — dev        (lowest risk; fast feedback)
+#     Step 2 — stage + integration  (pre-production soak)
+#     Step 3 — prod       (gates on prior steps succeeding)
+#   A step is "complete" when ALL Applications that matched its selector are
+#   Healthy+Synced. If any Application in a step reaches a degraded/error state
+#   the rollout pauses (maxUpdate: 0 semantics via the pause-on-error selector).
+#   Rollback: delete or pause the ApplicationSet; ArgoCD halts further promotion.
+#
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -25,6 +41,37 @@ spec:
               revision: HEAD
               directories:
                 - path: 'apps/cluster-roles/{{.metadata.labels.cluster-role}}/*'
+  # Progressive/RollingSync — staged promotion dev -> stage/integration -> prod.
+  # ADR-0024 section 4: ApplicationSet fleet rollout by env label.
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        # Step 1: dev — lowest blast radius; validates the generated Applications
+        # are renderable and sync cleanly before any shared environment.
+        - matchExpressions:
+            - key: env
+              operator: In
+              values:
+                - dev
+          maxUpdate: 100%
+        # Step 2: stage + integration — pre-production soak.
+        # Both are gated on Step 1 completing (all dev Applications Healthy+Synced).
+        - matchExpressions:
+            - key: env
+              operator: In
+              values:
+                - stage
+                - integration
+          maxUpdate: 50%
+        # Step 3: prod — gates on Steps 1+2.
+        # maxUpdate: 25% gives a canary wave on large prod fleets.
+        - matchExpressions:
+            - key: env
+              operator: In
+              values:
+                - prod
+          maxUpdate: 25%
   template:
     metadata:
       name: '{{.path.basename}}-{{.name}}'

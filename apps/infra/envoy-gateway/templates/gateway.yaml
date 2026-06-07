@@ -1,0 +1,32 @@
+{{- if .Values.exampleGateway.enabled }}
+---
+# Example Gateway — demonstrates an Envoy-backed multi-protocol listener.
+# Uses gatewayClassName: {{ .Values.exampleGateway.gatewayClassName }} which resolves
+# to the GatewayClass above (controllerName: gateway.envoyproxy.io/gatewayclass-controller).
+# This is intentionally namespace-scoped to {{ .Values.exampleGateway.namespace }}.
+# Move to a workload chart once a real service adopts this GatewayClass.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Values.exampleGateway.name }}
+  namespace: {{ .Values.exampleGateway.namespace }}
+  labels:
+    {{- include "envoy-gateway.labels" . | nindent 4 }}
+spec:
+  gatewayClassName: {{ .Values.exampleGateway.gatewayClassName }}
+  listeners:
+    {{- range .Values.exampleGateway.listeners }}
+    - name: {{ .name }}
+      protocol: {{ .protocol }}
+      port: {{ .port }}
+      {{- if .tls }}
+      tls:
+        mode: {{ .tls.mode }}
+        certificateRefs:
+          {{- range .tls.certificateRefs }}
+          - name: {{ .name }}
+            kind: {{ .kind | default "Secret" }}
+          {{- end }}
+      {{- end }}
+    {{- end }}
+{{- end }}

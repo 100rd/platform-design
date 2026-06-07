@@ -1,16 +1,16 @@
 apiVersion: v2
 name: gateways
-description: External and internal Cilium Gateways backed by AWS NLBs via the Gateway API (ADR-0009)
-version: 0.1.0
+description: External and internal Cilium Gateways + BackendTLSPolicy (ADR-0009, refs #252)
+version: 0.2.0
 type: application
 # Cluster ingress entrypoints for the shared EKS cluster (ADR-0009).
 #
-# Prerequisites (must sync before this chart — enforced via sync-waves):
-#   - apps/infra/gateway-api-crds  (Gateway API CRDs + Cilium GatewayClass)
-#   - apps/infra/cilium            (gatewayAPI.enabled=true registers the controller)
+# Prerequisites (must sync before this chart -- enforced via sync-waves):
+#   - apps/infra/gateway-api-crds  (Gateway API CRDs v1.4.0 + Cilium GatewayClass)
+#   - apps/infra/cilium            (gatewayAPI.enabled=true + gatewayAPI.enableAlpn=true)
 #   - apps/infra/aws-lb-controller (provisions the NLB from Gateway infra annotations)
 #   - apps/infra/cert-manager      (provides the `selfsigned` ClusterIssuer used by
-#                                   the gw-external TLS Certificate below)
+#                                   gw-external TLS cert and BackendTLSPolicy CA)
 
 maintainers:
   - name: Platform Team
@@ -22,6 +22,7 @@ keywords:
   - cilium
   - nlb
   - networking
+  - backendtlspolicy
 
 annotations:
   category: Networking

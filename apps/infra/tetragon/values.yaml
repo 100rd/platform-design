@@ -1,0 +1,186 @@
+# Tetragon Runtime Security Configuration
+# ADR-0019: Runtime Security — Tetragon (observe-mode, eBPF) over Falco.
+# https://tetragon.io/docs/
+
+tetragon:
+  enabled: true
+
+  # ---------------------------------------------------------------------------
+  # DaemonSet — runs on every node; requires privileged eBPF access.
+  # Tetragon attaches BPF programs to kprobes/tracepoints at the kernel level.
+  # ---------------------------------------------------------------------------
+  daemonSet:
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 1
+
+  # ---------------------------------------------------------------------------
+  # Container image — digest-pinned for supply-chain integrity.
+  #
+  # The upstream cilium/tetragon chart (v1.3.0) renders the agent image via
+  # _container_tetragon.tpl using .Values.tetragon.image.override.  When this
+  # wrapper chart passes values to the subchart named "tetragon", Helm strips
+  # one level — so the parent key `tetragon.tetragon.image.override` maps to
+  # the subchart's `.Values.tetragon.image.override`.
+  #
+  # Digest resolved 2026-06-07 via quay.io registry v2 manifests API:
+  #   curl -sI \
+  #     -H 'Accept: application/vnd.oci.image.index.v1+json' \
+  #     https://quay.io/v2/cilium/tetragon/manifests/v1.3.0
+  #   → docker-content-digest:
+  #       sha256:d196a28172ba6140458e4955f1e3e7d0746e638490214624b756214e5b1809c2
+  # Multi-arch manifest list (index) covering linux/amd64 + linux/arm64.
+  # Cross-checked via `docker manifest inspect`: 2 platform manifests confirmed.
+  # When upgrading: bump override tag AND digest together in one PR.
+  # ---------------------------------------------------------------------------
+  tetragon:
+    image:
+      repository: quay.io/cilium/tetragon
+      tag: v1.3.0
+      # override replaces the full image ref (repository:tag) when non-empty.
+      # This makes the DaemonSet image reference immutable and auditable.
+      override: "quay.io/cilium/tetragon:v1.3.0@sha256:d196a28172ba6140458e4955f1e3e7d0746e638490214624b756214e5b1809c2"  # v1.3.0
+      pullPolicy: IfNotPresent
+
+  # ---------------------------------------------------------------------------
+  # Resource limits
+  # Tetragon agent is memory-intensive (BPF maps + kernel ring buffer).
+  # These are intentionally generous for a safety-first initial deployment.
+  # Tune down after observing actual usage with `kubectl top pods -n tetragon`.
+  # ---------------------------------------------------------------------------
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  # ---------------------------------------------------------------------------
+  # ARM64 / multi-arch support (Graviton + x86_64 mixed node groups)
+  # ---------------------------------------------------------------------------
+  tolerations: []
+  # Target only Linux worker nodes (not Fargate or Windows).
+  # Add targeted tolerations for spot/GPU nodes if Tetragon must run there:
+  #   - key: "node.kubernetes.io/not-ready"  operator: Exists  effect: NoExecute
+  #   - key: "karpenter.sh/spot"             operator: Exists  effect: NoSchedule
+  nodeSelector:
+    kubernetes.io/os: linux
+
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                  - linux
+              # Runs on both amd64 and arm64 (Graviton); remove arm64 to
+              # restrict to x86_64-only if needed.
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+                  - arm64
+
+  # ---------------------------------------------------------------------------
+  # Security context — Tetragon requires elevated kernel access for eBPF.
+  # CAP_BPF + CAP_PERFMON are the minimal Linux 5.8+ capability set.
+  # Bottlerocket ships 5.15; older kernels need SYS_ADMIN as a fallback.
+  # ---------------------------------------------------------------------------
+  securityContext:
+    privileged: false
+    capabilities:
+      add:
+        - BPF
+        - PERFMON
+        - NET_ADMIN
+        - SYS_PTRACE
+      drop:
+        - ALL
+    seccompProfile:
+      type: Unconfined  # Required: BPF syscalls are not in RuntimeDefault
+
+  # ---------------------------------------------------------------------------
+  # Export — structured JSON events to stdout, consumed by the node-local
+  # log collector (Fluentd / OBI DaemonSet) and forwarded to the SIEM.
+  # Hubble integration: Tetragon can annotate flows with process context visible
+  # in Hubble UI alongside network flows (requires Hubble relay reachable).
+  # ---------------------------------------------------------------------------
+  export:
+    stdout:
+      enabled: true
+      # JSON Lines format; one event per line.
+      # Field reference: https://tetragon.io/docs/reference/grpc-api/
+
+  # ---------------------------------------------------------------------------
+  # Tetragon operator — manages TracingPolicy lifecycle and CRD upgrades.
+  #
+  # The upstream chart renders the operator image via operator_deployment.yaml
+  # using .Values.tetragonOperator.image.override.  In the parent chart the
+  # path is tetragon.tetragonOperator.image.override.
+  #
+  # Digest resolved 2026-06-07 via quay.io registry v2 manifests API:
+  #   curl -sI \
+  #     -H 'Accept: application/vnd.oci.image.index.v1+json' \
+  #     https://quay.io/v2/cilium/tetragon-operator/manifests/v1.3.0
+  #   → docker-content-digest:
+  #       sha256:97a8e45a3896fa7fbe91e52d980c69ae2db099cf2ed2620eee7404613b3fa1b6
+  # When upgrading: bump override tag AND digest together in one PR.
+  # ---------------------------------------------------------------------------
+  tetragonOperator:
+    enabled: true
+
+    image:
+      repository: quay.io/cilium/tetragon-operator
+      tag: v1.3.0
+      # override replaces the full image ref when non-empty.
+      override: "quay.io/cilium/tetragon-operator:v1.3.0@sha256:97a8e45a3896fa7fbe91e52d980c69ae2db099cf2ed2620eee7404613b3fa1b6"  # v1.3.0
+      pullPolicy: IfNotPresent
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 65534
+      seccompProfile:
+        type: RuntimeDefault
+      capabilities:
+        drop:
+          - ALL
+
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+
+  # ---------------------------------------------------------------------------
+  # Prometheus metrics (Tetragon agent exports /metrics on port 2112)
+  # ---------------------------------------------------------------------------
+  prometheus:
+    enabled: true
+    port: 2112
+    serviceMonitor:
+      enabled: true
+      # Namespace must match where prometheus-operator is watching.
+      # kube-prometheus-stack was migrated to `observability` (ADR-0026 / PR #255).
+      namespace: observability
+      labels:
+        prometheus: kube-prometheus
+      interval: 30s
+      scrapeTimeout: 10s
+
+  # ---------------------------------------------------------------------------
+  # gRPC health server (used by readiness/liveness probes)
+  # ---------------------------------------------------------------------------
+  grpc:
+    address: "localhost:54321"

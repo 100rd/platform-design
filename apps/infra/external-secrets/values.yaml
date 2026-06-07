@@ -1,2 +1,18 @@
 # CRDs are managed by Terraform (platform-crds module) — do not install via Helm
 installCRDs: false
+
+# Subchart values for the upstream external-secrets chart (alias matches the
+# dependency name in Chart.yaml).
+external-secrets:
+  # ESO controller workload identity via EKS Pod Identity (ADR-0018). Identity is
+  # bound by an aws_eks_pod_identity_association (catalog/units/pod-identity-eso)
+  # on this controller ServiceAccount - ESO uses the identity injected into its own
+  # controller pod, NOT a SecretStore `serviceAccountRef` (ADR-0018 sub-decision).
+  #
+  # No IRSA `eks.amazonaws.com/role-arn` annotation is set: a ServiceAccount must
+  # never carry BOTH an IRSA annotation and a Pod Identity association (precedence
+  # is undocumented by AWS; ADR-0018 treats both as unsupported).
+  serviceAccount:
+    create: true
+    name: external-secrets
+    annotations: {}
