@@ -18,6 +18,15 @@
 # scheduled on nodes that have joined but whose Cilium agent is still
 # initialising. Without this toleration CoreDNS stays Pending until the taint
 # is removed, which can block cluster DNS for the first few minutes.
+#
+# Tier-1 compute (doc-verified 2026-06-07):
+#   The eks-node-monitoring-agent managed addon is deployed here as a DaemonSet.
+#   It surfaces node-level health conditions (kernel/network/storage faults) that
+#   Karpenter's NodeRepair (Node Auto-Repair) feature gate consumes to replace
+#   unhealthy nodes automatically. NodeRepair is wired in the karpenter module
+#   (settings.featureGates.nodeRepair). Repair disruption is capped at 20% of
+#   each NodePool's nodes by Karpenter's hard-coded upper bound.
+#   Ref: https://docs.aws.amazon.com/eks/latest/userguide/node-health.html
 # ---------------------------------------------------------------------------------------------------------------------
 
 # Include root.hcl to activate remote_state (S3 backend generation) and provider
@@ -87,6 +96,14 @@ inputs = {
         ]
       })
     }
+
+    # EKS Node Monitoring Agent (Tier-1 compute, doc-verified 2026-06-07).
+    # DaemonSet that detects node-level health problems and writes them to the
+    # node's status conditions. This is the signal source for Karpenter's
+    # NodeRepair (Node Auto-Repair) feature gate enabled in the karpenter module.
+    # addon_version = null (module default) lets EKS pick the latest version
+    # compatible with the cluster's Kubernetes version.
+    eks-node-monitoring-agent = {}
   }
 
   tags = {
