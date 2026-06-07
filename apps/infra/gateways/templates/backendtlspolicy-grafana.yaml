@@ -35,9 +35,10 @@
 #    grafana-backend-ca-secret.ca.crt into this ConfigMap automatically.
 #
 # 5. grafana BackendTLSPolicy (wave 4)
-#    Targets the kube-prometheus-stack-grafana Service in the monitoring
-#    namespace. Instructs Cilium to use SNI grafana.platform.internal and
-#    validate the backend TLS cert against the CA in grafana-backend-ca-cm.
+#    Targets the kube-prometheus-stack-grafana Service in the observability
+#    namespace (migrated from `monitoring` per ADR-0026 / PR #255). Instructs
+#    Cilium to use SNI grafana.platform.internal and validate the backend TLS
+#    cert against the CA in grafana-backend-ca-cm.
 #
 # Ordering
 # --------
@@ -101,8 +102,9 @@ spec:
 
 ---
 # Step 3 -- Grafana backend serving certificate
-# Issued in the monitoring namespace so Grafana can mount it as a volume.
-# Configure Grafana to serve HTTPS by setting in grafana.ini:
+# Issued in the observability namespace so Grafana can mount it as a volume.
+# kube-prometheus-stack was migrated from `monitoring` to `observability` per
+# ADR-0026 (PR #255). Configure Grafana to serve HTTPS by setting in grafana.ini:
 #   [server]
 #   protocol = https
 #   cert_file = /etc/grafana/tls/tls.crt
@@ -113,15 +115,15 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: grafana-backend-serving
-  namespace: monitoring
+  namespace: observability
   annotations:
     argocd.argoproj.io/sync-wave: "3"
 spec:
   secretName: grafana-backend-serving-secret
-  commonName: kube-prometheus-stack-grafana.monitoring.svc.cluster.local
+  commonName: kube-prometheus-stack-grafana.observability.svc.cluster.local
   dnsNames:
-    - kube-prometheus-stack-grafana.monitoring.svc.cluster.local
-    - kube-prometheus-stack-grafana.monitoring.svc
+    - kube-prometheus-stack-grafana.observability.svc.cluster.local
+    - kube-prometheus-stack-grafana.observability.svc
     - grafana.platform.internal
   duration: 8760h  # 1 year
   renewBefore: 720h
@@ -137,7 +139,7 @@ spec:
 #
 # BackendTLSPolicy spec.validation.caCertificateRefs references a ConfigMap
 # (group: "", kind: ConfigMap) with key `ca.crt`. The ConfigMap must be in
-# the same namespace as the targetRef Service (monitoring -- see step 4b).
+# the same namespace as the targetRef Service (observability -- see step 4b).
 # This copy in the `gateways` namespace is kept for operational convenience
 # (kubectl inspection, ESO sync source).
 #
@@ -163,19 +165,20 @@ data:
   ca.crt: ""
 
 ---
-# Step 4b -- CA ConfigMap in monitoring namespace (required by BackendTLSPolicy)
+# Step 4b -- CA ConfigMap in observability namespace (required by BackendTLSPolicy)
 #
 # Gateway API v1.4.0 BackendTLSPolicy requires caCertificateRefs to be in the
-# same namespace as the targetRef Service. Grafana's Service is in `monitoring`,
-# so this ConfigMap must also be in `monitoring`.
+# same namespace as the targetRef Service. Grafana's Service is in `observability`
+# (migrated from `monitoring` per ADR-0026 / PR #255), so this ConfigMap must
+# also be in `observability`.
 #
 # In production: use a Kyverno ClusterPolicy or ESO ExternalSecret to keep
-# both ConfigMaps (gateways + monitoring) in sync with the CA Secret.
+# both ConfigMaps (gateways + observability) in sync with the CA Secret.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: grafana-backend-ca-cm
-  namespace: monitoring
+  namespace: observability
   annotations:
     argocd.argoproj.io/sync-wave: "3"
     # PLACEHOLDER -- mirrors grafana-backend-ca-cm in the gateways namespace.
@@ -187,8 +190,9 @@ data:
 ---
 # Step 5 -- BackendTLSPolicy
 #
-# Targets the kube-prometheus-stack-grafana Service in the monitoring namespace.
-# Instructs Cilium (acting as the Gateway data plane) to:
+# Targets the kube-prometheus-stack-grafana Service in the observability namespace
+# (migrated from `monitoring` per ADR-0026 / PR #255). Instructs Cilium (acting
+# as the Gateway data plane) to:
 #   - Connect to the Grafana backend over TLS (not plaintext HTTP/80)
 #   - Use SNI: grafana.platform.internal
 #   - Validate the backend certificate against the CA in grafana-backend-ca-cm
@@ -200,7 +204,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: BackendTLSPolicy
 metadata:
   name: grafana
-  namespace: monitoring
+  namespace: observability
   annotations:
     argocd.argoproj.io/sync-wave: "4"
     # Tier-1 component -- ADR-0009 follow-on (gateway->backend encryption, refs #252)
