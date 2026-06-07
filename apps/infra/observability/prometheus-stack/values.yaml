@@ -54,6 +54,34 @@ kube-prometheus-stack:
       # WAL compression for better performance
       walCompression: true
 
+      # -----------------------------------------------------------------------
+      # ADR-0026: Prometheus native histograms (stable since Prometheus 3.x)
+      #
+      # Enables two complementary flags:
+      #   native-histograms         -- Prometheus stores and evaluates native
+      #                                histogram metrics (OTEL/nhcb format).
+      #   scrape-native-histograms  -- Prometheus scrapes native histograms from
+      #                                targets that expose them (Protobuf format).
+      #
+      # REQUIRES Prometheus 3.x (kube-prometheus-stack >= 66, appVersion >= 3.0).
+      # If running Prometheus 2.x, remove these flags to avoid startup errors.
+      # Verify: kubectl exec -n observability $(kubectl get pod -n observability
+      #           -l app.kubernetes.io/name=prometheus -o name | head -1) --
+      #           prometheus --version
+      # -----------------------------------------------------------------------
+      enableFeatures:
+        - native-histograms
+        - scrape-native-histograms
+
+      # Native-histogram scrape class: opt-in per ServiceMonitor via
+      # scrapeClass: native-histograms.  Services that expose both classic and
+      # native histogram formats will be scraped preferring the native format.
+      scrapeClasses:
+        - name: native-histograms
+          fallbackScrapeProtocol: PrometheusText0.0.4
+          params:
+            scrape_native_histograms: [true]
+
       # Sharding configuration for large clusters
       # Functional sharding: different Prometheus instances scrape different targets
       # Controlled via ServiceMonitor/PodMonitor selectors
