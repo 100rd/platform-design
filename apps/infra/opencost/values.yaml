@@ -1,0 +1,162 @@
+---
+# OpenCost – per-namespace cost allocation + AWS CUR/Athena cloud-integration
+# ADR-0027: reconciles allocation to amortised, discount-aware billed cost
+#           (Reserved Instances / Savings Plans / Spot), not on-demand list pricing.
+#
+# Required AWS infrastructure (terraform/modules/cost-cur-export):
+#   S3 bucket  ← CUR delivery
+#   Glue DB    ← schema-on-read over CUR Parquet
+#   Athena WG  ← query workgroup
+#   IAM role   ← least-privilege read-only access (IRSA)
+#
+# cloud-integration.json is materialised from AWS Secrets Manager by
+# apps/infra/opencost/templates/external-secret.yaml  (ESO v1 / ADR-0008).
+
+# ---------------------------------------------------------------------------
+# Wrapper-chart–level values (consumed by templates/ in this chart only)
+# ---------------------------------------------------------------------------
+
+# NetworkPolicy: guard egress/ingress for the opencost namespace.
+# Mirror of the pattern used in apps/infra/observability/loki-stack.
+networkPolicy:
+  enabled: true
+
+# ---------------------------------------------------------------------------
+# OpenCost sub-chart values (passed through to the opencost dependency chart)
+# ---------------------------------------------------------------------------
+opencost:
+  enabled: true
+
+  # ---------------------------------------------------------------------------
+  # OpenCost exporter
+  # ---------------------------------------------------------------------------
+  opencost:
+    exporter:
+      # Pull the image from the CNCF-maintained repository.
+      image:
+        registry: ghcr.io
+        repository: opencost/opencost
+        tag: "1.113.0"
+
+      # Resource requests/limits — lightweight read loop.
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+
+      # defaultClusterId: override per cluster via ArgoCD ApplicationSet parameter
+      defaultClusterId: ""
+
+    # -------------------------------------------------------------------------
+    # AWS cloud-integration – grounds allocation in the real, amortized bill
+    # -------------------------------------------------------------------------
+    cloudCost:
+      # Enable cloud-cost reconciliation against the AWS CUR/Athena pipeline.
+      enabled: true
+
+      # Secret name that holds cloud-integration.json.
+      # Materialised by templates/external-secret.yaml via ESO ClusterSecretStore.
+      cloudIntegrationSecret: opencost-cloud-integration
+
+      # Reconciliation runs every 6 hours; each run queries Athena for
+      # amortised line items and reconciles against in-cluster allocation.
+      reconcileFrequency: 6h
+
+    # -------------------------------------------------------------------------
+    # Prometheus / Thanos integration
+    # -------------------------------------------------------------------------
+    prometheus:
+      # Point at the kube-prometheus-stack Prometheus installed in monitoring/.
+      # In multi-cluster setups this will be a Thanos Query endpoint.
+      internal:
+        enabled: false
+      external:
+        enabled: true
+        url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+
+    # -------------------------------------------------------------------------
+    # ServiceMonitor – expose OpenCost metrics to Prometheus
+    # -------------------------------------------------------------------------
+    serviceMonitor:
+      enabled: true
+      # Must match the label the prometheus-stack Prometheus selects on.
+      additionalLabels:
+        prometheus: kube-prometheus
+      namespace: monitoring
+      interval: 60s
+      scrapeTimeout: 30s
+
+    # -------------------------------------------------------------------------
+    # Persistence – store allocation cache across restarts
+    # -------------------------------------------------------------------------
+    persistentVolume:
+      enabled: true
+      size: 10Gi
+      # Use the cluster default StorageClass (GP3 via Karpenter / ADR-0007).
+      storageClass: ""
+
+    # -------------------------------------------------------------------------
+    # Security context
+    # -------------------------------------------------------------------------
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1001
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+
+    podSecurityContext:
+      fsGroup: 1001
+
+  # ---------------------------------------------------------------------------
+  # OpenCost UI (optional)
+  # Disable in clusters where Grafana dashboards are the primary cost surface.
+  # Enable temporarily for ad-hoc investigation or initial validation.
+  # ---------------------------------------------------------------------------
+  ui:
+    enabled: true
+
+    image:
+      registry: ghcr.io
+      repository: opencost/opencost-ui
+      tag: "1.113.0"
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+    # Expose via the internal Cilium Gateway (ADR-0009 / gateways chart).
+    service:
+      type: ClusterIP
+      port: 9090
+
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1001
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+
+  # ---------------------------------------------------------------------------
+  # RBAC / ServiceAccount
+  # IRSA annotation is applied via the ArgoCD Application parameter or a
+  # separate patch so the IAM role ARN can be cluster-specific.
+  # ---------------------------------------------------------------------------
+  serviceAccount:
+    create: true
+    name: opencost
+    annotations: {}
+    # To enable IRSA, set at deploy time:
+    #   eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>
+    # The role ARN is output by terraform/modules/cost-cur-export (opencost_irsa_role_arn).

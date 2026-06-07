@@ -1,0 +1,146 @@
+{{- if .Values.networkPolicy.enabled }}
+---
+# NetworkPolicy: OpenCost exporter
+# Allows:
+#   ingress  – Prometheus scraping on :9003 (metrics) + UI :9090
+#   egress   – Prometheus query API, Kubernetes API, AWS HTTPS (Athena/S3/Glue), DNS
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: opencost
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: opencost
+    app.kubernetes.io/component: exporter
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/part-of: finops
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: opencost
+      app.kubernetes.io/component: exporter
+
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Prometheus scrapes metrics from OpenCost
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9003
+
+    # OpenCost UI → exporter API
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: opencost
+              app.kubernetes.io/component: ui
+      ports:
+        - protocol: TCP
+          port: 9003
+
+  egress:
+    # Query Prometheus / Thanos for node metrics
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 9090
+        # Thanos Query (if installed)
+        - protocol: TCP
+          port: 10902
+
+    # Kubernetes API (RBAC, node/pod/service metadata)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+
+    # AWS service endpoints – Athena, S3, Glue (HTTPS only)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+
+    # DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# NetworkPolicy: OpenCost UI
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: opencost-ui
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: opencost
+    app.kubernetes.io/component: ui
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/part-of: finops
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: opencost
+      app.kubernetes.io/component: ui
+
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Allow from the internal Cilium Gateway and any monitoring namespace
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 9090
+
+  egress:
+    # Query the OpenCost exporter API
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: opencost
+              app.kubernetes.io/component: exporter
+      ports:
+        - protocol: TCP
+          port: 9003
+
+    # DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+{{- end }}
