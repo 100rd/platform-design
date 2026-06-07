@@ -4,11 +4,14 @@
 # hardcoded org identifiers; eu-central-1 to match the prometheus-stack
 # ClusterSecretStore default region).
 #
-# IRSA dependency: the ServiceAccount below references an IAM role
-# (<PLACEHOLDER>) that must be created out-of-band (e.g. infra
-# modules/observability-irsa) with a trust policy on:
-#   sub = system:serviceaccount:observability:yace
-# Until that role exists, YACE starts but CloudWatch calls fail with
+# Workload identity: EKS Pod Identity (ADR-0018), NOT IRSA. The IAM role + the
+# PodIdentityAssociation for (cluster, observability, yace) are provisioned by
+# terraform/modules/pod-identity-yace (catalog/units/pod-identity-yace). The SA
+# below therefore carries NO eks.amazonaws.com/role-arn annotation - the
+# eks-pod-identity-agent addon injects credentials directly.
+# Coexistence (ADR-0018): IRSA remains supported for not-yet-migrated workloads,
+# but a single SA must never carry both an IRSA annotation and an association.
+# Until the association exists, YACE starts but CloudWatch calls fail with
 # AccessDeniedException - non-fatal (metrics absent, no crashloop).
 #
 # Chart = nerdswords/yet-another-cloudwatch-exporter 0.38.0 (YACE app v0.61.2).
@@ -31,16 +34,22 @@ yet-another-cloudwatch-exporter:
   aws:
     region: eu-central-1
 
-  # ---- Service account (IRSA) ------------------------------------------
-  # The role ARN is a PLACEHOLDER. Replace <AWS_ACCOUNT_ID> and the role name
-  # with the IRSA role provisioned for CloudWatch read access, or inject it
-  # per-environment via values-<env>.yaml / ApplicationSet generator.
-  # Trust policy on that role: sub = system:serviceaccount:observability:yace
+  # ---- Service account (EKS Pod Identity) ------------------------------
+  # No role-arn annotation (ADR-0018). The PodIdentityAssociation provisioned by
+  # terraform/modules/pod-identity-yace binds this SA (observability/yace) to its
+  # CloudWatch-read role; the agent injects credentials. ABAC on the injected
+  # kubernetes-namespace session tag scopes the role's permissions.
   serviceAccount:
     create: true
     name: yace
-    annotations:
-      eks.amazonaws.com/role-arn: "arn:aws:iam::<AWS_ACCOUNT_ID>:role/platform-observability-yace"
+    # IRSA annotation intentionally REMOVED (ADR-0018). Identity is now bound via
+    # an EKS PodIdentityAssociation (terraform/modules/pod-identity-yace +
+    # catalog/units/pod-identity-yace), which targets this SA
+    # (observability/yace) directly. Do NOT re-add `eks.amazonaws.com/role-arn`:
+    # a SA carrying BOTH an IRSA annotation and a Pod Identity association is
+    # unsupported (AWS leaves the precedence undocumented — ADR-0018).
+    # The eks-pod-identity-agent addon injects credentials with no annotation.
+    annotations: {}
 
   # ---- Resources --------------------------------------------------------
   resources:
