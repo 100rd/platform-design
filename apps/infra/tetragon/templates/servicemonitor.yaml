@@ -1,0 +1,40 @@
+# ServiceMonitor for Tetragon
+# Follows the same pattern as sibling charts (otel-collector, opencost).
+# Prometheus-operator (kube-prometheus-stack in `observability` namespace per
+# ADR-0026 / PR #255) picks this up via the `prometheus: kube-prometheus` label.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-tetragon
+  namespace: {{ .Values.tetragon.prometheus.serviceMonitor.namespace | default "observability" }}
+  labels:
+    app.kubernetes.io/name: tetragon
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: tetragon
+    {{- with .Values.tetragon.prometheus.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  # Select the Tetragon metrics Service in the tetragon namespace
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tetragon
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ .Values.tetragon.prometheus.serviceMonitor.interval | default "30s" }}
+      scrapeTimeout: {{ .Values.tetragon.prometheus.serviceMonitor.scrapeTimeout | default "10s" }}
+      scheme: http
+      relabelings:
+        # Carry node identity so dashboards can aggregate per-node security events
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
