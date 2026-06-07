@@ -167,6 +167,46 @@ guard is the `partial` remainder). #176 stands up the ADR catalog itself
 
 ---
 
+## Phase 8 — 2026 Modernization (research-backed + doc-verified; decisions Accepted, implementation PLANNED)
+
+These items came from the **2026 platform-block research** deep-dives — formalized
+into eleven ADRs (0017–0027), **all ratified Accepted 2026-06-07 by the platform
+owner** and **doc-verified 2026-06-07 (Context7 + official AWS/vendor docs)**. The
+decisions are made; **implementation is PLANNED** and each stays `pending` in-repo
+until wired in. Tracked under epic
+[#252](https://github.com/100rd/platform-design/issues/252).
+
+| # | Title | Decision | Implementation | Governing ADR |
+|---|-------|----------|----------------|---------------|
+| #252 | Resource-side data perimeter + declarative org controls (AFT vending, RCPs, EC2 Declarative Policies, full-IAM SCPs GA 2025-09-19, Access-Analyzer custom-check gate on JSON `result`) | Accepted | PLANNED | [ADR-0017](docs/adrs/0017-resource-side-perimeter-and-declarative-org-controls.md) |
+| #252 | EKS Pod Identity as default workload identity (IRSA → legacy, 6 ABAC session tags, ESO 0.10.5→v2.6.0 prereq) | Accepted | PLANNED | [ADR-0018](docs/adrs/0018-eks-pod-identity-as-default-workload-identity.md) |
+| #252 | Harvest Cilium / eBPF capabilities (OBI→Tempo tracing, Hubble UI, Tetragon, ClusterMesh; **netkit pilot** — unblocked on kernel 6.12) | Accepted | PLANNED | [ADR-0019](docs/adrs/0019-harvest-cilium-ebpf-capabilities.md) |
+| #252 | Kyverno + ValidatingAdmissionPolicy policy-engine layer (admission-time cosign verify — not ArgoCD; complements Gatekeeper) | Accepted | PLANNED | [ADR-0020](docs/adrs/0020-kyverno-and-vap-policy-engine.md) |
+| #252 | Kargo GitOps environment-promotion layer (bump 1.2→1.9, Prometheus analysis gates, OTel SLO-gating design-target) | Accepted | PLANNED | [ADR-0021](docs/adrs/0021-kargo-gitops-promotion-layer.md) |
+| #252 | CI supply-chain runtime hardening (zizmor Actions SAST + Harden-Runner egress; Artifact Attestations / Immutable Releases / cosign 2.4 follow-ons; spike #251) | Accepted | PLANNED | [ADR-0022](docs/adrs/0022-ci-supply-chain-runtime-hardening.md) |
+| #252 | VPC Lattice resource connectivity — cross-account/cross-VPC TCP resource access (Resource Gateway + `type=ARN` config + RAM + IAM auth) | Accepted | PLANNED | [ADR-0023](docs/adrs/0023-vpc-lattice-resource-connectivity.md) |
+| #252 | ArgoCD operational hardening (PreDelete hooks, shallow clone, server-side diff/apply, progressive ApplicationSet rollout — no upgrade) | Accepted | PLANNED | [ADR-0024](docs/adrs/0024-argocd-operational-hardening.md) |
+| #252 | Envoy Gateway secondary L7 GatewayClass alongside Cilium (rate-limit / ext-proc / WASM / circuit-breaking) | Accepted | PLANNED | [ADR-0025](docs/adrs/0025-envoy-gateway-secondary-l7.md) |
+| #252 | Observability target architecture (LGTM: Prometheus 3 + Thanos, Loki, Tempo, Alloy; one RED source; no Mimir/Coroot) | Accepted | PLANNED | [ADR-0026](docs/adrs/0026-observability-target-architecture.md) |
+| #252 | Kubernetes cost allocation via OpenCost + AWS CUR/Athena (amortized, discount-aware; optional Kubecost Free) | Accepted | PLANNED | [ADR-0027](docs/adrs/0027-kubernetes-cost-opencost-cur.md) |
+
+### Candidates / revisit (considered, NOT accepted)
+
+Recorded in ADR-0025's alternatives — tracked, not adopted:
+
+- **AWS Load Balancer Controller Gateway API v3.0** (ALB `gateway.k8s.aws/alb` +
+  NLB `gateway.k8s.aws/nlb`, GA 2026-01-23; coexists with Cilium). Deferred because
+  the estate is NLB-only and Argo Rollouts' AWS-native canary is ALB-Ingress-based,
+  not Gateway-API — **revisit when ALB enters**.
+- **GAMMA on Cilium** (east-west `HTTPRoute`→`Service`; Cilium GAMMA v1.0.0
+  Core + 2/3 Extended, producer-only / same-namespace, no consumer routes,
+  experimental). **Revisit as Cilium's GAMMA support matures.**
+
+**Phase exit criteria**: each ADR is ratified (done — Accepted 2026-06-07) and its
+decision wired in-repo (`pending` → `synced`).
+
+---
+
 ## GATE umbrella issues
 
 | GATE | Issue | Children | Governing ADRs | Status |
@@ -181,8 +221,10 @@ Add new GATE umbrellas in pull-requests when initiating any multi-issue effort t
 ## Cross-cutting decisions
 
 ADRs live in `docs/adrs/` — see the [index](docs/adrs/README.md) for the full
-catalog (0001–0016) with each ADR's **platform-design status**. The two native
-foundation ADRs:
+catalog (0001–0027) with each ADR's **platform-design status**. ADRs 0017–0027 are
+the **2026 modernization** set: research-backed + doc-verified 2026-06-07, all
+ratified **Accepted** (implementation `pending` / PLANNED, tracked by Phase 8 above).
+The two native foundation ADRs:
 - [ADR-0001 OU split](docs/adrs/0001-ou-split.md) — explains why `Prod` / `NonProd` aliases were preserved instead of renaming to canonical `Production` / `Non-Production`.
 - [ADR-0002 TF-only state backend bootstrap](docs/adrs/0002-tf-only-state-backend.md) — bootstrap chicken-and-egg resolution.
 
