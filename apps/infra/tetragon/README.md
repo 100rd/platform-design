@@ -17,24 +17,95 @@ Falco was not selected: it runs outside the Cilium data-plane and requires a sep
 
 ## Deployment Mode
 
-Observe-mode only. All three starter TracingPolicies have `tetragon.io/observe-only: "true"` and no `matchActions` configured. Events are written to stdout (JSON Lines) and forwarded to the SIEM via the node-local log collector.
+**Wave 3 — enforce-mode active** (`enforce.enabled=true` by default).
 
-To graduate any policy to enforce-mode, follow the in-file instructions in each TracingPolicy template.
+Two of the three TracingPolicies now carry `matchActions` that block hostile behaviour
+in-kernel. `exec-tracing` stays observe-only permanently (it records all execve events
+for SIEM correlation; blocking arbitrary exec would be too broad).
 
 ## TracingPolicies
 
-| File | Purpose |
-|------|---------|
-| `tracing-policy-exec.yaml` | Trace all process executions (execve/execveat) |
-| `tracing-policy-sensitive-files.yaml` | Observe opens of /etc/shadow, /etc/passwd, SSH host keys, SA tokens |
-| `tracing-policy-privileged-syscalls.yaml` | Observe ptrace, setuid, setgid, mount |
+| File | Policy name | Mode |
+|------|-------------|------|
+| `tracing-policy-exec.yaml` | `exec-tracing` | observe (permanent) |
+| `tracing-policy-privileged-syscalls.yaml` | `privileged-syscall-tracing` | **enforce** (Wave 3) |
+| `tracing-policy-sensitive-files.yaml` | `sensitive-file-access` | **enforce** (Wave 3) |
+
+### privileged-syscall-tracing (enforce)
+
+| Syscall | Action | Scope |
+|---------|--------|-------|
+| `ptrace` | **Sigkill** caller | Binaries not in allowlist, inside containers (Mnt ns != host) |
+| `setuid` | **Override -EPERM** | Binaries not in allowlist, inside containers |
+| `setgid` | **Override -EPERM** | Binaries not in allowlist, inside containers |
+| `mount` | observe only | All callers (needs dedicated soak before enforcement) |
+
+ptrace allowlist: `/usr/bin/strace`, `/usr/bin/gdb`, `/usr/local/bin/dlv`
+
+setuid/setgid allowlist: `/usr/bin/sudo`, `/usr/bin/su`, `/usr/sbin/sshd`, `/usr/lib/openssh/sftp-server`
+
+### sensitive-file-access (enforce)
+
+| Syscall | Paths enforced | Action | Scope |
+|---------|----------------|--------|-------|
+| `openat` / `open` | `/etc/{shadow,gshadow,passwd,group}` | **Override -EPERM** | Write-intent opens by binaries not in allowlist |
+
+Reads are not blocked. SSH host keys and the SA token remain observe-only on
+writes; they require a dedicated node-type soak cycle before enforcement is safe.
+
+Allowlist: `/usr/bin/passwd`, `/sbin/unix_chkpwd`, `/usr/sbin/{useradd,usermod,userdel,groupadd,groupmod}`, `/usr/bin/chage`
+
+## Enforcement Gate
+
+The `enforce.enabled` value (default `true`) toggles enforcement across all policies at once.
+Both enforced policies render `matchActions` only when `enforce.enabled=true`; at `false` they
+are observe-only event emitters. The flag controls the `tetragon.io/policy-mode` label and the
+`tetragon.io/observe-only` annotation on each TracingPolicy CRD.
+
+```yaml
+# values.yaml default
+enforce:
+  enabled: true
+```
+
+## Observe-to-Enforce History
+
+| Wave | PR | Date | Change |
+|------|----|------|--------|
+| Initial | PR #263 | 2026-06-07 | All three policies deployed in observe-mode (ADR-0019) |
+| Wave 3 | PR #252 | 2026-06-07 | 72 h soak complete; privileged-syscall + sensitive-file graduated to enforce |
+
+Soak baseline: 72 h on staging cluster (namespaces: kube-system, tetragon, cilium).
+No false-positive events from the binary allowlists were observed in that window.
+
+## Rollback
+
+Enforcement can be hot-rolled back without restarting any DaemonSet:
+
+```bash
+helm upgrade tetragon . --set enforce.enabled=false
+```
+
+Tetragon operator reconciles the TracingPolicy CRDs in under 30 s.
+Policies immediately drop to observe-only. No pod restarts occur.
+
+To re-enable after confirming the issue:
+
+```bash
+helm upgrade tetragon . --set enforce.enabled=true
+```
 
 ## Hubble UI
 
-Hubble UI (`hubble.ui.enabled: true` in `apps/infra/cilium/values.yaml`) was explicitly confirmed as part of this ADR-0019 slice to provide a visual network-flow and security-event overlay in the same interface.
+Hubble UI (`hubble.ui.enabled: true` in `apps/infra/cilium/values.yaml`) was explicitly
+confirmed as part of ADR-0019 to provide a visual network-flow and security-event overlay.
 
-Access: port-forward to the `hubble-ui` Service in the `kube-system` namespace, or expose via an HTTPRoute referencing the `cilium` GatewayClass.
+Access: port-forward to the `hubble-ui` Service in the `kube-system` namespace, or expose
+via an HTTPRoute referencing the `cilium` GatewayClass.
 
 ## ArgoCD
 
-This chart is auto-discovered by the `infra` ApplicationSet (`argocd/bootstrap/applicationsets/infra-appset.yaml`, path glob `apps/infra/*`). No separate Application manifest is required. ArgoCD deploys this as `tetragon-<cluster-name>` in namespace `tetragon` with `CreateNamespace=true`.
+This chart is auto-discovered by the `infra` ApplicationSet
+(`argocd/bootstrap/applicationsets/infra-appset.yaml`, path glob `apps/infra/*`).
+No separate Application manifest is required. ArgoCD deploys this as
+`tetragon-<cluster-name>` in namespace `tetragon` with `CreateNamespace=true`.
