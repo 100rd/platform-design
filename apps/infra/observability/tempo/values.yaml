@@ -71,7 +71,7 @@ tempo-distributed:
     # Metrics generator configuration
     metricsGenerator:
       enabled: true
-      remoteWriteUrl: "http://prometheus-server.monitoring.svc.cluster.local:80/api/v1/write"
+      remoteWriteUrl: "http://prometheus-stack-kube-prom-prometheus.observability.svc.cluster.local:80/api/v1/write"
       processor:
         span_metrics:
           dimensions:
@@ -368,7 +368,7 @@ tempo-distributed:
       storage:
         path: /var/tempo/wal
         remote_write:
-          - url: http://prometheus-server.monitoring.svc.cluster.local:80/api/v1/write
+          - url: http://prometheus-stack-kube-prom-prometheus.observability.svc.cluster.local:80/api/v1/write
             send_exemplars: true
 
   # Memcached for caching
@@ -439,3 +439,27 @@ tempo-distributed:
 #     replicas: 2
 #   ingester:
 #     replicas: 2
+
+# External Secret for Tempo S3 credentials
+# Pre-existing scaffold: tempoS3Secret was referenced in templates/tempo-s3-secret.yaml
+# but missing from values.yaml (ADR-0019 fix).
+tempoS3Secret:
+  enabled: true
+  secretStore: aws-secrets-manager
+  secretStoreKind: SecretStore
+  refreshInterval: 1h
+  awsSecretName: tempo/s3-credentials
+  bucket: tempo-traces-prod
+  endpoint: s3.us-east-1.amazonaws.com
+  region: ""  # TODO: Set via ArgoCD ApplicationSet region injection
+  prefix: traces/
+
+# Top-level serviceMonitor for templates/servicemonitor.yaml
+# Pre-existing scaffold: servicemonitor.yaml uses .Values.serviceMonitor (top-level)
+# but the key was only defined under tempo-distributed (ADR-0019 fix).
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  labels:
+    release: prometheus
