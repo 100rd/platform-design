@@ -1,4 +1,4 @@
-{"generated_at": "2026-06-07T19:38:57Z", "applications": [
+{"generated_at": "2026-06-07T21:43:09Z", "applications": [
 {
   "name": "aws-lb-controller",
   "chartVersion": "3.1.0",
@@ -40,6 +40,14 @@
 }
 ,
 {
+  "name": "envoy-gateway",
+  "chartVersion": "1.0.0",
+  "appVersion": "v1.8.0",
+  "description": "Envoy Gateway - secondary L7 GatewayClass alongside Cilium (ADR-0025)",
+  "path": "apps/infra/envoy-gateway"
+}
+,
+{
   "name": "external-dns",
   "chartVersion": "1.0.0",
   "appVersion": "0.15.1",
@@ -65,17 +73,17 @@
 ,
 {
   "name": "gateway-api-crds",
-  "chartVersion": "0.1.0",
+  "chartVersion": "0.2.0",
   "appVersion": "",
-  "description": "Gateway API standard channel CRDs v1.2.1 + Cilium GatewayClass (ADR-0009)",
+  "description": "Gateway API standard channel CRDs v1.4.0 + Cilium GatewayClass (ADR-0009)",
   "path": "apps/infra/gateway-api-crds"
 }
 ,
 {
   "name": "gateways",
-  "chartVersion": "0.1.0",
+  "chartVersion": "0.2.0",
   "appVersion": "",
-  "description": "External and internal Cilium Gateways backed by AWS NLBs via the Gateway API (ADR-0009)",
+  "description": "External and internal Cilium Gateways + BackendTLSPolicy (ADR-0009, refs #252)",
   "path": "apps/infra/gateways"
 }
 ,
@@ -89,17 +97,17 @@
 ,
 {
   "name": "kargo",
-  "chartVersion": "0.1.0",
-  "appVersion": "1.2.0",
+  "chartVersion": "0.2.0",
+  "appVersion": "1.9.0",
   "description": "Kargo progressive delivery controller",
   "path": "apps/infra/kargo"
 }
 ,
 {
   "name": "kyverno",
-  "chartVersion": "1.0.0",
-  "appVersion": "1.13.4",
-  "description": "Kyverno - Kubernetes Native Policy Management",
+  "chartVersion": "1.1.0",
+  "appVersion": "1.18.1",
+  "description": "Kyverno - Kubernetes Native Policy Management (ADR-0020)",
   "path": "apps/infra/kyverno"
 }
 ,
@@ -184,11 +192,27 @@
 }
 ,
 {
+  "name": "pyrra",
+  "chartVersion": "1.0.0",
+  "appVersion": "0.10.0",
+  "description": "SLO operator and UI (Pyrra) — emits PrometheusRules from ServiceLevelObjective CRs (ADR-0026)",
+  "path": "apps/infra/pyrra"
+}
+,
+{
   "name": "rabbitmq-operator",
   "chartVersion": "1.0.0",
   "appVersion": "2.12.0",
   "description": "RabbitMQ Cluster Operator - Kubernetes-native RabbitMQ lifecycle management",
   "path": "apps/infra/rabbitmq-operator"
+}
+,
+{
+  "name": "tetragon",
+  "chartVersion": "1.0.0",
+  "appVersion": "1.3.0",
+  "description": "|",
+  "path": "apps/infra/tetragon"
 }
 ,
 {

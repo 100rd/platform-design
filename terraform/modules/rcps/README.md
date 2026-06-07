@@ -37,27 +37,50 @@ context do not false-trip. The AWS-service carve-out keeps first-party flows
 
 RCPs evaluate **after** identity-based policy, SCPs, and resource-based policy.
 An explicit `Deny` here is final. Because a mis-scoped RCP could deny legitimate
-AWS-service access, this control is rolled out in **stages** (see below) rather
-than straight to root.
+AWS-service access, this control was rolled out in **stages** (Policy-Staging OU
+first) before promotion to root, rather than straight to root.
 
 RCPs have their **own slot budget**, separate from the 5-SCP-per-target cap, so
 adding this control does **not** consume an SCP slot — it directly relieves the
 root SCP slot pressure noted in ADR-0017.
 
-## Staged rollout (ADR-0017 Implementation notes)
+## Graduation: staged rollout → root promotion (ADR-0017 Implementation notes)
 
 ```
-step 3  attach to Policy-Staging OU  ──►  verify no legitimate access breaks
-step 4  promote to root              ──►  once staging is clean
+step 3 (done)  attach to Policy-Staging OU  ──►  soak; verify no legitimate access breaks
+step 4 (now)   promote to root              ──►  post-soak, additive
 ```
 
 The attachment is parameterized by `target_ou_ids` (a `for_each` set):
 
-- **Now (staged):** wire the terragrunt input to the **Policy-Staging OU id**
-  only. The terragrunt unit `_org/_global/rcps` does this via the organization
-  module's `policy_staging_ou_id` output.
-- **Promote:** switch the input to the **root id** (or add it). Because the
-  attachment is `for_each`, promotion is additive and revertible.
+- **Staged (step 3, complete):** the terragrunt input was wired to the
+  **Policy-Staging OU id** only, via the organization module's
+  `policy_staging_ou_id` output. This bounded the blast radius to a small
+  test-account set during the soak.
+- **Promoted to root (step 4, current):** the terragrunt unit `_org/_global/rcps`
+  now passes **both** the Policy-Staging OU id **and** the organization
+  `root_id`. Because the attachment is `for_each`, appending the root id is
+  **additive** — the Policy-Staging attachment is retained, and the
+  org-perimeter policy resource itself is unchanged.
+
+### Rollback
+
+The promotion is **fully reversible** at the terragrunt unit, with no change to
+the policy resource:
+
+- **Detach from root (revert to staged-only):** remove
+  `dependency.organization.outputs.root_id` from `target_ou_ids` in
+  `_org/_global/rcps/terragrunt.hcl` and re-plan/apply. Terraform destroys only
+  the **root** attachment instance; the policy and the Policy-Staging attachment
+  survive. This is a one-line, blast-radius-bounded revert.
+- **Disable entirely:** set `target_ou_ids = []`. The policy stays
+  **defined but unattached** (no enforcement anywhere) — the lowest-risk full
+  disable, leaving the resource ready to re-attach.
+
+Because the seed policy is an explicit `Deny` that evaluates last, prefer the
+staged-only revert over a full disable unless an org-wide false-positive is
+confirmed; the AWS-service carve-out (`PrincipalIsAWSService`) and `*IfExists`
+semantics are designed to keep first-party flows working at root scope.
 
 ## Prerequisite
 
@@ -70,7 +93,7 @@ The attachment is parameterized by `target_ou_ids` (a `for_each` set):
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | `organization_id` | `string` | — | AWS Organization ID; the `aws:PrincipalOrgID` match. |
-| `target_ou_ids` | `list(string)` | `[]` | OU/root IDs to attach the RCP to. **Staged: Policy-Staging OU only.** |
+| `target_ou_ids` | `list(string)` | `[]` | OU/root IDs to attach the RCP to. **Promoted: Policy-Staging OU + org root** (ADR-0017 step 4). |
 | `tags` | `map(string)` | `{}` | Tags for the RCP. |
 
 ## Outputs

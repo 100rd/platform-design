@@ -8,8 +8,10 @@
 #     (CEL in-process, no webhook).
 #   - Gatekeeper stays — its 4 ConstraintTemplates are not replaced.
 #
-# Rollout: all policies start in Audit mode.
-# Promote to Enforce after a clean audit window in each environment.
+# W3/ADR-0020: policies graduated from Audit to Enforce after clean soak window.
+# Rollback: set validationFailureAction back to Audit in verify-images.yaml,
+#   validationActions back to [Audit] in block-latest-require-limits.yaml,
+#   and forceFailurePolicyIgnore.enabled back to true in this file, then re-apply.
 
 kyverno:
   enabled: true
@@ -56,12 +58,11 @@ kyverno:
 
     priorityClassName: system-cluster-critical
 
-    # Start with failurePolicy Ignore (fail-open) to avoid blocking deploys
-    # during the Audit phase. Flip to Fail (fail-closed) in prod once policies
-    # are proven stable.
-    # In v3.4.x this is set via forceFailurePolicyIgnore:
+    # W3/ADR-0020: fail-closed now that policies are proven stable post-soak.
+    # forceFailurePolicyIgnore disabled — webhook uses failurePolicy: Fail.
+    # Rollback: set enabled back to true to restore fail-open behaviour.
     forceFailurePolicyIgnore:
-      enabled: true  # TODO(ops): set to false to go Fail-closed in prod
+      enabled: false
 
   # -----------------------------------------------------------------------
   # Background controller — processes generate / mutate for existing objects
