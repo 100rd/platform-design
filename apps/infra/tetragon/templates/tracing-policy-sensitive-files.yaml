@@ -1,0 +1,91 @@
+# TracingPolicy: Sensitive File Access — OBSERVE MODE
+# ADR-0019: Detects reads/writes of high-value credential and config files.
+# Fires a ProcessKprobe event when any process opens the listed paths.
+#
+# Graduate to enforce-mode when ready:
+#   1. Run in observe-mode until you have confirmed which workloads legitimately
+#      access each path (e.g. node-exporter reads /etc/passwd, sssd reads /etc/shadow).
+#   2. Build an allowlist using matchBinaries/matchNamespaces selectors.
+#   3. Add `matchActions: [{action: Sigkill}]` to block unexpected openers.
+#      Example (do NOT enable now):
+#        selectors:
+#          - matchPaths:
+#              - operator: "In"
+#                values: ["/etc/shadow", "/etc/gshadow"]
+#            matchBinaries:
+#              - operator: "NotIn"
+#                values: ["/usr/bin/passwd", "/sbin/unix_chkpwd"]
+#            matchActions:
+#              - action: Sigkill
+#   4. Update ADR-0019 status section and record the enforcement PR.
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: sensitive-file-access
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: tetragon
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: tetragon
+    tetragon.io/policy-mode: observe
+    adr: "0019"
+  annotations:
+    tetragon.io/description: "Observe opens of sensitive credential and config files"
+    tetragon.io/observe-only: "true"
+spec:
+  kprobes:
+    # sys_openat covers the vast majority of file opens on Linux 3.x+.
+    - call: "sys_openat"
+      syscall: true
+      args:
+        - index: 0
+          type: "int"     # dirfd
+        - index: 1
+          type: "string"  # pathname
+        - index: 2
+          type: "int"     # flags (O_RDONLY=0, O_WRONLY=1, O_RDWR=2)
+      selectors:
+        # Match on sensitive paths only — reduces event volume dramatically
+        # compared to observing all file opens.
+        - matchPaths:
+            - operator: "In"
+              values:
+                # Password and shadow databases
+                - "/etc/shadow"
+                - "/etc/gshadow"
+                - "/etc/passwd"
+                - "/etc/group"
+                # PAM and sudo config
+                - "/etc/pam.d/common-auth"
+                - "/etc/sudoers"
+                # SSH host private keys
+                - "/etc/ssh/ssh_host_rsa_key"
+                - "/etc/ssh/ssh_host_ecdsa_key"
+                - "/etc/ssh/ssh_host_ed25519_key"
+                # Kubernetes service-account token (IMDSv1-style lateral-movement
+                # tooling may read the projected token directly from the filesystem)
+                - "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
+    # sys_open (non-at variant) — vestigial on x86_64 but retained for completeness
+    # and for any 32-bit compat binaries that may run in the cluster.
+    - call: "sys_open"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"  # pathname
+        - index: 1
+          type: "int"     # flags
+      selectors:
+        - matchPaths:
+            - operator: "In"
+              values:
+                - "/etc/shadow"
+                - "/etc/gshadow"
+                - "/etc/passwd"
+                - "/etc/group"
+                - "/etc/sudoers"
+                - "/etc/ssh/ssh_host_rsa_key"
+                - "/etc/ssh/ssh_host_ecdsa_key"
+                - "/etc/ssh/ssh_host_ed25519_key"
+                - "/var/run/secrets/kubernetes.io/serviceaccount/token"
