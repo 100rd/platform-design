@@ -9,25 +9,42 @@
 envoyGateway:
   enabled: true
 
+  # ---------------------------------------------------------------------------
+  # Digest-pinned images (security remediation — wave 2 infra-team).
+  # Resolved 2026-06-07 via registry v2 API (Docker-Content-Digest header).
+  #
+  # To refresh controller digest:
+  #   TOKEN=$(curl -s "https://auth.docker.io/token?service=registry.docker.io&scope=repository:envoyproxy/gateway:pull" \
+  #     | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+  #   curl -sI -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+  #     -H "Authorization: Bearer $TOKEN" \
+  #     https://registry-1.docker.io/v2/envoyproxy/gateway/manifests/v1.8.0 | grep docker-content-digest
+  #
+  # To refresh proxy digest:
+  #   TOKEN=$(curl -s "https://auth.docker.io/token?service=registry.docker.io&scope=repository:envoyproxy/envoy:pull" \
+  #     | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+  #   curl -sI -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+  #     -H "Authorization: Bearer $TOKEN" \
+  #     https://registry-1.docker.io/v2/envoyproxy/envoy/manifests/v1.33.0 | grep docker-content-digest
+  # ---------------------------------------------------------------------------
+
+  # global.images overrides are the upstream chart's canonical image override mechanism.
+  # The :tag@sha256:<digest> format is Kubernetes-native — tag is human-readable,
+  # the digest governs what Kubernetes actually pulls.
+  global:
+    images:
+      envoyGateway:
+        # Controller image — v1.8.0, multi-arch manifest list digest.
+        image: "docker.io/envoyproxy/gateway:v1.8.0@sha256:a9b4c4d8a402e8c007b74f2796587a6fb33d8baba46094f17c8a6f233e46d609"
+        pullPolicy: IfNotPresent
+      envoyProxy:
+        # Proxy image — v1.33.0 (Envoy version bundled with Envoy Gateway v1.8.0),
+        # multi-arch manifest list digest.
+        image: "docker.io/envoyproxy/envoy:v1.33.0@sha256:56da5afd7df364350ff92de4fb49a9b09957c17295f2899f0a31cd12c28770c2"
+        pullPolicy: IfNotPresent
+
   # Replica count — 2 for HA; increase for high-throughput environments.
   replicaCount: 2
-
-  # Image — upstream chart pulls envoyproxy/gateway; digest pinned in Chart.lock
-  # after `helm dep update`.
-  image:
-    repository: docker.io/envoyproxy/gateway
-    tag: "v1.8.0"
-    # digest: sha256:  (populate after image is available in registry)
-    pullPolicy: IfNotPresent
-
-  # Envoy proxy image used for the data-plane pods provisioned by Gateway resources.
-  envoy:
-    image:
-      repository: docker.io/envoyproxy/envoy
-      # Envoy Gateway v1.8.0 ships with Envoy 1.33.x; pin to the exact tag the
-      # upstream chart defaults to — override only after intentional testing.
-      tag: "v1.33.0"
-      pullPolicy: IfNotPresent
 
   # Resource requests/limits for the Envoy Gateway controller pods.
   resources:
