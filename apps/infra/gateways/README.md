@@ -21,7 +21,7 @@ ingress** for platform services.
 | `grafana-backend-ca` | `Certificate` | Self-signed CA cert for the Grafana backend TLS chain |
 | `grafana-backend-ca-issuer` | `ClusterIssuer` | CA-type issuer signing backend serving certs |
 | `grafana-backend-serving` | `Certificate` | TLS serving cert for the Grafana backend pod |
-| `grafana-backend-ca-cm` | `ConfigMap` | CA cert bundle used by BackendTLSPolicy for peer validation |
+| `grafana-backend-ca-cm` | `ConfigMap` | CA cert bundle used by BackendTLSPolicy for peer validation (populated by cert-manager cainjector) |
 | `grafana` | `BackendTLSPolicy` | Encrypts the gateway->Grafana backend hop (refs #252) |
 
 Both Gateways use `gatewayClassName: cilium` (from
@@ -53,21 +53,63 @@ Grafana backend (ADR-0009 follow-on, refs #252):
    ClusterIssuer and stored in `grafana-backend-ca-secret`.
 2. A CA-type `ClusterIssuer` (`grafana-backend-ca-issuer`) signs the Grafana
    serving cert (`grafana-backend-serving-secret`).
-3. The CA cert is projected into `grafana-backend-ca-cm` ConfigMaps in both
-   the `gateways` and `monitoring` namespaces (BackendTLSPolicy requires the
-   ConfigMap in the same namespace as the targetRef Service).
-4. `BackendTLSPolicy/grafana` (namespace: `monitoring`) targets the
+3. Two `grafana-backend-ca-cm` ConfigMaps are created (one in `gateways`, one
+   in `observability`). Both carry the annotation:
+
+   ```
+   cert-manager.io/inject-ca-from: gateways/grafana-backend-ca
+   ```
+
+   cert-manager's **cainjector** watches for this annotation and automatically
+   injects `ca.crt` from the named Certificate's CA bundle into each ConfigMap
+   as soon as the Certificate is issued. Both ConfigMaps stay in sync on
+   CA renewal -- no manual bootstrap or ESO sync job is required.
+   Prerequisite: `apps/infra/cert-manager` must have `cainjector.enabled: true`
+   (this is the default; confirmed in `apps/infra/cert-manager/values.yaml`).
+
+4. `BackendTLSPolicy/grafana` (namespace: `observability`) targets the
    `kube-prometheus-stack-grafana` Service, instructs Cilium to use SNI
    `grafana.platform.internal`, and validates the backend cert against the CA.
 
-**Bootstrap required**: after cert-manager issues `grafana-backend-ca`, copy
-`ca.crt` from `grafana-backend-ca-secret` into both `grafana-backend-ca-cm`
-ConfigMaps (or use an ESO ExternalSecret -- see the inline comment in
-`templates/backendtlspolicy-grafana.yaml`).
+### Grafana HTTPS flip (follow-up in apps/infra/observability)
 
-**Grafana config required**: the Grafana Deployment must be switched to HTTPS
-(mount `grafana-backend-serving-secret` and set `grafana.ini` `[server]
-protocol=https`). Wire this in `apps/infra/observability`.
+The BackendTLSPolicy is wired and the CA ConfigMaps are populated, but Grafana
+still serves plaintext HTTP/80. To complete the fully encrypted backend hop:
+
+1. In `apps/infra/observability/prometheus-stack/values.yaml`, configure the
+   Grafana subchart to mount `grafana-backend-serving-secret` and enable HTTPS:
+
+   ```yaml
+   grafana:
+     extraSecretMounts:
+       - name: grafana-backend-tls
+         secretName: grafana-backend-serving-secret
+         mountPath: /etc/grafana/tls
+         readOnly: true
+     grafana.ini:
+       server:
+         protocol: https
+         cert_file: /etc/grafana/tls/tls.crt
+         cert_key: /etc/grafana/tls/tls.key
+   ```
+
+2. In this chart's `values.yaml`, change the Grafana HTTPRoute backend port from
+   `80` to `443` (`httpRoutes[grafana].backend.port: 443`).
+3. Add `sectionName: https` to the BackendTLSPolicy `targetRefs[0]` in
+   `templates/backendtlspolicy-grafana.yaml` to pin the policy to the HTTPS port.
+
+This is a follow-up change scoped to `apps/infra/observability`; the gateway
+and BackendTLSPolicy resources in this chart do not need structural modification.
+
+## HTTPRoute namespace
+
+The Grafana HTTPRoute backend targets `kube-prometheus-stack-grafana` in the
+`observability` namespace (migrated from `monitoring` per ADR-0026 / PR #255).
+If you see `503` responses from Grafana, verify the Service namespace:
+
+```bash
+kubectl get svc kube-prometheus-stack-grafana -n observability
+```
 
 ## Adding a platform UI
 
@@ -117,8 +159,10 @@ kubectl get gateway -n gateways
 kubectl get certificate gw-external-tls -n gateways
 kubectl get httproute -A
 # BackendTLSPolicy (v1.4.0+ Standard channel):
-kubectl get backendtlspolicy -n monitoring
+kubectl get backendtlspolicy -n observability
 kubectl get certificate grafana-backend-ca -n gateways
-kubectl get certificate grafana-backend-serving -n monitoring
-kubectl get configmap grafana-backend-ca-cm -n monitoring
+kubectl get certificate grafana-backend-serving -n observability
+kubectl get configmap grafana-backend-ca-cm -n observability
+# Confirm cainjector populated ca.crt (should not be empty):
+kubectl get configmap grafana-backend-ca-cm -n observability -o jsonpath='{.data.ca\.crt}' | head -1
 ```
