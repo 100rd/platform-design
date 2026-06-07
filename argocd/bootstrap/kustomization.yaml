@@ -6,3 +6,5 @@ resources:
   - applicationsets/role-apps-appset.yaml
   - applicationsets/observability-appset.yaml
   - applicationsets/multicluster-infra-appset.yaml
+  # ADR-0024: ArgoCD operational config patches (server-side diff, shallow clone).
+  - ../config
