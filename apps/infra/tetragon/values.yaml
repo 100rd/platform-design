@@ -2,6 +2,26 @@
 # ADR-0019: Runtime Security — Tetragon (observe-mode, eBPF) over Falco.
 # https://tetragon.io/docs/
 
+# ---------------------------------------------------------------------------
+# Enforcement gate — Wave 3 graduation (feat/w3-tetragon-enforce, ADR-0019).
+#
+# enforce.enabled=true  (default): TracingPolicies with matchActions active.
+#   - privileged-syscall-tracing: Sigkill on ptrace, Override -EPERM on
+#     setuid/setgid for binaries not in the per-policy allowlist inside
+#     containers. mount remains observe-only in both modes.
+#   - sensitive-file-access: Override -EPERM on writes to /etc/shadow,
+#     /etc/gshadow, /etc/passwd, /etc/group for unlisted binaries.
+#
+# enforce.enabled=false: All policies revert to observe-only (no BPF actions).
+#   Hot rollback — no DaemonSet restart required:
+#     helm upgrade tetragon . --set enforce.enabled=false
+#   Tetragon operator reconciles the CRD in < 30 s.
+#
+# exec-tracing is unaffected by this flag; it remains observe-only always.
+# ---------------------------------------------------------------------------
+enforce:
+  enabled: true
+
 tetragon:
   enabled: true
 

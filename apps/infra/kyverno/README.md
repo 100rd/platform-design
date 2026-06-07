@@ -4,10 +4,17 @@ Kubernetes Native Policy Management. Complements Gatekeeper + Pod Security Admis
 
 ## Status
 
-**Enabled** (v1.18.1). All policies start in **Audit** mode.
-Promote to **Enforce** after a clean audit window in each environment.
+**Enabled** (v1.18.1). Policies are in **Enforce** mode (graduated from Audit — W3/ADR-0020).
+See [Rollback](#rollback) below if enforcement must be reverted.
 
 See [ADR-0020](../../../docs/adrs/0020-kyverno-and-vap-policy-engine.md) for rationale.
+
+## Enforcement History
+
+| Date | Event | PR |
+|------|-------|-----|
+| Initial deploy | All policies set to Audit | #266 |
+| W3 graduation | Audit → Enforce (post-soak, zero unexpected violations) | W3/ADR-0020 |
 
 ## Policy split (ADR-0020)
 
@@ -30,7 +37,7 @@ See [ADR-0020](../../../docs/adrs/0020-kyverno-and-vap-policy-engine.md) for rat
 
 | File | Kind | Purpose |
 |------|------|---------|
-| `verify-images.yaml` | ClusterPolicy | Keyless cosign image signature verification. Fulcio issuer = GitHub Actions OIDC. mutateDigest rewrites tag to verified digest. Audit then Enforce. |
+| `verify-images.yaml` | ClusterPolicy | Keyless cosign image signature verification. Fulcio issuer = GitHub Actions OIDC. mutateDigest rewrites tag to verified digest. **Enforce** (W3). |
 | `mutate-security-context.yaml` | ClusterPolicy | Injects `runAsNonRoot: true`, `seccompProfile: RuntimeDefault`, `capabilities.drop: [ALL]` into containers that do not already set these fields. |
 | `generate-default-deny-netpol.yaml` | ClusterPolicy | Generates a `default-deny-all` NetworkPolicy into every new namespace (excluding system/infra namespaces). Synchronized back if deleted. |
 
@@ -38,7 +45,7 @@ See [ADR-0020](../../../docs/adrs/0020-kyverno-and-vap-policy-engine.md) for rat
 
 | File | Kind | Purpose |
 |------|------|---------|
-| `block-latest-require-limits.yaml` | ValidatingAdmissionPolicy + Binding | Block `:latest` image tags; require `resources.limits.cpu` and `resources.limits.memory`. In-process CEL, no webhook. Audit then Deny. |
+| `block-latest-require-limits.yaml` | ValidatingAdmissionPolicy + Binding | Block `:latest` image tags; require `resources.limits.cpu` and `resources.limits.memory`. In-process CEL, no webhook. **Deny** (W3). |
 
 ## Why image verification is here and NOT in ArgoCD
 
@@ -47,25 +54,63 @@ OCI image signatures. Image-signature enforcement belongs at admission, where
 Kyverno's `verifyImages` checks the OCI signature before the pod is admitted.
 This is the verification layer that ADR-0016's cosign signing requires.
 
-## Rollout
-
-All policies and the VAP binding start in Audit mode (no blocking):
+## Current enforcement state (post W3 graduation)
 
 ```
-ClusterPolicy:                    validationFailureAction: Audit
-ValidatingAdmissionPolicy:        failurePolicy: Ignore
-ValidatingAdmissionPolicyBinding: validationActions: [Audit]
+ClusterPolicy verify-images-keyless-cosign:
+  validationFailureAction: Enforce
+
+ValidatingAdmissionPolicy platform-pod-baseline:
+  failurePolicy: Fail
+
+ValidatingAdmissionPolicyBinding platform-pod-baseline-binding:
+  validationActions: [Deny]
+
+values.yaml admissionController:
+  forceFailurePolicyIgnore.enabled: false   # webhook is fail-closed
 ```
 
-Promotion checklist (per environment):
+## Rollback
 
-1. Monitor `kubectl get policyreport -A` and `kubectl get clusterpolicyreport` for violations.
-2. Investigate and remediate violating workloads.
-3. After a clean audit window (no unexpected violations), promote:
-   - ClusterPolicy: `validationFailureAction: Enforce`
-   - Webhook failurePolicy in `values.yaml`: `Fail`
-   - VAP Binding: `validationActions: [Deny]` (or `[Deny, Warn]`)
-   - VAP Policy: `failurePolicy: Fail`
+**Prerequisite**: this rollback assumes a completed soak period. Only use it
+to revert unexpected admission failures after graduation — not as a way to
+skip soak-validation in new environments.
+
+To revert enforcement to Audit mode, apply the following changes and push:
+
+1. `apps/infra/kyverno/templates/policies/verify-images.yaml`
+   ```yaml
+   spec:
+     validationFailureAction: Audit   # revert from Enforce
+   ```
+
+2. `apps/infra/kyverno/templates/vap/block-latest-require-limits.yaml`
+   ```yaml
+   spec:
+     failurePolicy: Ignore            # revert from Fail (ValidatingAdmissionPolicy)
+   ---
+   spec:
+     validationActions:
+       - Audit                        # revert from Deny (ValidatingAdmissionPolicyBinding)
+   ```
+
+3. `apps/infra/kyverno/values.yaml`
+   ```yaml
+   admissionController:
+     forceFailurePolicyIgnore:
+       enabled: true                  # revert from false — restores fail-open webhook
+   ```
+
+Commit, push, and let ArgoCD sync. Audit mode produces `PolicyReport` /
+`ClusterPolicyReport` violations but does not block admission.
+
+Investigate violations before re-attempting graduation:
+
+```bash
+kubectl get policyreport -A
+kubectl get clusterpolicyreport
+kubectl describe policyreport -n <namespace> <name>
+```
 
 ## ArgoCD
 

@@ -421,13 +421,25 @@ thanos:
         prometheus: kube-prometheus
 
   # --------------------------------------------------------------------------
-  # IRSA (IAM Roles for Service Accounts) - AWS Integration
+  # Workload Identity - EKS Pod Identity (ADR-0018), NOT IRSA
   # --------------------------------------------------------------------------
+  # The Thanos ServiceAccount carries NO `eks.amazonaws.com/role-arn` annotation.
+  # S3 access is granted by the `pod-identity-thanos` Terraform module (#267),
+  # which creates an EksPodIdentityAssociation binding
+  #   (cluster, namespace=monitoring, serviceAccount=thanos) -> IAM role
+  # whose trust targets `pods.eks.amazonaws.com`. Pod Identity injects creds via
+  # the EKS Pod Identity Agent (no SA annotation, no per-cluster OIDC needed).
+  #
+  # IMPORTANT: never set both mechanisms on this SA. The IRSA annotation was
+  # dropped in W4; if the annotation is re-added while the Pod Identity
+  # association exists, behaviour is unsupported (ADR-0018: precedence-both).
+  #
+  # The chart must still CREATE the `thanos` SA (the association references it by
+  # name); it just must not annotate it.
   serviceAccount:
     create: true
     name: thanos
-    annotations:
-      eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/thanos-s3-access  # Replace with actual IAM role ARN
+    # annotations: {}  # intentionally empty — Pod Identity, not IRSA (see above)
 
 ---
 # Cache Configuration ConfigMap (Memcached for Query Frontend)
