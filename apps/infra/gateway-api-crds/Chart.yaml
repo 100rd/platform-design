@@ -1,14 +1,18 @@
 apiVersion: v2
 name: gateway-api-crds
-description: Gateway API standard channel CRDs v1.2.1 + Cilium GatewayClass (ADR-0009)
-version: 0.1.0
+description: Gateway API standard channel CRDs v1.4.0 + Cilium GatewayClass (ADR-0009)
+version: 0.2.0
 type: application
 # No upstream chart dependency — CRDs are vendored directly in crds/ so ArgoCD
 # can apply them with ServerSideApply before any Gateway resource is created.
-# This chart MUST sync before charts that create Gateway/HTTPRoute resources
-# (apps/infra/gateways) and before the Cilium Helm release that enables
+# This chart MUST sync before charts that create Gateway/HTTPRoute/BackendTLSPolicy
+# resources (apps/infra/gateways) and before the Cilium Helm release that enables
 # gatewayAPI. Ordering is enforced via argocd.argoproj.io/sync-wave annotations
 # on the rendered resources (CRDs/GatewayClass land at the earliest waves).
+#
+# v1.4.0 (GA 2025-10) adds BackendTLSPolicy to the Standard channel, enabling
+# gateway->backend TLS encryption (ADR-0009 follow-on, refs #252).
+# Cilium 1.19 passes v1.4 conformance.
 
 maintainers:
   - name: Platform Team
