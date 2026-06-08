@@ -31,6 +31,22 @@ resource "helm_release" "karpenter" {
           clusterName       = var.cluster_name
           clusterEndpoint   = var.cluster_endpoint
           interruptionQueue = var.karpenter_interruption_queue_name
+
+          # Feature gates (Tier-1 compute, doc-verified 2026-06-07)
+          # NodeRepair: alpha feature gate in Karpenter v1.10 (our pinned version).
+          # When enabled, Karpenter watches node health conditions surfaced by the
+          # EKS Node Monitoring Agent addon (eks-node-monitoring-agent) and replaces
+          # unhealthy nodes automatically ("Node Auto-Repair").
+          #
+          # SAFETY CAP: Karpenter caps node-repair disruption to a maximum of 20% of
+          # each NodePool's nodes at any one time (hard-coded upper bound, independent
+          # of `disruption.budgets`). This prevents a correlated health-signal failure
+          # from draining an entire NodePool. The NodePool's own disruption budgets
+          # still apply on top of this cap.
+          # Ref: https://karpenter.sh/docs/concepts/disruption/#node-auto-repair
+          featureGates = {
+            nodeRepair = var.enable_node_repair
+          }
         }
 
         # Service account configuration

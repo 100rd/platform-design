@@ -1,0 +1,51 @@
+# Internet-facing Gateway backed by an AWS NLB (ADR-0009).
+#
+# This is the cluster's primary public ingress entrypoint. Cilium reads
+# spec.infrastructure.annotations and propagates them to the LoadBalancer
+# Service it generates; the AWS Load Balancer Controller (apps/infra/
+# aws-lb-controller) then creates an internet-facing NLB from those annotations.
+#
+# TLS is terminated at this Gateway (mode: Terminate) using the cert-manager
+# issued secret (templates/certificate-external-tls.yaml). Swap the
+# Certificate/ClusterIssuer for a real ACM/ACME cert once Route53 + a public
+# hosted zone are wired — this Gateway resource does not need to change.
+#
+# Platform UIs (Grafana, ArgoCD, inference-gateway) attach to this Gateway via
+# HTTPRoute objects (templates/httproute-platform.yaml).
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gw-external
+  namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  gatewayClassName: {{ .Values.gatewayClassName }}
+  infrastructure:
+    annotations:
+      # AWS LBC — create an internet-facing NLB with instance target type
+      # (Cilium Gateways expose a sentinel endpoint; NLB targets the nodePort).
+      service.beta.kubernetes.io/aws-load-balancer-type: external
+      service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: instance
+      service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+      # Explicit, human-readable NLB name (default is k8s-<ns>-<svc>-<hash>,
+      # which hides scheme/purpose). Name is immutable — changing it later
+      # forces NLB recreation.
+      service.beta.kubernetes.io/aws-load-balancer-name: {{ .Values.external.nlbName }}
+  listeners:
+    - name: https
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          # group "" is the Gateway API CRD default — written explicitly so
+          # ArgoCD does not flag the listener OutOfSync against the live object.
+          - group: ""
+            kind: Secret
+            name: {{ .Values.external.tls.secretName }}
+            namespace: {{ .Values.namespace }}
+      # Allow HTTPRoutes from any namespace to attach (e.g. monitoring, argocd).
+      allowedRoutes:
+        namespaces:
+          from: All

@@ -13,12 +13,33 @@ We have configured four specialized NodePools to handle different workload types
 3. **c-series-compute** - Compute-intensive workloads (C series only)
 4. **spot-flexible** - Maximum cost savings with 100% spot instances
 
+### Node Operating System: Bottlerocket (ADR-0030)
+
+All NodePools run on **Bottlerocket**, the EKS node OS adopted in **ADR-0030**.
+Bottlerocket is a minimal, **immutable**, container-purpose Linux: **read-only
+root**, **SELinux-enforcing**, no SSH/shell/package-manager — a radical reduction
+of host attack surface versus a general-purpose distro.
+
+- `EC2NodeClass.spec.amiSelectorTerms` uses `alias: bottlerocket@latest`
+  (AL2023 is kept as a **commented fallback** for the VPC-CNI escape hatch).
+- **Two-volume layout**: `/dev/xvda` = small OS volume, `/dev/xvdb` = data volume
+  for container storage (both `gp3`, encrypted).
+- Nodes are configured via **Bottlerocket TOML userData** (`[settings.kubernetes]`),
+  not a bash bootstrap.
+- Bottlerocket `aws-k8s-1.33+` ships **kernel 6.12** (`aws-k8s-1.36` ships 6.18),
+  which also **unblocks Cilium netkit** (ADR-0019 / #272).
+- **FIPS** variant for FIPS 140-3 pools; **NVIDIA** variant for GPU pools.
+
+The `karpenter-nodepools` Terraform module already defaults
+`ami_family = "Bottlerocket"` and emits all of the above; the example manifests
+and templates in this directory match it.
+
 ## NodePool Comparison
 
 | NodePool | Architecture | Instance Types | Capacity Type | Best For | Cost Savings |
 |----------|-------------|----------------|---------------|----------|--------------|
 | x86-general-purpose | x86/amd64 | M, C, R series | 80% spot, 20% on-demand | General workloads | ~60-70% |
-| arm64-graviton | ARM64 | Graviton (m7g, c7g, r7g) | 90% spot, 10% on-demand | Cost-sensitive workloads | ~70-80% |
+| arm64-graviton | ARM64 | Graviton4 (c8g/m8g/r8g, preferred) + Graviton3 (7g) fallback | 90% spot, 10% on-demand | Cost-sensitive workloads | ~70-80% |
 | c-series-compute | x86/amd64 | C series only | 70% spot, 30% on-demand | CPU-intensive tasks | ~50-60% |
 | spot-flexible | x86 + ARM64 | All M, C, R, T series | 100% spot | Interruption-tolerant | ~85-92% |
 
@@ -462,3 +483,38 @@ kubectl describe nodepool <name>
 # Describe EC2NodeClass
 kubectl describe ec2nodeclass <name>
 ```
+
+
+## Tier-1 Compute (doc-verified 2026-06-07)
+
+These NodePools were extended for the Tier-1 compute wins. All facts below were
+verified against AWS / Karpenter documentation on 2026-06-07.
+
+### Graviton4 (8g families)
+
+- Graviton4 instance families **C8g / M8g / R8g** (incl. `d`/`n` variants) are
+  **GA** and now lead the instance-family list on the `arm64-graviton` and
+  `spot-flexible` NodePools.
+- Graviton3 **7g** families are retained as **fallback** so Karpenter can still
+  provision when 8g capacity is unavailable in an AZ.
+- The node OS is **Bottlerocket** (ADR-0030); Bottlerocket `aws-k8s-1.33+`
+  ships **kernel 6.12** (`aws-k8s-1.36` ships 6.18), fully supporting
+  Graviton4 and clearing the netkit kernel floor (ADR-0019 / #272). The
+  AL2023 EKS AMI also ships kernel 6.12 and remains the commented fallback.
+- `karpenter.k8s.aws/instance-cpu` on the arm64 NodePool was widened (up to 192)
+  to allow the larger 8g sizes (e.g. `*8g.48xlarge`).
+
+### Node Auto-Repair (Karpenter NodeRepair)
+
+- Enabled via the **karpenter** Terraform module
+  (`settings.featureGates.nodeRepair`, exposed as `var.enable_node_repair`,
+  default `true`). NodeRepair is an **alpha** feature gate in Karpenter **v1.10**
+  (our pinned version).
+- Health signals come from the **EKS Node Monitoring Agent** managed addon
+  (`eks-node-monitoring-agent`), wired in the `minimal-platform-eks-addons`
+  catalog unit via the generic `eks-addons` module.
+- **Safety cap**: Karpenter limits node-repair disruption to a maximum of
+  **20% of each NodePool's nodes** at any one time (hard-coded upper bound,
+  independent of `disruption.budgets`). A NodePool's own disruption budgets still
+  apply on top of this cap. This prevents a correlated health-signal failure from
+  draining an entire NodePool.

@@ -60,6 +60,27 @@ resource "aws_organizations_organizational_unit" "suspended" {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
+# Policy-Staging OU
+# ---------------------------------------------------------------------------------------------------------------------
+# A small test-account set used to STAGE new org policies before promoting them
+# org-wide (ADR-0017, decision item 1 + Implementation notes step 3). The
+# org-perimeter RCP (modules/rcps) is attached HERE FIRST so a mis-scoped deny
+# is caught in a blast-radius-limited OU before it is promoted to root.
+#
+# Hard-coded as a top-level OU (like Suspended) so its id is always available
+# as a stable module output for the rcps terragrunt unit to consume.
+# ---------------------------------------------------------------------------------------------------------------------
+
+resource "aws_organizations_organizational_unit" "policy_staging" {
+  name      = "Policy-Staging"
+  parent_id = aws_organizations_organization.this.roots[0].id
+
+  tags = merge(var.tags, {
+    Purpose = "policy-staging"
+  })
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
 # Member Accounts
 # ---------------------------------------------------------------------------------------------------------------------
 

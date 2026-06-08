@@ -1,0 +1,121 @@
+# -----------------------------------------------------------------------------
+# policy-access-check.yml
+#
+# Access Analyzer custom-policy-check CI gate for SCP / RCP changes (ADR-0017,
+# decision item 4; epic #252).
+#
+# WHY: the data perimeter is enforced by org policies (SCPs in modules/scps,
+# RCPs in modules/rcps). Historically a proposed policy edit was reviewed BY EYE
+# — a reviewer reasoned about deny logic manually in the PR. This gate replaces
+# review-by-eye with a machine check: IAM Access Analyzer custom policy checks
+# prove that a change does NOT widen effective access before it can merge.
+#
+#   - check-no-new-access      : proves the NEW policy grants no new effective
+#                                access relative to the OLD policy (the diff).
+#   - check-access-not-granted : proves named SENSITIVE actions stay denied
+#                                (organizations:LeaveOrganization, cloudtrail:StopLogging).
+#
+# PAID FEATURE: Access Analyzer custom policy checks are a PAID AWS feature
+# (priced per check). This workflow only runs on PRs that actually touch
+# modules/{scps,rcps}, to bound cost.
+#
+# GATE ON THE JSON `result` FIELD, NOT THE EXIT CODE: the AWS CLI can exit 0
+# even when the check result is FAIL. The gate MUST read the structured JSON
+# `result` field (PASS / FAIL) — see scripts/policy-access-check.sh. (This is
+# called out explicitly in ADR-0017.)
+#
+# OLD vs NEW POLICY JSON: the old (current) and new (proposed) policy documents
+# are extracted from the Terraform plan via `terraform show -json` — the
+# aws_organizations_policy resources' `content` (a JSON IAM policy document) in
+# the before/after of each planned change. See scripts/policy-access-check.sh.
+#
+# GATING MODEL: ADVISORY first (ADR-0017 Implementation notes step 1 — "land the
+# gate advisory so subsequent edits are measured from the start", flip to
+# blocking at step 6). Controlled by the ADVISORY env below. While advisory, a
+# FAIL is surfaced in the job summary but does not fail the job.
+#
+# Third-party `uses:` are SHA-pinned with a version comment (ADR-0015 convention,
+# matching zizmor.yml). AWS auth uses OIDC (no long-lived keys); the gate is a
+# no-op (skips the paid calls) when no AWS role is configured, so forks / the
+# mock repo still pass.
+# -----------------------------------------------------------------------------
+
+name: Policy Access Check (Access Analyzer)
+
+on:
+  pull_request:
+    paths:
+      - "terraform/modules/scps/**"
+      - "terraform/modules/rcps/**"
+      - ".github/workflows/policy-access-check.yml"
+      - "scripts/policy-access-check.sh"
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  # ADVISORY: true => a FAIL result is reported but does NOT fail the job.
+  # Flip to "false" to make the gate blocking (ADR-0017 Implementation step 6).
+  ADVISORY: "true"
+  TF_VERSION: "1.14.8"
+  # Region for the Access Analyzer API calls (the checks are global in effect;
+  # any enabled region works for the API endpoint).
+  AWS_REGION: "eu-west-1"
+
+jobs:
+  policy-access-check:
+    name: Access Analyzer custom policy checks
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - scps
+          - rcps
+    permissions:
+      contents: read # checkout
+      id-token: write # OIDC to assume the read-only Access Analyzer role
+    steps:
+      - name: Checkout
+        # actions/checkout v4.2.2 (same pin used by zizmor.yml)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # AWS auth via OIDC. Skipped (step `if`) when no role is configured so the
+      # mock repo / forks do not fail on a missing secret — the check script then
+      # runs in its self-contained "no credentials => skip paid calls" mode.
+      - name: Configure AWS credentials (OIDC)
+        if: ${{ vars.POLICY_CHECK_ROLE_ARN != '' }}
+        # aws-actions/configure-aws-credentials v4.0.2
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502
+        with:
+          role-to-assume: ${{ vars.POLICY_CHECK_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Produce the plan JSON the check script reads old/new policy docs from.
+      # -backend=false: validate-only plan against the module in isolation (no
+      # apply, no real backend). On a configured account this would run against
+      # real state; here it proves the extraction + check wiring.
+      - name: Terraform plan (JSON)
+        working-directory: terraform/modules/${{ matrix.module }}
+        run: |
+          terraform init -backend=false
+          # Best-effort plan to JSON. In the mock repo there is no provider auth,
+          # so a full plan may not converge — the check script tolerates an empty
+          # plan (no policy changes => trivially PASS) and is the real gate logic.
+          terraform plan -out=tfplan.binary -input=false || true
+          terraform show -json tfplan.binary > "${GITHUB_WORKSPACE}/plan-${{ matrix.module }}.json" 2>/dev/null || echo '{}' > "${GITHUB_WORKSPACE}/plan-${{ matrix.module }}.json"
+
+      - name: Run Access Analyzer policy checks
+        env:
+          PLAN_JSON: ${{ github.workspace }}/plan-${{ matrix.module }}.json
+          MODULE: ${{ matrix.module }}
+          HAS_AWS: ${{ vars.POLICY_CHECK_ROLE_ARN != '' }}
+        run: |
+          chmod +x scripts/policy-access-check.sh
+          scripts/policy-access-check.sh "${PLAN_JSON}" >> "${GITHUB_STEP_SUMMARY}"

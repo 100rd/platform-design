@@ -8,7 +8,7 @@
 #
 # Why a wrapper instead of renaming the underlying module?
 #   - Issue #161 asks for a module named `cloudtrail-org` (mirroring the
-#     source repo qbiq-ai/infra naming).
+#     source repo infra naming).
 #   - The existing `cloudtrail` module already meets every acceptance
 #     criterion in #161 and is referenced from terragrunt + tests.
 #   - Renaming would churn a stable surface and require state moves on any

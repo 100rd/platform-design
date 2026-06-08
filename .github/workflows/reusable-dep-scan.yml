@@ -1,0 +1,143 @@
+# -----------------------------------------------------------------------------
+# reusable-dep-scan.yml
+#
+# Reusable workflow: scan application dependencies for known CVEs. Wraps the
+# `python-dep-scan` (pip-audit) and `node-dep-scan` (npm audit + osv-scanner)
+# composites from .github/actions/* in this repo.
+#
+# Completes the Tier-1 set started in PR #241 (ADR-0016): the Trivy image scan
+# in reusable-build-and-push only covers OS/system libs, so application-level
+# dependency CVEs went uncaught. This is the gating dep-scan layer.
+#
+# Findings flow to GitHub Security (SARIF). The scan GATES the job by default
+# (fails on CRITICAL/HIGH), with a per-repo `.audit-ignore` allowlist; set
+# `advisory: true` to downgrade to reporting-only.
+#
+# Mirrors platform-workflows@3bb35df dep-scan wiring (2026-06 consolidation
+# sync). In the real estate this lives in the shared platform-workflows repo and
+# is referenced as `uses: platform-workflows/.github/workflows/reusable-dep-scan.yml@<ref>`.
+# In this mock it lives in-repo and is called via local `./.github/...` paths.
+#
+# Caller example:
+#
+#   jobs:
+#     dep-scan:
+#       uses: ./.github/workflows/reusable-dep-scan.yml
+#       permissions:
+#         contents: read
+#         security-events: write
+#       with:
+#         language: python
+#         working_directory: services/render-manager
+#
+# See: docs/ci-cd/README.md
+# -----------------------------------------------------------------------------
+
+name: reusable-dep-scan
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        description: "python or node. Selects which dep-scan composite runs."
+        type: string
+        required: true
+      working_directory:
+        description: "Project root containing the manifest + lockfile."
+        type: string
+        required: false
+        default: "."
+      ignore_file:
+        description: "Allowlist file (relative to working_directory) of CVE/GHSA/OSV IDs to ignore."
+        type: string
+        required: false
+        default: ".audit-ignore"
+      severity_threshold:
+        description: "Python: comma-separated severities that fail (pip-audit gate)."
+        type: string
+        required: false
+        default: "CRITICAL,HIGH"
+      audit_level:
+        description: "Node: npm audit severity threshold (info|low|moderate|high|critical)."
+        type: string
+        required: false
+        default: "high"
+      python_version:
+        description: "Python version for the pip-audit run."
+        type: string
+        required: false
+        default: "3.12"
+      node_version:
+        description: "Node version for the npm audit / osv-scanner run."
+        type: string
+        required: false
+        default: "20"
+      package_manager:
+        description: "Node: npm, pnpm, or yarn."
+        type: string
+        required: false
+        default: "npm"
+      install_command:
+        description: "Override the language-specific dependency install command. Empty string uses the composite default."
+        type: string
+        required: false
+        default: ""
+      advisory:
+        description: "If true, findings are reporting-only (exit-code 0). Default false = gating."
+        type: boolean
+        required: false
+        default: false
+      upload_sarif:
+        description: "Upload findings as SARIF to GitHub Security."
+        type: boolean
+        required: false
+        default: true
+
+permissions: {}
+
+jobs:
+  python-dep-scan:
+    name: Python dependency scan
+    if: inputs.language == 'python'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python dependency scan
+        uses: ./.github/actions/python-dep-scan
+        with:
+          working-directory: ${{ inputs.working_directory }}
+          ignore-file: ${{ inputs.ignore_file }}
+          severity-threshold: ${{ inputs.severity_threshold }}
+          python-version: ${{ inputs.python_version }}
+          # Empty install_command -> fall back to the composite default.
+          install-command: ${{ inputs.install_command != '' && inputs.install_command || 'pip install -e ''.[dev]''' }}
+          exit-code: ${{ inputs.advisory && '0' || '1' }}
+          sarif-category: python-dep-scan-${{ inputs.working_directory }}
+          upload-sarif: ${{ inputs.upload_sarif }}
+
+  node-dep-scan:
+    name: Node dependency scan
+    if: inputs.language == 'node'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node dependency scan
+        uses: ./.github/actions/node-dep-scan
+        with:
+          working-directory: ${{ inputs.working_directory }}
+          package-manager: ${{ inputs.package_manager }}
+          ignore-file: ${{ inputs.ignore_file }}
+          audit-level: ${{ inputs.audit_level }}
+          node-version: ${{ inputs.node_version }}
+          install-command: ${{ inputs.install_command }}
+          exit-code: ${{ inputs.advisory && '0' || '1' }}
+          sarif-category: node-dep-scan-${{ inputs.working_directory }}
+          upload-sarif: ${{ inputs.upload_sarif }}

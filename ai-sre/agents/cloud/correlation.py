@@ -84,9 +84,15 @@ class CrossLayerCorrelator:
     with cloud infrastructure context from the AWS Cloud Agent.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        omniscience_url: Optional[str] = None,
+        omniscience_token: Optional[str] = None,
+    ) -> None:
         self._node_cache: dict[str, AWSNodeContext] = {}
         self._volume_cache: dict[str, AWSVolumeContext] = {}
+        self.omniscience_url = omniscience_url
+        self.omniscience_token = omniscience_token
 
     async def enrich_for_node(
         self,
@@ -95,20 +101,43 @@ class CrossLayerCorrelator:
     ) -> Optional[AWSNodeContext]:
         """Get AWS context for a K8s node.
 
-        In production, queries the AWS Cloud Agent's instance map
-        and then calls aws-mcp for current status.
-
-        Returns None if the node is not found or not an EC2 instance.
+        Queries Omniscience Graph to look up the EC2 instance ID and mapping.
         """
-        cached = self._node_cache.get(f"{cluster}/{node_name}")
+        cache_key = f"{cluster}/{node_name}"
+        cached = self._node_cache.get(cache_key)
         if cached:
             return cached
 
-        # In production:
-        # 1. Look up instance ID from cloud agent's instance_map
-        # 2. Call aws-mcp: describe_instance_status for health
-        # 3. Call aws-mcp: describe_spot_instance_requests if spot
-        # 4. Build and cache the context
+        if not self.omniscience_url or not self.omniscience_token:
+            return None
+
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                headers = {"Authorization": f"Bearer {self.omniscience_token}"}
+                response = await client.get(
+                    f"{self.omniscience_url}/api/v1/graph/node-context",
+                    params={"node_name": node_name, "cluster": cluster},
+                    headers=headers,
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    ctx = AWSNodeContext(
+                        node_name=node_name,
+                        instance_id=data.get("instance_id", "unknown"),
+                        instance_type=data.get("instance_type", "unknown"),
+                        availability_zone=data.get("availability_zone", "unknown"),
+                        lifecycle=data.get("lifecycle", "on-demand"),
+                        instance_status=data.get("instance_status", "ok"),
+                        system_check=data.get("system_check", "ok"),
+                        instance_check=data.get("instance_check", "ok"),
+                        spot_interruption=data.get("spot_interruption", False),
+                    )
+                    self._node_cache[cache_key] = ctx
+                    return ctx
+        except Exception as e:
+            logger.error("Failed to enrich node context via Omniscience: %s", e)
+
         return None
 
     async def enrich_for_pvc(
@@ -119,17 +148,42 @@ class CrossLayerCorrelator:
     ) -> Optional[AWSVolumeContext]:
         """Get AWS context for a K8s PVC.
 
-        In production, queries the AWS Cloud Agent's volume map
-        and then calls aws-mcp for current volume status.
+        Queries Omniscience Graph to look up the EBS volume mapping.
         """
-        cached = self._volume_cache.get(f"{cluster}/{namespace}/{pvc_name}")
+        cache_key = f"{cluster}/{namespace}/{pvc_name}"
+        cached = self._volume_cache.get(cache_key)
         if cached:
             return cached
 
-        # In production:
-        # 1. Look up volume ID from cloud agent's volume_map
-        # 2. Call aws-mcp: describe_volume_status for health
-        # 3. Call aws-mcp: get_metric_data for IO metrics
+        if not self.omniscience_url or not self.omniscience_token:
+            return None
+
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                headers = {"Authorization": f"Bearer {self.omniscience_token}"}
+                response = await client.get(
+                    f"{self.omniscience_url}/api/v1/graph/pvc-context",
+                    params={"pvc_name": pvc_name, "namespace": namespace, "cluster": cluster},
+                    headers=headers,
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    ctx = AWSVolumeContext(
+                        pvc_name=pvc_name,
+                        pvc_namespace=namespace,
+                        volume_id=data.get("volume_id", "unknown"),
+                        volume_type=data.get("volume_type", "unknown"),
+                        volume_status=data.get("volume_status", "ok"),
+                        io_performance=data.get("io_performance", "normal"),
+                        iops=data.get("iops", 0),
+                        queue_length=data.get("queue_length", 0.0),
+                    )
+                    self._volume_cache[cache_key] = ctx
+                    return ctx
+        except Exception as e:
+            logger.error("Failed to enrich volume context via Omniscience: %s", e)
+
         return None
 
     async def enrich_for_security(

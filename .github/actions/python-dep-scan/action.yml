@@ -1,0 +1,261 @@
+# -----------------------------------------------------------------------------
+# python-dep-scan
+#
+# Mirrors platform-workflows@3bb35df .github/actions/python-dep-scan
+# (2026-06 platform-workflows consolidation sync).
+# Completes the Tier-1 set started in PR #241 (ADR-0016): application-dependency
+# CVE scanning, which the Trivy image scan (OS/system libs only) does not cover.
+# -----------------------------------------------------------------------------
+name: "Python Dependency Scan"
+description: "Scan Python project dependencies for known CVEs using pip-audit. Reads vulnerabilities from PyPI Advisory DB + OSV. Fails on HIGH/CRITICAL by default, with `.audit-ignore` allowlist support."
+
+inputs:
+  working-directory:
+    description: "Project root containing pyproject.toml / requirements*.txt."
+    required: false
+    default: "."
+  ignore-file:
+    description: "Path (relative to working-directory) to a newline-delimited file of CVE/GHSA IDs to ignore. Lines starting with `#` and blank lines are skipped. Missing file is treated as empty."
+    required: false
+    default: ".audit-ignore"
+  severity-threshold:
+    description: "Comma-separated severities that fail the job. pip-audit does not natively gate on severity, so this action enforces the gate by post-filtering the JSON report."
+    required: false
+    default: "CRITICAL,HIGH"
+  python-version:
+    description: "Python version to set up before running pip-audit."
+    required: false
+    default: "3.12"
+  install-command:
+    description: "Command run before scanning to install project deps so pip-audit can resolve the resolved environment. Empty string skips."
+    required: false
+    default: "pip install -e '.[dev]'"
+  exit-code:
+    description: "Exit code when in-scope vulnerabilities are present. Set to 0 to make the scan advisory."
+    required: false
+    default: "1"
+  sarif-category:
+    description: "SARIF category. Differentiates multiple Python scans on the same commit."
+    required: false
+    default: "python-dep-scan"
+  upload-sarif:
+    description: "Upload pip-audit findings as SARIF to GitHub Security."
+    required: false
+    default: "true"
+
+outputs:
+  report-path:
+    description: "Path to the JSON report produced by pip-audit."
+    value: ${{ steps.scan.outputs.report-path }}
+  in-scope-findings:
+    description: "Number of findings that match severity-threshold AND are not in ignore-file."
+    value: ${{ steps.gate.outputs.in-scope-findings }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python ${{ inputs.python-version }}
+      # actions/setup-python v5.3.0
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install project dependencies
+      if: inputs.install-command != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        python -m pip install --upgrade pip
+        ${{ inputs.install-command }}
+
+    - name: Install pip-audit
+      shell: bash
+      run: |
+        set -euo pipefail
+        python -m pip install --upgrade 'pip-audit==2.7.3'
+        pip-audit --version
+
+    - name: Run pip-audit (JSON report)
+      id: scan
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        REPORT_PATH: pip-audit-report.json
+      run: |
+        set -uo pipefail
+        # pip-audit returns non-zero when findings exist; we want the report regardless.
+        pip-audit --format json --output "${REPORT_PATH}" || true
+        if [ ! -s "${REPORT_PATH}" ]; then
+          echo "::warning::pip-audit produced no JSON output — treating as zero findings."
+          printf '{"dependencies":[]}' > "${REPORT_PATH}"
+        fi
+        echo "report-path=${{ inputs.working-directory }}/${REPORT_PATH}" >> "$GITHUB_OUTPUT"
+
+    - name: Apply ignore-file + severity gate
+      id: gate
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        REPORT_PATH: pip-audit-report.json
+        IGNORE_FILE: ${{ inputs.ignore-file }}
+        SEVERITY: ${{ inputs.severity-threshold }}
+        EXIT_CODE: ${{ inputs.exit-code }}
+      run: |
+        set -euo pipefail
+
+        # Build the ignore set (CVE/GHSA IDs). Empty if file missing or all-comments.
+        # NOTE: grep returns 1 on "no matches" which would trip `set -e`; suppress with `|| true`.
+        if [ -f "${IGNORE_FILE}" ]; then
+          IGNORES=$(grep -vE '^\s*(#|$)' "${IGNORE_FILE}" | tr '\n' ',' | sed 's/,$//' || true)
+        else
+          IGNORES=""
+        fi
+        export IGNORES
+
+        python - <<PY
+        import json
+        import os
+        import sys
+
+        report_path = os.environ["REPORT_PATH"]
+        severity = {s.strip().upper() for s in os.environ["SEVERITY"].split(",") if s.strip()}
+        ignores = {i.strip() for i in os.environ.get("IGNORES", "").split(",") if i.strip()}
+
+        with open(report_path) as fh:
+            data = json.load(fh)
+
+        in_scope = []
+        for dep in data.get("dependencies", []):
+            for v in dep.get("vulns", []):
+                vid = v.get("id", "")
+                # pip-audit reports an `id` (PYSEC-... or GHSA-...) and `aliases` list incl. CVE.
+                aliases = set(v.get("aliases", [])) | {vid}
+                if aliases & ignores:
+                    continue
+                # Severity isn't always in the report; default to UNKNOWN -> in-scope (be safe).
+                sev_vals = {(s or "").upper() for s in v.get("severity", [])} if isinstance(v.get("severity"), list) else {str(v.get("severity", "")).upper()}
+                if not sev_vals or "UNKNOWN" in sev_vals or sev_vals & severity:
+                    in_scope.append({
+                        "package": dep.get("name"),
+                        "version": dep.get("version"),
+                        "id": vid,
+                        "aliases": sorted(aliases),
+                        "severity": sorted(sev_vals),
+                        "fix_versions": v.get("fix_versions", []),
+                    })
+
+        with open("pip-audit-in-scope.json", "w") as fh:
+            json.dump(in_scope, fh, indent=2)
+
+        print(f"In-scope findings: {len(in_scope)}", file=sys.stderr)
+        for f in in_scope:
+            print(
+                f"  - {f['package']}=={f['version']} {f['id']} severity={','.join(f['severity']) or 'UNKNOWN'} fix={','.join(f['fix_versions']) or 'no-fix'}",
+                file=sys.stderr,
+            )
+
+        # GITHUB_OUTPUT
+        gh_out = os.environ.get("GITHUB_OUTPUT")
+        if gh_out:
+            with open(gh_out, "a") as fh:
+                fh.write(f"in-scope-findings={len(in_scope)}\n")
+
+        PY
+
+        IN_SCOPE=$(python -c 'import json; print(len(json.load(open("pip-audit-in-scope.json"))))')
+        if [ "${IN_SCOPE}" -gt 0 ]; then
+          echo "::error::pip-audit found ${IN_SCOPE} in-scope vulnerabilities (severity ${SEVERITY}, ignore-file=${IGNORE_FILE})."
+          exit "${EXIT_CODE}"
+        fi
+        echo "pip-audit clean (in-scope severity: ${SEVERITY})."
+
+    - name: Convert findings to SARIF
+      if: always() && inputs.upload-sarif == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+
+        IN_SCOPE_FILE="pip-audit-in-scope.json"
+        if [ ! -f "${IN_SCOPE_FILE}" ]; then
+          echo '[]' > "${IN_SCOPE_FILE}"
+        fi
+
+        python - <<'PY' > pip-audit.sarif
+        import json
+        from pathlib import Path
+
+        findings = json.loads(Path("pip-audit-in-scope.json").read_text())
+
+        sarif = {
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [
+                {
+                    "tool": {
+                        "driver": {
+                            "name": "pip-audit",
+                            "informationUri": "https://github.com/pypa/pip-audit",
+                            "rules": [],
+                        }
+                    },
+                    "results": [],
+                }
+            ],
+        }
+
+        rule_ids = {}
+        for f in findings:
+            rid = f["id"] or "PYSEC-UNKNOWN"
+            if rid not in rule_ids:
+                rule_ids[rid] = {
+                    "id": rid,
+                    "shortDescription": {"text": f"{f['package']} vulnerability {rid}"},
+                    "helpUri": f"https://osv.dev/vulnerability/{rid}",
+                }
+                sarif["runs"][0]["tool"]["driver"]["rules"].append(rule_ids[rid])
+            sarif["runs"][0]["results"].append(
+                {
+                    "ruleId": rid,
+                    "level": "error",
+                    "message": {
+                        "text": f"{f['package']}=={f['version']} affected by {rid} (aliases: {', '.join(f['aliases'])}). Fix versions: {', '.join(f['fix_versions']) or 'none'}."
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {"uri": "pyproject.toml"},
+                                "region": {"startLine": 1},
+                            }
+                        }
+                    ],
+                }
+            )
+
+        print(json.dumps(sarif, indent=2))
+        PY
+
+    - name: Upload SARIF to GitHub Security
+      if: always() && inputs.upload-sarif == 'true'
+      # github/codeql-action/upload-sarif v3.27.0
+      # continue-on-error: upload may fail on repos without Code Scanning enabled
+      # (free private repos without GHAS, or forks without write tokens). The
+      # scan result is still surfaced via the previous gate step + artifact.
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa
+      with:
+        sarif_file: ${{ inputs.working-directory }}/pip-audit.sarif
+        category: ${{ inputs.sarif-category }}
+
+    - name: Upload raw report as artifact
+      if: always()
+      # actions/upload-artifact v4.4.3
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: pip-audit-${{ github.run_id }}-${{ github.run_attempt }}
+        path: |
+          ${{ inputs.working-directory }}/pip-audit-report.json
+          ${{ inputs.working-directory }}/pip-audit-in-scope.json
+        if-no-files-found: warn
+        retention-days: 30

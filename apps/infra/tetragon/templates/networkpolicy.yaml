@@ -1,0 +1,78 @@
+# NetworkPolicy for Tetragon DaemonSet
+# Follows the same pattern as sibling charts (otel-collector, opencost).
+# Default-deny is applied cluster-wide by Cilium; this policy carves out
+# the precise ingress/egress Tetragon requires.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-tetragon
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: tetragon
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: tetragon
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: tetragon
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Prometheus scrape of /metrics on port 2112 (ADR-0026 namespace: observability)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 2112
+
+    # Liveness/readiness probe from kubelet via gRPC health server
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 54321
+
+  egress:
+    # DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+    # Kubernetes API server — required for TracingPolicy CRD watch and
+    # PodInfo enrichment (process-to-pod identity mapping)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+
+    # Hubble relay — Tetragon exports enriched process-context events to Hubble.
+    # Hubble relay listens on port 4244 inside the kube-system namespace.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: hubble-relay
+      ports:
+        - protocol: TCP
+          port: 4244

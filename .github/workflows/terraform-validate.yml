@@ -51,6 +51,7 @@ jobs:
           - monitoring
           - organization
           - ram-share
+          - rcps
           - rds
           - route53-resolver
           - scps

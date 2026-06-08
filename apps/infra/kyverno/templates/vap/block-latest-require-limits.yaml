@@ -1,0 +1,168 @@
+---
+# ValidatingAdmissionPolicy — block :latest tag + require resource limits
+#
+# ADR-0020: Simple validations that need no webhook belong in native
+# ValidatingAdmissionPolicy (VAP), which runs in-process via CEL.
+# No admission webhook, no controller on the request path, lower latency.
+#
+# VAP went GA in Kubernetes 1.30. This manifest demonstrates the
+# Kyverno-owns-verify/mutate/generate vs VAP-owns-simple-validate split.
+#
+# Policies encoded here:
+#   1. Block images tagged :latest (any container or initContainer).
+#   2. Require memory limits on every container.
+#      CPU limits are intentionally NOT required — see note below.
+#
+# These checks intentionally complement Gatekeeper's block-latest-tag and
+# require-resource-limits ConstraintTemplates. ADR-0020 routes new simple
+# CEL checks to VAP (in-process, no webhook) while Gatekeeper retains its
+# existing mature templates.
+#
+# --- Alignment with Gatekeeper require-resource-limits ---
+# The parallel Gatekeeper constraint (require-resource-limits) sets:
+#   requireCPU: false    — CPU limits are omitted to avoid throttling
+#   requireMemory: true  — Memory limits are critical for OOM protection
+# and excludes: kube-system, kube-public, gatekeeper-system, monitoring,
+#   external-secrets (see gatekeeper/templates/constraints/require-resource-limits.yaml
+#   and require-security-context.yaml for the full exclusion set).
+#
+# This VAP intentionally mirrors those semantics:
+#   • Binding excludes the same namespace set so a pod in monitoring or
+#     external-secrets is not hard-Denied by VAP while Gatekeeper exempts it.
+#   • Rule 2 requires MEMORY ONLY — no CPU check — for the same throttling
+#     avoidance reason. Any future change to require CPU here must be
+#     coordinated with the Gatekeeper constraint (requireCPU: true there too).
+#
+# Binding: validationActions: [Deny] — graduated from Audit after clean soak
+# window (W3/ADR-0020).
+# Rollback: set validationActions back to [Audit] and re-apply.
+#
+# References:
+#   https://kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/
+#   ADR-0020 section: VAP — block :latest, require limits (CEL in-process)
+#   apps/infra/gatekeeper/templates/constraints/require-resource-limits.yaml
+
+# -----------------------------------------------------------------------
+# ValidatingAdmissionPolicy — CEL rules
+# -----------------------------------------------------------------------
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: platform-pod-baseline
+  annotations:
+    adr: ADR-0020
+    description: >-
+      Block :latest image tags and require memory limits on all containers.
+      CPU limits are not required (matches Gatekeeper requireCPU:false).
+      In-process CEL validation (no webhook). Owned by VAP layer per ADR-0020.
+spec:
+  # failurePolicy: Fail — block admission when the CEL expression itself errors
+  # (e.g. a type error against an unusual object). Aligned with Enforce posture
+  # post-soak (W3/ADR-0020). Rollback: set back to Ignore if needed.
+  failurePolicy: Fail
+
+  matchConstraints:
+    resourceRules:
+      # Cover Pods directly
+      - apiGroups:   [""]
+        apiVersions: ["v1"]
+        operations:  ["CREATE", "UPDATE"]
+        resources:   ["pods"]
+      # Cover Pod controllers so teams get feedback at the controller level too.
+      - apiGroups:   ["apps"]
+        apiVersions: ["v1"]
+        operations:  ["CREATE", "UPDATE"]
+        resources:   ["deployments", "statefulsets", "daemonsets", "replicasets"]
+      - apiGroups:   ["batch"]
+        apiVersions: ["v1"]
+        operations:  ["CREATE", "UPDATE"]
+        resources:   ["jobs", "cronjobs"]
+
+  validations:
+    # -----------------------------------------------------------------------
+    # Rule 1 — Block :latest image tags
+    # Applies only to Pod objects; controller objects pass through (pod
+    # admission check catches them at pod creation time).
+    # -----------------------------------------------------------------------
+    - expression: >-
+        object.kind != 'Pod' ||
+        (
+          object.spec.containers.all(c,
+            c.image.contains(':') && !c.image.endsWith(':latest')
+          ) &&
+          (
+            !has(object.spec.initContainers) ||
+            object.spec.initContainers.all(c,
+              c.image.contains(':') && !c.image.endsWith(':latest')
+            )
+          )
+        )
+      message: >-
+        All container images must specify an explicit tag or digest and must not
+        use ':latest'. Pin images to a specific version or SHA digest.
+      reason: Invalid
+
+    # -----------------------------------------------------------------------
+    # Rule 2 — Require memory limits on every container
+    # CPU limits are intentionally omitted to avoid CPU throttling issues
+    # (matches Gatekeeper require-resource-limits with requireCPU:false).
+    # If CPU enforcement is needed in future, update both this VAP and
+    # the Gatekeeper constraint (requireCPU:true) together.
+    # -----------------------------------------------------------------------
+    - expression: >-
+        object.kind != 'Pod' ||
+        object.spec.containers.all(c,
+          has(c.resources) &&
+          has(c.resources.limits) &&
+          has(c.resources.limits.memory)
+        )
+      message: >-
+        All containers must declare a memory limit under resources.limits.
+        Add 'resources.limits.memory' to every container spec.
+        (CPU limits are not required — see ADR-0020 and Gatekeeper
+        require-resource-limits for rationale.)
+      reason: Invalid
+
+---
+# -----------------------------------------------------------------------
+# ValidatingAdmissionPolicyBinding — wires the policy to a scope
+# -----------------------------------------------------------------------
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: platform-pod-baseline-binding
+  annotations:
+    adr: ADR-0020
+    description: >-
+      Excludes the same namespace set as the parallel Gatekeeper
+      require-resource-limits and require-security-context constraints so
+      there is no VAP-vs-Gatekeeper divergence on which namespaces are
+      enforced. Keep this list in sync with
+      apps/infra/gatekeeper/templates/constraints/require-resource-limits.yaml
+      (excludedNamespaces) when adding new platform namespaces.
+spec:
+  policyName: platform-pod-baseline
+
+  # Scope: all namespaces except system + platform-operated namespaces.
+  # Mirrors the Gatekeeper exclusion set:
+  #   require-resource-limits:  kube-system, kube-public, gatekeeper-system, monitoring
+  #   require-security-context: kube-system, kube-public, gatekeeper-system, monitoring,
+  #                             external-secrets
+  # Using the union of both sets here for maximum consistency.
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values:
+            - kube-system
+            - kube-public
+            - kube-node-lease
+            - gatekeeper-system
+            - monitoring
+            - external-secrets
+
+  # W3/ADR-0020: graduated from Audit to Deny after clean soak window.
+  # Rollback: set back to [Audit] and re-apply (see README Rollback section).
+  validationActions:
+    - Deny
