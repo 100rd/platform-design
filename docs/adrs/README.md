@@ -67,6 +67,8 @@ decision.
 | [0025](0025-envoy-gateway-secondary-l7.md) | Envoy Gateway as a secondary L7 GatewayClass alongside Cilium | Accepted | pending | research-backed + doc-verified |
 | [0026](0026-observability-target-architecture.md) | Observability target architecture (LGTM: Prometheus 3 + Thanos, Loki, Tempo, Alloy) | Accepted | pending | research-backed + doc-verified |
 | [0027](0027-kubernetes-cost-opencost-cur.md) | Kubernetes cost allocation via OpenCost + AWS CUR/Athena | Accepted | pending | research-backed + doc-verified |
+| [0028](0028-unified-platform-tagging-and-labeling-taxonomy.md) | Unified Platform Tagging and Labeling Taxonomy | Accepted | pending | native |
+
 
 ## Notes on the sync
 
