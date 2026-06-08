@@ -7,6 +7,8 @@ Kubernetes Native Policy Management. Complements Gatekeeper + Pod Security Admis
 **Enabled** (v1.18.1). Policies are in **Enforce** mode (graduated from Audit — W3/ADR-0020).
 See [Rollback](#rollback) below if enforcement must be reverted.
 
+`require-platform-labels` (ADR-0028) is in **Audit / observe** mode — see [ADR-0028 graduation path](#adr-0028-platform-label-policy-graduation-path) below.
+
 See [ADR-0020](../../../docs/adrs/0020-kyverno-and-vap-policy-engine.md) for rationale.
 
 ## Enforcement History
@@ -15,12 +17,13 @@ See [ADR-0020](../../../docs/adrs/0020-kyverno-and-vap-policy-engine.md) for rat
 |------|-------|-----|
 | Initial deploy | All policies set to Audit | #266 |
 | W3 graduation | Audit → Enforce (post-soak, zero unexpected violations) | W3/ADR-0020 |
+| ADR-0028 stream 3 | `require-platform-labels` added in Audit/observe mode | feat/adr-0028-kyverno-labels |
 
 ## Policy split (ADR-0020)
 
 | Layer | What it owns | Why |
 |-------|-------------|-----|
-| **Kyverno** | verifyImages (keyless cosign), mutate securityContext, generate default-deny NetworkPolicy | Verify/mutate/generate — things VAP and Rego handle poorly |
+| **Kyverno** | verifyImages (keyless cosign), mutate securityContext, generate default-deny NetworkPolicy, require platform taxonomy labels | Verify/mutate/generate — things VAP and Rego handle poorly |
 | **VAP (native CEL)** | Block `:latest`, require resource limits | Simple in-process CEL checks, no webhook, lower latency |
 | **Gatekeeper** | 4 existing ConstraintTemplates (kept) | Mature, audited — no rewrite risk |
 | **PSA** | `restricted` baseline | Node-level Pod Security Admission |
@@ -40,6 +43,7 @@ See [ADR-0020](../../../docs/adrs/0020-kyverno-and-vap-policy-engine.md) for rat
 | `verify-images.yaml` | ClusterPolicy | Keyless cosign image signature verification. Fulcio issuer = GitHub Actions OIDC. mutateDigest rewrites tag to verified digest. **Enforce** (W3). |
 | `mutate-security-context.yaml` | ClusterPolicy | Injects `runAsNonRoot: true`, `seccompProfile: RuntimeDefault`, `capabilities.drop: [ALL]` into containers that do not already set these fields. |
 | `generate-default-deny-netpol.yaml` | ClusterPolicy | Generates a `default-deny-all` NetworkPolicy into every new namespace (excluding system/infra namespaces). Synchronized back if deleted. |
+| `require-platform-labels.yaml` | ClusterPolicy | Validates Pods, Services, Deployments, and Argo Rollouts carry `platform.system`, `platform.component`, `platform.owner` labels (ADR-0028). **Audit** (observe phase — see graduation path below). |
 
 ### ValidatingAdmissionPolicy (`templates/vap/`)
 
@@ -60,6 +64,10 @@ This is the verification layer that ADR-0016's cosign signing requires.
 ClusterPolicy verify-images-keyless-cosign:
   validationFailureAction: Enforce
 
+ClusterPolicy require-platform-labels:
+  validationFailureAction: Audit    # observe phase — ADR-0028 stream 3
+  failurePolicy: Ignore             # fail-open during soak
+
 ValidatingAdmissionPolicy platform-pod-baseline:
   failurePolicy: Fail
 
@@ -69,6 +77,78 @@ ValidatingAdmissionPolicyBinding platform-pod-baseline-binding:
 values.yaml admissionController:
   forceFailurePolicyIgnore.enabled: false   # webhook is fail-closed
 ```
+
+## ADR-0028 platform label policy graduation path
+
+`require-platform-labels` implements ADR-0028 implementation note 2: observe
+existing workloads for missing `platform.system` / `platform.component` /
+`platform.owner` labels before blocking admission.
+
+### Current state: Audit / observe
+
+- `validationFailureAction: Audit` — violations written to `PolicyReport` /
+  `ClusterPolicyReport` only; admission is not blocked.
+- `failurePolicy: Ignore` — webhook unavailability does not block admission.
+- `background: true` — existing resources are scanned on a background cycle
+  and violations appear in `ClusterPolicyReport`.
+
+### Monitoring violations during observe phase
+
+```bash
+# All policy report violations cluster-wide
+kubectl get clusterpolicyreport -o json \
+  | jq '.items[].results[] | select(.policy=="require-platform-labels")'
+
+# Per-namespace PolicyReport
+kubectl get policyreport -A \
+  | grep require-platform-labels
+
+# Detailed violation list for a namespace
+kubectl describe policyreport -n <namespace> <name>
+```
+
+Grafana: filter `kyverno_policy_results_total{policy="require-platform-labels",result="fail"}`.
+
+### Graduation to Enforce (next phase)
+
+Criteria before promoting to Enforce:
+1. Zero `require-platform-labels` violations in `PolicyReport` /
+   `ClusterPolicyReport` for one full sprint (typically two weeks).
+2. All teams have confirmed their Helm charts propagate the three required
+   labels on Pods, Services, Deployments, and Rollouts.
+3. ADR-0028 Terragrunt stream (stream 1) is merged — AWS tags confirmed
+   consistent, so the taxonomy is live on both planes.
+
+When criteria are met, apply these two changes and open a PR:
+
+1. `apps/infra/kyverno/templates/policies/require-platform-labels.yaml`
+   ```yaml
+   spec:
+     validationFailureAction: Enforce   # was: Audit
+     failurePolicy: Fail                # was: Ignore
+   ```
+
+2. Update the Enforcement History table in this README with the graduation
+   date and PR number.
+
+### Required labels (ADR-0028)
+
+| K8s Label | Description | Example |
+|-----------|-------------|---------|
+| `platform.system` | Logical service/system boundary | `auth`, `payment` |
+| `platform.component` | Architectural tier/role | `compute`, `database`, `cache` |
+| `platform.owner` | Engineering team responsible | `team-sec`, `team-data` |
+
+`platform.env` and `platform.managed-by` are optional at the resource level
+(they are typically injected by the ArgoCD ApplicationSet or Helm values layer).
+
+### Namespace exclusions
+
+The policy excludes the following namespaces from validation (these are system
+or infra namespaces that do not carry workload labels):
+
+`kube-system`, `kube-public`, `kube-node-lease`, `kyverno`, `cert-manager`,
+`gatekeeper-system`, `external-secrets`, `argocd`, `monitoring`
 
 ## Rollback
 
@@ -140,6 +220,7 @@ kubectl describe policyreport -n <namespace> <name>
 ## References
 
 - [ADR-0020](../../../docs/adrs/0020-kyverno-and-vap-policy-engine.md) — policy engine decision
+- [ADR-0028](../../../docs/adrs/0028-unified-platform-tagging-and-labeling-taxonomy.md) — platform tagging taxonomy (require-platform-labels)
 - ADR-0016 — cosign signing (verified here at admission, not in ArgoCD)
 - ADR-0003 — Cilium (generated NetworkPolicy pairs with Cilium baseline)
 - [Kyverno docs](https://kyverno.io/docs/)
