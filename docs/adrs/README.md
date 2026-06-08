@@ -24,6 +24,11 @@ session tags + ESO upgrade prereq in 0018, netkit unblocked on kernel 6.12 in 00
 admission-time cosign verification in 0020, OTel SLO-gating in 0021, the supply-chain
 follow-ons in 0022).
 
+ADRs 0029–0032 are the **Batch-B infra-team ADRs**, implemented this session
+(2026-06-08) — modules / templates / charts landed in their respective PRs and
+are doc-verified 2026-06-08. ADR-0034 is **Proposed — Deferred (on hold)** by
+the platform owner pending a dedicated Backstage owner being assigned.
+
 Every ported ADR also carries a **platform-design status** (`synced` / `partial`
 / `pending`) recording whether the decision is actually wired into *this* repo —
 see the column in the index below. This makes the catalog a development driver:
@@ -68,10 +73,11 @@ decision.
 | [0026](0026-observability-target-architecture.md) | Observability target architecture (LGTM: Prometheus 3 + Thanos, Loki, Tempo, Alloy) | Accepted | pending | research-backed + doc-verified |
 | [0027](0027-kubernetes-cost-opencost-cur.md) | Kubernetes cost allocation via OpenCost + AWS CUR/Athena | Accepted | pending | research-backed + doc-verified |
 | [0028](0028-unified-platform-tagging-and-labeling-taxonomy.md) | Unified Platform Tagging and Labeling Taxonomy | Accepted | pending | native |
-| [0029](0029-ecr-pull-through-cache.md) | ECR Pull-Through Cache for public upstream registries | Accepted | pending | native |
-| [0030](0030-bottlerocket-node-os.md) | Bottlerocket as the EKS node operating system | Accepted | synced (module) / pending (manifests) | native |
-| [0031](0031-secret-rotation.md) | Automated secret rotation via Secrets Manager rotation Lambda + ESO auto-refresh | Accepted | pending | native |
-| [0032](0032-db-migrations-gitops.md) | DB migrations via ArgoCD PreSync Jobs | Accepted | pending | native |
+| [0029](0029-ecr-pull-through-cache.md) | ECR Pull-Through Cache for public upstream registries | Accepted | synced (module) | proposal — doc-verified 2026-06-08 |
+| [0030](0030-bottlerocket-node-os.md) | Bottlerocket as the EKS node operating system | Accepted | synced (module) / pending (manifests) | proposal — doc-verified 2026-06-08 |
+| [0031](0031-secret-rotation.md) | Automated secret rotation via Secrets Manager rotation Lambda + ESO auto-refresh | Accepted | synced (module) | proposal — doc-verified 2026-06-08 |
+| [0032](0032-db-migrations-gitops.md) | DB migrations via ArgoCD PreSync Jobs | Accepted | synced (helm) | proposal — doc-verified 2026-06-08 |
+| [0034](0034-backstage-idp.md) | Backstage as the Internal Developer Platform | Proposed — Deferred (on hold) | pending | proposal — doc-verified 2026-06-08 |
 
 
 
@@ -85,6 +91,8 @@ decision.
 - Source numbering does not map 1:1 onto target numbering: ported ADRs were
   renumbered sequentially from 0003 with clearer kebab titles, and the two CI/CD
   ADRs land last as 0015–0016.
+- ADR-0033 is intentionally unassigned (reserved gap between the Batch-B ADRs
+  and the Backstage proposal).
 
 ## Conventions
 
