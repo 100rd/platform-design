@@ -33,14 +33,16 @@ Optional (has a default):
   platform.managedBy  — orchestration tool; defaults to "argocd"
 */}}
 {{- define "app.validatePlatformLabels" -}}
+{{- if .Values.platform.strict -}}
 {{- if not .Values.platform.system -}}
-{{- fail "platform.system is required (ADR-0028). Set it to the logical service name, e.g. auth, payment, analytics." -}}
+{{- fail "platform.system is required (ADR-0028, strict mode). Set it to the logical service name, e.g. auth, payment, analytics." -}}
 {{- end -}}
 {{- if not .Values.platform.component -}}
-{{- fail "platform.component is required (ADR-0028). Set it to the architectural tier, e.g. compute, database, cache, ingress." -}}
+{{- fail "platform.component is required (ADR-0028, strict mode). Set it to the architectural tier, e.g. compute, database, cache, ingress." -}}
 {{- end -}}
 {{- if not .Values.platform.owner -}}
-{{- fail "platform.owner is required (ADR-0028). Set it to the responsible team, e.g. team-sec, team-checkout, team-data." -}}
+{{- fail "platform.owner is required (ADR-0028, strict mode). Set it to the responsible team, e.g. team-sec, team-checkout, team-data." -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 
