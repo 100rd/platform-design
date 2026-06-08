@@ -89,9 +89,9 @@ def validate_agent_file(filepath: str) -> list:
     return errors
 
 def main():
-    agents_dir = os.path.join(".github", "agents")
+    agents_dir = "agents" if os.path.exists("agents") else os.path.join(".github", "agents")
     if not os.path.exists(agents_dir):
-        print(f"❌ Agents directory not found: {agents_dir}")
+        print(f"❌ Agents directory not found: agents/ or .github/agents/")
         sys.exit(1)
         
     files = [f for f in os.listdir(agents_dir) if f.endswith(".agent.md")]
