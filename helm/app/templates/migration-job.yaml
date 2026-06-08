@@ -1,0 +1,124 @@
+---
+{{- /*
+  migration-job.yaml — ArgoCD PreSync DB migration Job (ADR-0032).
+
+  Rendered only when .Values.migrations.enabled is true. The Job is annotated
+  as an ArgoCD PreSync hook so ArgoCD creates and waits for it BEFORE applying
+  any Sync-phase resource (Deployment / Rollout / Service / etc.). A failure
+  marks the Application sync Failed and leaves the Job object in place for
+  debugging; the workload rollout never starts.
+
+  Hook lifecycle:
+    argocd.argoproj.io/hook: PreSync
+      → Job is created during the PreSync phase, before Sync-wave resources.
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+      → Job (and its pods) are deleted automatically after a successful run.
+        On failure the Job is kept so operators can kubectl logs the migration
+        pod. Re-sync after fixing the root cause; BeforeHookCreation (also set)
+        handles the name-collision cleanup.
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+      → Any existing instance of this Job is deleted before the new one is
+        created. Prevents ResourceAlreadyExists on re-sync when the prior run
+        was retained for debugging (failure case above).
+    argocd.argoproj.io/sync-wave: "-1"
+      → Runs early within the PreSync phase, leaving wave 0 free for other
+        PreSync hooks (e.g., smoke-check, secret-rotation).
+
+  Security posture:
+    - Reuses the app's ServiceAccount (IRSA-capable, ADR-0018).
+    - Inherits podSecurityContext + containerSecurityContext from values
+      (non-root, drop ALL caps, read-only root filesystem — ADR-0022).
+    - DB credentials come exclusively from the ESO-managed secret via envFrom
+      (ADR-0008); no credentials are embedded in the Job spec.
+    - backoffLimit defaults to 0 — a failed migration must not be silently
+      retried against a half-applied schema.
+*/}}
+{{- if .Values.migrations.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "app.fullname" . }}-migrate
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migration
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded,BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  # backoffLimit: 0 is the safe default — do not retry a failed migration.
+  # Set to a small positive integer only if your migration tool is idempotent
+  # and you need resilience against transient DB connectivity failures.
+  backoffLimit: {{ .Values.migrations.backoffLimit | default 0 }}
+  # Bound the migration runtime. A hung migration blocks the entire sync.
+  # Increase for intentionally long migrations (e.g., large backfills).
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds | default 300 }}
+  template:
+    metadata:
+      labels:
+        {{- include "app.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migration
+    spec:
+      serviceAccountName: {{ include "app.serviceAccountName" . }}
+      restartPolicy: Never
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          {{- /*
+            Image: use migrations.image if explicitly overridden, otherwise
+            reuse the main application image. This is the common case — most
+            migration binaries are bundled in the application image itself.
+          */}}
+          {{- if .Values.migrations.image }}
+          image: {{ .Values.migrations.image | quote }}
+          {{- else }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          {{- end }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.migrations.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.migrations.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- /*
+            envFrom: inherit the ESO-managed secret (DB credentials) and any
+            additional envFrom entries defined in values. When
+            externalSecrets.enabled is true the ESO secret is always included
+            so migration has access to DATABASE_URL / DB_* variables.
+          */}}
+          {{- if or .Values.externalSecrets.enabled .Values.envFrom }}
+          envFrom:
+            {{- if .Values.externalSecrets.enabled }}
+            - secretRef:
+                name: {{ include "app.fullname" . }}-secrets
+            {{- end }}
+            {{- with .Values.envFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          {{- with .Values.env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- /*
+              Use migrations.resources if provided; fall back to the main
+              app resources block. Migrations sometimes need more memory
+              (large schema diffs, ORM introspection) than the runtime pod.
+            */}}
+            {{- if .Values.migrations.resources }}
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+            {{- else }}
+            {{- toYaml .Values.resources | nindent 12 }}
+            {{- end }}
+{{- end }}

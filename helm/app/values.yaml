@@ -292,10 +292,77 @@ cronJobs: []
   #   failedJobsHistoryLimit: 3
 
 # --- Init Containers ---
+# NOTE: do NOT use initContainers for DB schema migrations when
+# migrations.enabled=true — per ADR-0032, the PreSync Job is the authoritative
+# migration mechanism. Use initContainers for other purposes (e.g.,
+# wait-for-dependency, config-rendering).
 initContainers: []
-  # - name: migrate
-  #   image: ""
-  #   command: ["/app/migrate", "up"]
+  # - name: wait-for-db
+  #   image: busybox:1.36
+  #   command: ["sh", "-c", "until nc -z postgres 5432; do sleep 2; done"]
+
+# --- DB Migrations via ArgoCD PreSync Job (ADR-0032) -------------------------
+# When migrations.enabled=true the chart renders a batch/v1 Job annotated as
+# an ArgoCD PreSync hook. ArgoCD runs this Job to completion BEFORE applying
+# any Sync-phase resources (Deployment/Rollout/Service/etc.), so the schema is
+# always up to date before the new application version starts serving traffic.
+#
+# A failed migration marks the Application sync Failed and blocks the rollout;
+# existing pods continue serving traffic uninterrupted. The Job is deleted
+# automatically on success (HookSucceeded) and cleaned up before re-creation
+# (BeforeHookCreation).
+#
+# Prerequisites:
+#   - externalSecrets.enabled: true  — DB credentials must be available via the
+#     ESO secret. The migration Job inherits envFrom so DATABASE_URL / DB_*
+#     variables are present at migration runtime.
+#
+# Recommended migration tools (idempotent, track applied versions):
+#   golang-migrate: ["migrate", "-path", "/migrations", "-database", "$(DATABASE_URL)", "up"]
+#   alembic:        ["alembic", "upgrade", "head"]
+#   flyway:         ["flyway", "migrate"]
+#   atlas:          ["atlas", "migrate", "apply", "--url", "$(DATABASE_URL)"]
+migrations:
+  # Set to true to render the PreSync migration Job. Default off — existing
+  # releases without migrations are unaffected (backward compatible).
+  enabled: false
+
+  # command: migration entrypoint. Required when enabled=true. Must exit 0 on
+  # success and non-zero on failure. Should be idempotent (safe to re-run).
+  # Example (golang-migrate):
+  #   command: ["migrate", "-path", "/migrations", "-database", "$(DATABASE_URL)", "up"]
+  command: []
+
+  # args: optional extra arguments appended after command. Leave empty when
+  # command already encodes all arguments.
+  args: []
+
+  # image: override the migration container image. Leave empty ("") to reuse
+  # the main application image (common case — migration binary is bundled).
+  # Example: "ghcr.io/myorg/myapp-migrations:1.2.3"
+  image: ""
+
+  # backoffLimit: retries on failure. Default 0 — no retries. Increase only
+  # when migration tool is idempotent and transient connectivity failures are
+  # a concern (e.g., cold-start DB in a non-prod environment).
+  backoffLimit: 0
+
+  # activeDeadlineSeconds: hard wall-clock timeout for the Job. A hung
+  # migration blocks the entire ArgoCD sync. Increase for large backfills.
+  # Default: 300 (5 minutes).
+  activeDeadlineSeconds: 300
+
+  # resources: resource requests/limits for the migration container. When
+  # empty ({}), the main app `resources` block is reused. Override here when
+  # migrations need more memory (ORM introspection, large schema diffs).
+  # resources:
+  #   requests:
+  #     cpu: 100m
+  #     memory: 256Mi
+  #   limits:
+  #     cpu: 500m
+  #     memory: 512Mi
+  resources: {}
 
 # --- Labels & Annotations ---
 labels: {}
