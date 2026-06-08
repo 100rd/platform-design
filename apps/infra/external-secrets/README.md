@@ -102,3 +102,73 @@ The ESO controller uses EKS Pod Identity (ADR-0018). An
 controller `ServiceAccount` to an IAM role. The `ServiceAccount` must not carry an
 `eks.amazonaws.com/role-arn` IRSA annotation alongside a Pod Identity association
 (precedence is undocumented by AWS; ADR-0018 forbids the combination).
+
+---
+
+## Auto-refresh for rotated secrets (`refreshInterval` + Reloader) — ADR-0031
+
+When a backend credential is **rotated** in AWS Secrets Manager (see ADR-0031: the
+`secret-rotation` Terraform module + rotation Lambda), ESO must **re-pull** the new
+value and consumers must **roll their pods** onto it. Rotation alone is not enough —
+the materialized K8s `Secret` and any running pods keep the **old** value until
+something refreshes them, which silently breaks auth on the next reconnect.
+
+### Set a bounded `refreshInterval` on each `ExternalSecret`
+
+`refreshInterval` controls how often ESO re-pulls the `SecretString` from Secrets
+Manager and updates the materialized `Secret`. For a rotated credential it must be
+**bounded** (not `0`, which disables refresh) and shorter than the gap between the
+new credential going live and the old one being retired:
+
+```yaml
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: app-db-credentials
+spec:
+  refreshInterval: 1h            # re-pull hourly; tune to the rotation cadence
+  secretStoreRef:
+    name: cluster-secret-store
+    kind: ClusterSecretStore
+  target:
+    name: app-db-credentials     # the materialized K8s Secret
+  data:
+    - secretKey: password
+      remoteRef:
+        key: staging/app-db/credentials   # the rotated Secrets Manager secret
+        property: password
+```
+
+Trade-off: each `ExternalSecret` issues one Secrets Manager `GetSecretValue` per
+`refreshInterval`, so do not set it to seconds — minutes-to-hours is the right range.
+
+### Roll the pods onto the new value (Stakater Reloader)
+
+Updating the `Secret` does **not** restart the pods that mounted it. Annotate the
+consuming `Deployment`/`StatefulSet` for [Stakater Reloader](https://github.com/stakater/Reloader),
+which watches the `Secret` and triggers a rolling restart when its content changes:
+
+```yaml
+metadata:
+  annotations:
+    # restart only when THIS secret changes
+    secret.reloader.stakater.com/reload: "app-db-credentials"
+    # or, to watch every referenced Secret/ConfigMap:
+    # reloader.stakater.com/auto: "true"
+```
+
+Equivalently, ESO can stamp a content checksum the pod template references (so a
+value change produces a new pod-template hash and a rollout), but Reloader is the
+simpler, declarative default for this estate.
+
+### End-to-end flow
+
+```
+Secrets Manager rotation Lambda rotates the value (ADR-0031)
+      → ESO re-pulls within refreshInterval and updates the K8s Secret
+      → Reloader sees the Secret change and rolls the Deployment
+      → new pods read the rotated credential; old credential can be retired
+```
+
+See `terraform/modules/secret-rotation/README.md` and ADR-0031 for the
+Secrets-Manager-side rotation Lambda, schedule, and least-privilege IAM.
