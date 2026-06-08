@@ -68,6 +68,12 @@ decision.
 | [0026](0026-observability-target-architecture.md) | Observability target architecture (LGTM: Prometheus 3 + Thanos, Loki, Tempo, Alloy) | Accepted | pending | research-backed + doc-verified |
 | [0027](0027-kubernetes-cost-opencost-cur.md) | Kubernetes cost allocation via OpenCost + AWS CUR/Athena | Accepted | pending | research-backed + doc-verified |
 | [0028](0028-unified-platform-tagging-and-labeling-taxonomy.md) | Unified Platform Tagging and Labeling Taxonomy | Accepted | pending | native |
+| [0029](0029-ecr-pull-through-cache.md) | ECR Pull-Through Cache for public upstream registries | Accepted | pending | native |
+| [0030](0030-bottlerocket-node-os.md) | Bottlerocket as the EKS node operating system | Accepted | synced (module) / pending (manifests) | native |
+| [0031](0031-secret-rotation.md) | Automated secret rotation via Secrets Manager rotation Lambda + ESO auto-refresh | Accepted | pending | native |
+| [0032](0032-db-migrations-gitops.md) | DB migrations via ArgoCD PreSync Jobs | Accepted | pending | native |
+
+
 
 
 ## Notes on the sync
