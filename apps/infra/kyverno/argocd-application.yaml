@@ -1,0 +1,86 @@
+---
+# ArgoCD Application for Kyverno — ADR-0020
+#
+# Deploys Kyverno (v1.18.x) as a complement to Gatekeeper + PSA.
+# Kyverno owns: verifyImages (keyless cosign), mutate securityContext,
+#               generate default-deny NetworkPolicy.
+# VAP (in-process CEL) owns: block :latest, require resource limits.
+# Gatekeeper stays — its 4 ConstraintTemplates are not replaced.
+#
+# Sync wave 5: after cert-manager (wave 0-1) and before application
+# workloads; admission webhooks must be ready before workloads land.
+#
+# Usage:
+#   kubectl apply -f argocd-application.yaml
+#
+# ADR-0020: docs/adrs/0020-kyverno-and-vap-policy-engine.md
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: kyverno
+    app.kubernetes.io/component: policy-engine
+    team: platform
+  annotations:
+    # Wave 5 — after cert-manager (cert injection for webhooks), before workloads.
+    argocd.argoproj.io/sync-wave: "5"
+    adr: ADR-0020
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/100rd/platform-design.git
+    targetRevision: HEAD
+    path: apps/infra/kyverno
+
+    helm:
+      valueFiles:
+        - values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Ignore caBundle fields injected by cert-manager into webhook configurations.
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jsonPointers:
+        - /webhooks/0/clientConfig/caBundle
+        - /webhooks/1/clientConfig/caBundle
+        - /webhooks/2/clientConfig/caBundle
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jsonPointers:
+        - /webhooks/0/clientConfig/caBundle
+        - /webhooks/1/clientConfig/caBundle
+        - /webhooks/2/clientConfig/caBundle
+    # Ignore replica count drift (HPA / Kyverno auto-scaling)
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas

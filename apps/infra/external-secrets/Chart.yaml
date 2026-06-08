@@ -1,15 +1,16 @@
 apiVersion: v2
 name: external-secrets
 description: Install the External Secrets Operator using the official chart
-version: 1.3.1
-appVersion: "v0.14.1"
+version: 1.4.0
+appVersion: "v2.6.0"
 type: application
 
 dependencies:
-  # Updated 2026-01-28 from ^0 (0.18.0) to 0.14.1
-  # Note: ESO uses 0.x Helm chart versions even for stable releases.
-  # v1beta1 API is deprecated and will be removed 2026-05-01.
-  # Migrate ExternalSecret manifests to use external-secrets.io/v1 API.
+  # Upgraded 2026-06-07 from 0.14.1 to 2.6.0.
+  # ESO v2.x moved Helm chart versioning to match app version (2.x).
+  # The v1beta1 API was removed in v2.x; all CRs must use external-secrets.io/v1.
+  # CRDs are managed by Terraform (platform-crds module) — upgrade CRDs BEFORE
+  # rolling the chart; see README.md staged upgrade procedure.
   - name: external-secrets
-    version: "0.14.1"
+    version: "2.6.0"
     repository: https://charts.external-secrets.io

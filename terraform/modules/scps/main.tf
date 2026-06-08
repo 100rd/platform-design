@@ -222,6 +222,48 @@ resource "aws_organizations_policy" "require_ebs_encryption" {
   tags = var.tags
 }
 
+# Data perimeter — only allow API calls from principals inside our organization.
+# Closes #166: aws:PrincipalOrgID enforcement. Exemptions:
+#   - AWS service principals (aws:PrincipalIsAWSService = true) so service-linked
+#     roles (e.g. CloudTrail, Config recorder) keep working.
+#   - OrganizationAccountAccessRole (account vending requires assume-role calls
+#     that may not yet have an OrgID context).
+#   - platform-design-terraform-* (CI/CD apply role; same reason).
+# Attached at OU level alongside the other guardrails.
+resource "aws_organizations_policy" "deny_external_principals" {
+  name        = "DataPerimeter-DenyExternalPrincipals"
+  description = "Deny API calls whose PrincipalOrgID is not our org. Identity perimeter half of the data-perimeter pattern. Closes #166."
+  type        = "SERVICE_CONTROL_POLICY"
+
+  content = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "DenyNonOrgPrincipals"
+        Effect   = "Deny"
+        Action   = "*"
+        Resource = "*"
+        Condition = {
+          StringNotEqualsIfExists = {
+            "aws:PrincipalOrgID" = var.organization_id
+          }
+          BoolIfExists = {
+            "aws:PrincipalIsAWSService" = "false"
+          }
+          ArnNotLike = {
+            "aws:PrincipalArn" = [
+              "arn:aws:iam::*:role/OrganizationAccountAccessRole",
+              "arn:aws:iam::*:role/${var.project}-terraform-*",
+            ]
+          }
+        }
+      }
+    ]
+  })
+
+  tags = var.tags
+}
+
 # Deny all actions in Suspended OU — accounts moved here are quarantined.
 # OrganizationAccountAccessRole retains access for:
 # - Break-glass emergency operations
@@ -295,6 +337,18 @@ resource "aws_organizations_policy_attachment" "deny_guardduty_changes" {
   for_each = { for k, v in var.ou_ids : k => v if k != "Root" }
 
   policy_id = aws_organizations_policy.deny_guardduty_changes.id
+  target_id = each.value
+}
+
+# Attach data-perimeter (deny-external-principals) at the ROOT level — applies
+# to every account in the org and burns one of the 5 SCP slots at root, but is
+# the broadest stroke for identity-perimeter enforcement. Includes
+# StringNotEqualsIfExists/BoolIfExists semantics so STS calls without a full
+# context (account-vending edge cases) do not accidentally trip the deny.
+resource "aws_organizations_policy_attachment" "deny_external_principals" {
+  for_each = toset(var.root_ids)
+
+  policy_id = aws_organizations_policy.deny_external_principals.id
   target_id = each.value
 }
 

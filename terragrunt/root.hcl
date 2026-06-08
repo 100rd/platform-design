@@ -9,18 +9,27 @@
 #   }
 #
 # Hierarchy files expected in the directory tree:
-#   account.hcl  - defines account_name, account_id, environment, sizing
-#   region.hcl   - defines aws_region, region_short, azs
+#   account.hcl   - defines account_name, account_id, environment, sizing
+#   region.hcl    - defines aws_region, region_short, azs
+#
+# Sourced helper files (sibling to this file):
+#   versions.hcl  - tool + provider version pins
+#   common.hcl    - shared locals (project metadata, tag conventions, regions)
+#
+# Sandbox mode (account_name == "sandbox"):
+#   - Uses pre-existing bucket "opsfleet-terraform-state-<account_id>"
+#   - Bucket physically lives in eu-central-1; state_bucket_region in account.hcl
+#     pins the backend region so eu-west-1 deployments still reach the bucket.
+#   - S3 native locking (use_lockfile = true, TF >= 1.10) — no DynamoDB needed
+#   - Provider block omits assume_role (IAM user direct access, no deploy role)
 # -----------------------------------------------------------------------------
 
-# Exact version pin — eliminates drift between developers and CI.
-# Mirrors infra/versions.hcl: terragrunt_version = "0.99.5"
-terragrunt_version_constraint = "= 0.99.5"
-
 # -----------------------------------------------------------------------------
-# Locals: Read hierarchy config files
+# Sourced configs
 # -----------------------------------------------------------------------------
 locals {
+  versions     = read_terragrunt_config(find_in_parent_folders("versions.hcl"))
+  common       = read_terragrunt_config(find_in_parent_folders("common.hcl"))
   account_vars = read_terragrunt_config(find_in_parent_folders("account.hcl"))
   region_vars  = read_terragrunt_config(find_in_parent_folders("region.hcl"))
 
@@ -29,10 +38,64 @@ locals {
   aws_region   = local.region_vars.locals.aws_region
   environment  = local.account_vars.locals.environment
 
-  # Cost allocation and audit tracing tags — read from account.hcl with safe fallbacks
-  owner       = try(local.account_vars.locals.owner, "platform-team")
-  cost_center = try(local.account_vars.locals.cost_center, "platform")
+  # Cost allocation and audit tracing tags — read from account.hcl with
+  # safe fallbacks to common.hcl defaults.
+  owner       = try(local.account_vars.locals.owner, local.common.locals.default_owner)
+  cost_center = try(local.account_vars.locals.cost_center, local.common.locals.default_cost_center)
+
+  # ---------------------------------------------------------------------------
+  # Unified Platform Taxonomy (ADR-0028) — AWS plane
+  # ---------------------------------------------------------------------------
+  # The five core platform:* tag keys, derived from account/region context with
+  # overridable repo-wide defaults. These mirror the Kubernetes platform.* labels
+  # so the AWS infrastructure plane and the EKS workload plane share one taxonomy
+  # (single-pane dashboards, FinOps allocation, incident-response correlation).
+  #
+  #   platform:system     -> overridable default (per-unit `tags` input wins)
+  #   platform:component  -> overridable default (per-unit `tags` input wins)
+  #   platform:env        -> derived from account.hcl `environment`
+  #   platform:owner      -> derived from account.hcl `owner` (-> common default)
+  #   platform:managed-by -> constant "terragrunt" (AWS plane orchestrator)
+  #
+  # A unit hosting a specific logical service (e.g. the `auth` RDS/S3 stack)
+  # overrides system/component via its own `tags` input, which the merge order
+  # below applies on top of these defaults (unit wins, never clobbered).
+  platform_system     = try(local.account_vars.locals.platform_system, local.common.locals.default_platform_system)
+  platform_component  = try(local.account_vars.locals.platform_component, local.common.locals.default_platform_component)
+  platform_env        = local.environment
+  platform_owner      = local.owner
+  platform_managed_by = local.common.locals.platform_managed_by
+
+  # Canonical platform:* tag set. Merged into provider default_tags and into the
+  # `tags` input so every AWS resource carries the ADR-0028 taxonomy by default.
+  platform_tags = {
+    "platform:system"     = local.platform_system
+    "platform:component"  = local.platform_component
+    "platform:env"        = local.platform_env
+    "platform:owner"      = local.platform_owner
+    "platform:managed-by" = local.platform_managed_by
+  }
+
+  # Pinned provider version (single source of truth: versions.hcl).
+  aws_provider_version = local.versions.locals.provider_versions.aws
+
+  # Sandbox flag — drives backend bucket, locking strategy, and assume_role.
+  # All non-sandbox environments are unaffected: identical behavior as before.
+  is_sandbox = local.account_name == "sandbox"
+
+  # State bucket region — may differ from deployment region for sandbox.
+  # The sandbox S3 bucket "opsfleet-terraform-state-007027391583" was created
+  # in eu-central-1 and cannot be relocated. account.hcl sets state_bucket_region
+  # = "eu-central-1" so deployments to eu-west-1 still point at the right bucket.
+  # For all non-sandbox accounts the state bucket is per-region so this falls
+  # back to aws_region with no change in behavior.
+  state_bucket_region = try(local.account_vars.locals.state_bucket_region, local.aws_region)
 }
+
+# -----------------------------------------------------------------------------
+# Terragrunt version pin (single source of truth: versions.hcl)
+# -----------------------------------------------------------------------------
+terragrunt_version_constraint = local.versions.locals.terragrunt_version_constraint
 
 # -----------------------------------------------------------------------------
 # Catalog: local infrastructure catalog
@@ -42,7 +105,24 @@ catalog {
 }
 
 # -----------------------------------------------------------------------------
-# Remote State: S3 backend with DynamoDB locking
+# Remote State: S3 backend with per-account locking strategy
+#
+# Non-sandbox (staging / prod / dev / …):
+#   bucket         = tfstate-<account_name>-<region>
+#   dynamodb_table = terraform-locks-<account_name>
+#   use_lockfile   = false  (DynamoDB locking, existing behavior — unchanged)
+#
+# Sandbox (account_name == "sandbox"):
+#   bucket       = opsfleet-terraform-state-<account_id>  (pre-existing)
+#   region       = state_bucket_region (eu-central-1 — bucket's home region)
+#   use_lockfile = true  (S3 native locking, TF >= 1.10 — we run 1.14.8)
+#   No DynamoDB table required or created.
+#
+# Type-consistency note (Terragrunt v0.68):
+#   Both branches of the is_sandbox ternary inside merge() must have identical
+#   key shapes. Both branches declare all keys; the unused side uses null so
+#   Terragrunt omits it from the rendered backend config while satisfying the
+#   type checker. dynamodb_table_tags is null in the sandbox branch.
 # -----------------------------------------------------------------------------
 remote_state {
   backend = "s3"
@@ -52,30 +132,56 @@ remote_state {
     if_exists = "overwrite_terragrunt"
   }
 
-  config = {
-    bucket = "tfstate-${local.account_name}-${local.aws_region}"
-    key    = "${local.environment}/${path_relative_to_include()}/terraform.tfstate"
-    region = local.aws_region
+  config = merge(
+    {
+      bucket  = local.is_sandbox ? "opsfleet-terraform-state-${local.account_id}" : "tfstate-${local.account_name}-${local.aws_region}"
+      key     = "${local.environment}/${path_relative_to_include()}/terraform.tfstate"
+      region  = local.state_bucket_region
+      encrypt = true
 
-    encrypt        = true
-    dynamodb_table = "terraform-locks-${local.account_name}"
-
-    s3_bucket_tags = {
-      Environment = local.environment
-      ManagedBy   = "terragrunt"
-      Account     = local.account_name
+      s3_bucket_tags = {
+        Environment = local.environment
+        ManagedBy   = local.common.locals.managed_by_tag_value
+        Account     = local.account_name
+      }
+    },
+    local.is_sandbox
+    ? {
+      # S3 native locking — no DynamoDB table needed in sandbox account (TF >= 1.10)
+      use_lockfile        = true
+      dynamodb_table      = null
+      dynamodb_table_tags = null
     }
+    : {
+      use_lockfile   = false
+      dynamodb_table = "terraform-locks-${local.account_name}"
 
-    dynamodb_table_tags = {
-      Environment = local.environment
-      ManagedBy   = "terragrunt"
-      Account     = local.account_name
+      dynamodb_table_tags = {
+        Environment = local.environment
+        ManagedBy   = local.common.locals.managed_by_tag_value
+        Account     = local.account_name
+      }
     }
-  }
+  )
 }
 
 # -----------------------------------------------------------------------------
 # Generate: AWS Provider
+#
+# Non-sandbox: assumes TerragruntDeployRole in the target account. This is the
+#   org-vended cross-account role used by CI/CD pipelines.
+#
+# Sandbox: no assume_role block — IAM user "igor" (007027391583) authenticates
+#   directly via AWS_PROFILE or environment credentials. OrganizationAccountAccessRole
+#   does not exist in this personal account.
+#
+# Note: HCL does not support ternary expressions with heredoc branches.
+# The assume_role block is rendered conditionally by including an empty string
+# when is_sandbox = true, or the full block when is_sandbox = false.
+#
+# default_tags carry both the legacy cost/audit tags and the ADR-0028
+# platform:* taxonomy. Units may still override any of these per-resource via
+# their own `tags` (AWS merges resource tags over provider default_tags).
 # -----------------------------------------------------------------------------
 generate "provider" {
   path      = "provider.tf"
@@ -84,22 +190,31 @@ generate "provider" {
   contents = <<-EOF
     provider "aws" {
       region = "${local.aws_region}"
+      %{if !local.is_sandbox}
 
       assume_role {
         role_arn = "arn:aws:iam::${local.account_id}:role/TerragruntDeployRole"
       }
+      %{endif}
 
       default_tags {
         tags = {
           Environment    = "${local.environment}"
-          ManagedBy      = "terragrunt"
+          ManagedBy      = "${local.common.locals.managed_by_tag_value}"
           Account        = "${local.account_name}"
           Region         = "${local.aws_region}"
           Owner          = "${local.owner}"
           CostCenter     = "${local.cost_center}"
           TerragruntPath = "${path_relative_to_include()}"
-          Repository     = "100rd/platform-design"
-          Project        = "platform-design"
+          Repository     = "${local.common.locals.repository}"
+          Project        = "${local.common.locals.project_name}"
+
+          # ADR-0028 Unified Platform Taxonomy (AWS plane)
+          "platform:system"     = "${local.platform_system}"
+          "platform:component"  = "${local.platform_component}"
+          "platform:env"        = "${local.platform_env}"
+          "platform:owner"      = "${local.platform_owner}"
+          "platform:managed-by" = "${local.platform_managed_by}"
         }
       }
     }
@@ -108,7 +223,7 @@ generate "provider" {
 
 # -----------------------------------------------------------------------------
 # Generate: Terraform and Provider Version Constraints
-# Exact pin: mirrors infra/versions.hcl terraform_version = "1.14.8"
+# Pinned via versions.hcl
 # -----------------------------------------------------------------------------
 generate "versions" {
   path      = "versions_override.tf"
@@ -116,12 +231,12 @@ generate "versions" {
 
   contents = <<-EOF
     terraform {
-      required_version = "= 1.14.8"
+      required_version = "${local.versions.locals.terraform_version_constraint}"
 
       required_providers {
         aws = {
           source  = "hashicorp/aws"
-          version = "~> 6.0"
+          version = "${local.aws_provider_version}"
         }
       }
     }
@@ -129,34 +244,35 @@ generate "versions" {
 }
 
 # -----------------------------------------------------------------------------
-# Retry configuration for transient AWS errors
-# -----------------------------------------------------------------------------
-retry_max_attempts       = 3
-retry_sleep_interval_sec = 5
-
-retryable_errors = [
-  "(?s).*Error creating.*",
-  "(?s).*RequestError: send request failed.*",
-  "(?s).*connection reset by peer.*",
-]
-
-# -----------------------------------------------------------------------------
 # Common Inputs: Passed to every module
+#
+# Tag merge order (later wins):
+#   1. legacy cost/audit tags  (Environment, ManagedBy, Owner, ...)
+#   2. platform_tags           (ADR-0028 platform:* taxonomy defaults)
+#   3. unit-supplied tags      (inputs.tags set on the individual unit)
+#
+# Step 3 is applied by Terragrunt's deep-merge of `inputs` across the include
+# chain (unit inputs override root inputs), so a unit that sets
+# tags["platform:system"] = "auth" wins over the "shared" default here without
+# clobbering the other four keys. Nothing here clobbers pre-existing tags.
 # -----------------------------------------------------------------------------
 inputs = merge(
   local.account_vars.locals,
   local.region_vars.locals,
   {
-    tags = {
-      Environment    = local.environment
-      ManagedBy      = "terragrunt"
-      Account        = local.account_name
-      Region         = local.aws_region
-      Owner          = local.owner
-      CostCenter     = local.cost_center
-      TerragruntPath = path_relative_to_include()
-      Repository     = "100rd/platform-design"
-      Project        = "platform-design"
-    }
+    tags = merge(
+      {
+        Environment    = local.environment
+        ManagedBy      = local.common.locals.managed_by_tag_value
+        Account        = local.account_name
+        Region         = local.aws_region
+        Owner          = local.owner
+        CostCenter     = local.cost_center
+        TerragruntPath = path_relative_to_include()
+        Repository     = local.common.locals.repository
+        Project        = local.common.locals.project_name
+      },
+      local.platform_tags,
+    )
   }
 )

@@ -1,3 +1,6 @@
 [tools]
-terraform = "1.11"
-terragrunt = "0.68"
+# Mirrors terragrunt/versions.hcl. Edit versions.hcl first, then mirror here.
+# Repo-root .terraform-version / .terragrunt-version / .tool-versions also
+# mirror these — single source of truth in versions.hcl.
+terraform  = "1.14.8"
+terragrunt = "0.99.5"

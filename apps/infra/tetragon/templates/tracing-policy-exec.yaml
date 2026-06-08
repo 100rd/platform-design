@@ -1,0 +1,62 @@
+# TracingPolicy: Process Execution Tracing — OBSERVE MODE
+# ADR-0019: All policies start in observe-mode (no BPF Actions that kill/signal).
+# Every execve/execveat syscall on every node is recorded as a ProcessExec event.
+#
+# Graduate to enforce-mode when ready:
+#   1. Validate event stream in Hubble UI / SIEM for >=2 weeks with no false positives.
+#   2. Add a `matchActions` block under the kprobe selector that matches
+#      specific binaries/paths you want to block. Example (do NOT enable now):
+#        selectors:
+#          - matchBinaries:
+#              - operator: "In"
+#                values: ["/usr/bin/curl", "/usr/bin/wget"]
+#            matchActions:
+#              - action: Sigkill
+#   3. Deploy to non-prod first, hold for >=72 h, then promote to prod.
+#   4. Update ADR-0019 status to "enforced" and record the PR reference.
+#
+# Upstream CRD reference: https://tetragon.io/docs/concepts/tracing-policy/
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: exec-tracing
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: tetragon
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: tetragon
+    tetragon.io/policy-mode: observe
+    adr: "0019"
+  annotations:
+    tetragon.io/description: "Trace all process executions (execve/execveat) cluster-wide"
+    tetragon.io/observe-only: "true"
+spec:
+  kprobes:
+    # execve — standard process creation syscall
+    - call: "sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"        # filename (path of executable)
+        - index: 1
+          type: "string_array"  # argv
+      selectors:
+        # Observe everything — no filters in initial deployment.
+        # Narrow scope once baseline is established by adding matchBinaries
+        # or matchNamespaces filters here to reduce event volume.
+        - matchCapabilities: []
+
+    # execveat — fd-relative execve used by container runtimes and
+    # file-descriptor-based sandboxes (e.g. memfd_create + execveat).
+    - call: "sys_execveat"
+      syscall: true
+      args:
+        - index: 0
+          type: "int"           # dirfd
+        - index: 1
+          type: "string"        # pathname
+        - index: 2
+          type: "string_array"  # argv
+      selectors:
+        - matchCapabilities: []

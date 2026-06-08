@@ -42,12 +42,16 @@ jobs:
       fail-fast: false
       matrix:
         module:
+          - cilium
+          - eks-addons
           - hpa-defaults
           - karpenter-nodepools
           - keda
+          - kms
           - monitoring
           - organization
           - ram-share
+          - rcps
           - rds
           - route53-resolver
           - scps

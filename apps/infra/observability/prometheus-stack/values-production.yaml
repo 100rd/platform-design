@@ -344,7 +344,10 @@ thanos:
     persistence:
       size: 200Gi
 
+  # Workload Identity - EKS Pod Identity (ADR-0018), NOT IRSA.
+  # Production Thanos S3 access comes from the `pod-identity-thanos` association
+  # (per-env `cluster_name`/`bucket_names` in catalog/units/pod-identity-thanos),
+  # so the SA carries no `eks.amazonaws.com/role-arn` annotation. Keep `create`
+  # true (from values-thanos.yaml) so the association's referenced SA exists.
   serviceAccount:
-    annotations:
-      # TODO: Replace 123456789012 with actual AWS account ID before production deployment
-      eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/thanos-s3-access-prod
+    annotations: {}  # intentionally empty — Pod Identity, not IRSA

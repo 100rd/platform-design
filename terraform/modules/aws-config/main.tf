@@ -433,3 +433,94 @@ resource "aws_config_config_rule" "s3_bucket_public_read" {
 
   depends_on = [aws_config_configuration_recorder_status.this]
 }
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Org-wide aggregator (#162) — runs in the security/aggregator account
+# ---------------------------------------------------------------------------------------------------------------------
+# When `enable_organization_aggregator = true`, creates an
+# `aws_config_configuration_aggregator` collecting findings from every
+# member account in the organization. Typically applied in the security
+# account after the org has delegated Config admin to it.
+#
+# The aggregator IAM role MUST have the
+# AWSConfigRoleForOrganizations managed policy. We attach it explicitly
+# below.
+#
+# Closes the #162 acceptance criterion: "Aggregator in security account".
+
+resource "aws_iam_role" "config_aggregator" {
+  count = var.enable_organization_aggregator ? 1 : 0
+
+  name = "aws-config-org-aggregator"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "config.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "config_aggregator" {
+  count = var.enable_organization_aggregator ? 1 : 0
+
+  role       = aws_iam_role.config_aggregator[0].name
+  policy_arn = "arn:${local.partition}:iam::aws:policy/service-role/AWSConfigRoleForOrganizations"
+}
+
+resource "aws_config_configuration_aggregator" "organization" {
+  count = var.enable_organization_aggregator ? 1 : 0
+
+  name = var.organization_aggregator_name
+
+  organization_aggregation_source {
+    all_regions = true
+    role_arn    = aws_iam_role.config_aggregator[0].arn
+  }
+
+  tags = merge(var.tags, {
+    Name    = var.organization_aggregator_name
+    Purpose = "config-org-aggregator"
+  })
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Baseline conformance pack (#162) — applied at organization level when running in the management account
+# ---------------------------------------------------------------------------------------------------------------------
+# Conformance packs bundle Config rules + remediation actions. The simplest
+# baseline is the AWS-managed "Operational Best Practices for AWS
+# Foundational Security Best Practices" pack, applied org-wide.
+#
+# Set `baseline_conformance_pack_template_s3_uri` (or
+# `baseline_conformance_pack_template_body`) to provision. Empty by default
+# to keep this opt-in.
+#
+# Closes the #162 acceptance criterion: "Baseline conformance pack applied".
+
+resource "aws_config_organization_conformance_pack" "baseline" {
+  count = var.enable_organization_conformance_pack ? 1 : 0
+
+  name = var.organization_conformance_pack_name
+
+  # Template body OR S3 URI — exactly one must be set.
+  template_body = var.baseline_conformance_pack_template_body != "" ? var.baseline_conformance_pack_template_body : null
+  template_s3_uri = (
+    var.baseline_conformance_pack_template_body == "" && var.baseline_conformance_pack_template_s3_uri != ""
+    ? var.baseline_conformance_pack_template_s3_uri
+    : null
+  )
+
+  delivery_s3_bucket     = aws_s3_bucket.config.id
+  delivery_s3_key_prefix = "conformance-packs"
+
+  depends_on = [
+    aws_config_configuration_recorder_status.this,
+    aws_config_configuration_aggregator.organization,
+  ]
+}

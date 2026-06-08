@@ -55,3 +55,5 @@ spec:
     analysisTemplates:
       - name: health-check
       - name: smoke-test
+      - name: prometheus-5xx-error-rate
+      - name: prometheus-p95-latency

@@ -1,7 +1,7 @@
 # Repository Comparison Matrix: infra vs platform-design
 
 > Generated: 2026-04-05
-> Source of truth: `project/infra` (qbiq-ai/infra production landing zone)
+> Source of truth: `project/infra` (infra production landing zone)
 > Target: `project/platform-design` (multi-region platform)
 >
 > Legend: YES = present and functional | PARTIAL = exists but incomplete/different | NO = absent | AHEAD = platform-design exceeds infra
@@ -169,7 +169,7 @@
 | VPC design | Single region (eu-west-1) | Multi-region (4 EU regions) | platform-design AHEAD |
 | Transit Gateway | YES — `_envcommon/transit-gateway.hcl` | YES — `modules/transit-gateway/` | Aligned |
 | VPC Endpoints (S3, DynamoDB, SSM, EC2, ECR, STS, SNS, SQS, Logs, CloudWatch) | YES — `_envcommon/vpc-endpoints.hcl` | NO — no vpc-endpoints catalog unit | Missing in platform-design |
-| Private hosted zones (qbiq.internal, env.qbiq.internal) | YES — `modules/route53/` | PARTIAL — `catalog/units/route53-resolver/` (resolver only) | Add private hosted zones |
+| Private hosted zones (platform.internal, env.platform.internal) | YES — `modules/route53/` | PARTIAL — `catalog/units/route53-resolver/` (resolver only) | Add private hosted zones |
 | Custom DNS failover controllers (Go) | NO | YES — `failover-controller/`, `dns-sync/`, `dns-monitor/` | platform-design AHEAD |
 | Global Accelerator | NO | YES — `modules/global-accelerator/` | platform-design AHEAD |
 | ClusterMesh | NO | YES — `modules/clustermesh-connect/` | platform-design AHEAD |

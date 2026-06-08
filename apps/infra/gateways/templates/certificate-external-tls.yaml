@@ -1,0 +1,30 @@
+# TLS certificate for gw-external's HTTPS:443 listener (ADR-0009).
+#
+# Issued by cert-manager using the `selfsigned` ClusterIssuer shipped by
+# apps/infra/cert-manager (clusterIssuers.selfSigned.enabled=true). This is a
+# placeholder until Route53 + a public hosted zone + the ACME `letsencrypt-prod`
+# ClusterIssuer are in place — at that point set `external.tls.issuer:
+# letsencrypt-prod` and `external.tls.dnsNames` to the real domain in values.yaml;
+# this template does not change.
+#
+# Browsers warn on the self-signed cert; the argocd CLI and curl --insecure work
+# fine in the meantime. The produced secret (external.tls.secretName) is
+# referenced by gw-external's HTTPS listener (spec.listeners[].tls.certificateRefs).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: gw-external-tls
+  namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  secretName: {{ .Values.external.tls.secretName }}
+  issuerRef:
+    name: {{ .Values.external.tls.issuer }}
+    kind: ClusterIssuer
+  dnsNames:
+    {{- range .Values.external.tls.dnsNames }}
+    - {{ . | quote }}
+    {{- end }}
+  duration: 8760h  # 1 year
+  renewBefore: 720h  # 30 days

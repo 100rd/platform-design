@@ -18,10 +18,21 @@ project/platform-design/
 │       └── platform/terragrunt.stack.hcl # Full platform: VPC+EKS+Karpenter+RDS+Monitoring+Secrets
 │
 ├── terragrunt/                           # Live infrastructure config
-│   ├── root.hcl                          # Root: remote state, provider generation, versions
+│   ├── root.hcl                          # Root: remote state, provider generation, includes
+│   ├── versions.hcl                      # Pinned tool + provider versions (single source of truth)
+│   ├── common.hcl                        # Shared locals (project metadata, tag conventions)
 │   ├── mise.toml                         # Tool version pinning (terraform 1.10, terragrunt 0.68)
-│   ├── <env>/                            # dev | staging | prod | dr
-│   │   ├── account.hcl                   # AWS account ID, name, environment, sizing defaults
+│   ├── _envcommon/                       # Shared per-module configs
+│   │   ├── eks.hcl
+│   │   ├── vpc.hcl
+│   │   ├── kms.hcl
+│   │   ├── transit-gateway.hcl
+│   │   ├── budgets.hcl
+│   │   ├── centralized-logging.hcl
+│   │   └── README.md
+│   ├── <account>/                        # _org | security | log-archive | network | shared
+│   │   │                                 # | dev | staging | prod | dr | third-party
+│   │   ├── account.hcl                   # AWS account_id, email, org_ou, sizing defaults
 │   │   ├── _global/                      # Account-wide resources (not region-specific)
 │   │   │   └── iam/terragrunt.hcl        # IAM roles, policies, cross-account access
 │   │   └── <region>/                     # eu-west-1 | eu-west-2 | eu-west-3 | eu-central-1
@@ -32,14 +43,32 @@ project/platform-design/
 └── terraform/modules/                    # Custom Terraform modules (referenced by catalog units)
 ```
 
-## Environments
+## Accounts
 
-| Environment | AWS Account  | Purpose                      |
-|-------------|-------------|------------------------------|
-| dev         | 111111111111 | Development and experimentation |
-| staging     | 222222222222 | Pre-production validation    |
-| prod        | 333333333333 | Production workloads         |
-| dr          | 444444444444 | Disaster recovery            |
+The Control Tower landing zone (issue #157) defines nine accounts. Each top-level
+folder under `terragrunt/` corresponds to one AWS account and carries `account.hcl`
++ `eu-west-1/region.hcl`. OU placement is defined in #158.
+
+| Folder         | AWS Account  | OU              | Purpose                                            |
+|----------------|--------------|-----------------|----------------------------------------------------|
+| `_org/`        | 000000000000 | Root            | Organization management account (Control Tower hub) |
+| `security/`    | 777777777777 | Security        | Delegated admin: GuardDuty, SecurityHub, Detective, Inspector, Macie |
+| `log-archive/` | 888888888888 | Security        | Centralized log bucket (CloudTrail, Config, VPC Flow, EKS audit)     |
+| `network/`     | 555555555555 | Infrastructure  | Transit Gateway hub, Route53 resolver, inspection VPC                |
+| `shared/`      | 999999999999 | Infrastructure  | Shared services: ECR, Route53 private zones, ACM authority           |
+| `dev/`         | 111111111111 | Non-Production  | Development workloads                                                |
+| `staging/`     | 222222222222 | Non-Production  | Pre-production validation (canonical name: `stage`)                  |
+| `prod/`        | 333333333333 | Production      | Production workloads                                                 |
+| `dr/`          | 444444444444 | Production      | Disaster recovery for prod                                           |
+| `third-party/` | 121212121212 | Security        | Vendor IAM principals (Datadog, Vanta, Snyk) — narrow cross-org trust |
+
+**Account.hcl shape**: every per-account file declares `account_name`, `account_id`,
+`email`, `org_ou`, `environment`, `owner`, `cost_center`. Sizing knobs (NAT posture,
+EKS node groups, RDS class, etc.) live in workload accounts only.
+
+> Note: this repo originally used `staging/` for pre-prod; Control Tower / source
+> reference call it `stage`. We keep `staging/` for backwards compatibility — it
+> satisfies the `stage` slot in the canonical 9-account structure.
 
 ## Regions
 
@@ -160,3 +189,33 @@ The catalog separates **what** to deploy (units) from **where** to deploy it (li
 - **Units** (`catalog/units/`) — Self-contained Terragrunt configurations that define a single infrastructure component. They read hierarchy files (`account.hcl`, `region.hcl`) from the live tree via `find_in_parent_folders`.
 - **Stacks** (`catalog/stacks/`) — Compose multiple units into a deployable group. The `platform` stack includes all 6 infrastructure units.
 - **Live tree** (`terragrunt/`) — Environment and region directories containing `account.hcl`, `region.hcl`, and `terragrunt.stack.hcl` files that reference the catalog.
+
+## Root skeleton — versions.hcl, common.hcl, _envcommon/
+
+The root layout is split across three sibling files for separation of concerns:
+
+| File           | Owns                                                                 |
+|----------------|----------------------------------------------------------------------|
+| `root.hcl`     | Remote state, provider generation, version generation, retry policy, default tags. |
+| `versions.hcl` | Pinned tool + provider versions. **Single source of truth** — no version literal lives anywhere else. |
+| `common.hcl`   | Repo-wide locals: project metadata, tag schema, canonical region catalog. |
+| `_envcommon/`  | One file per module (`eks.hcl`, `vpc.hcl`, `kms.hcl`, ...) holding the module source pin, common inputs, and shared dependency declarations. New per-env units include from here. See [`_envcommon/README.md`](_envcommon/README.md). |
+
+### Directory-vs-Helm-values disambiguation
+
+Two top-level directories use the word "env":
+
+- `terragrunt/<env>/...` — the **canonical Terragrunt live tree** (this README's subject). All Terraform-driven AWS resources live here.
+- `envs/<env>/values/...` — **Helm values overrides** consumed by ArgoCD ApplicationSets and Kargo (see `argocd/` and `kargo/`). These are NOT Terragrunt configs and never include `root.hcl`.
+
+There is no parallel Terragrunt layout. Any new IaC unit goes under
+`terragrunt/<env>/<region>/<module>/` and includes the shared `_envcommon/<module>.hcl` config.
+
+## Layout decision (issue #156)
+
+The canonical layout described above (`root.hcl` + `versions.hcl` + `common.hcl` + `_envcommon/` + per-env hierarchy) is mandatory for every new Terragrunt unit. Existing units that pre-date this skeleton continue to work without modification — the skeleton is additive: `root.hcl` reads `versions.hcl` and `common.hcl` for its version constraints and tag values, which means existing units that include `root.hcl` automatically pick up the new pins.
+
+When migrating an existing unit to use `_envcommon`:
+1. Replace inline `terraform { source = ... }` with `include "envcommon" { path = find_in_parent_folders("_envcommon/<module>.hcl") ... }`.
+2. Strip duplicated default inputs from the unit's own `inputs` block.
+3. `terragrunt run-all plan` shows zero diff if `_envcommon` defaults match the previously-inline values.

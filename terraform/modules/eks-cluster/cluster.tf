@@ -8,8 +8,9 @@ module "eks" {
   # Authentication mode for EKS v21+
   authentication_mode = "API_AND_CONFIG_MAP"
 
-  cluster_endpoint_public_access  = var.cluster_endpoint_public_access
-  cluster_endpoint_private_access = true
+  cluster_endpoint_public_access       = var.cluster_endpoint_public_access
+  cluster_endpoint_private_access      = true
+  cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
 
   vpc_id     = var.vpc_id
   subnet_ids = var.subnet_ids

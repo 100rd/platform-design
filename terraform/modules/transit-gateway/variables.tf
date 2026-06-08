@@ -31,6 +31,12 @@ variable "blackhole_cidrs" {
   default     = {}
 }
 
+variable "ram_principals" {
+  description = "List of AWS RAM principals to share the TGW with — accept either 12-digit account IDs or OU / Organization ARNs (e.g. 'arn:aws:organizations::000000000000:ou/o-xxx/ou-xxx'). Empty list disables the RAM share entirely. Issue #170."
+  type        = list(string)
+  default     = []
+}
+
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)

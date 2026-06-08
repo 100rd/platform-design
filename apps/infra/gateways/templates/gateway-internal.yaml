@@ -1,0 +1,33 @@
+# Internal Gateway backed by an AWS internal NLB (ADR-0009).
+#
+# Traffic on this Gateway never leaves the VPC. Used for cluster-internal
+# services reachable from other VPCs/accounts via PrivateLink or VPC Peering
+# without traversing the public internet.
+#
+# No TLS termination here — backend services terminate TLS themselves or
+# traffic is plaintext inside the VPC. Add a listener/tls block if needed.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gw-internal
+  namespace: {{ .Values.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  gatewayClassName: {{ .Values.gatewayClassName }}
+  infrastructure:
+    annotations:
+      # AWS LBC — create an internal NLB with instance target type.
+      service.beta.kubernetes.io/aws-load-balancer-type: external
+      service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: instance
+      service.beta.kubernetes.io/aws-load-balancer-scheme: internal
+      # Explicit, human-readable NLB name (immutable — see gw-external).
+      service.beta.kubernetes.io/aws-load-balancer-name: {{ .Values.internal.nlbName }}
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      # Allow HTTPRoutes from any namespace to attach.
+      allowedRoutes:
+        namespaces:
+          from: All

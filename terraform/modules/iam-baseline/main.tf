@@ -160,6 +160,62 @@ resource "aws_ebs_default_kms_key" "this" {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
+# Account alias — #165
+# ---------------------------------------------------------------------------------------------------------------------
+# Sets the AWS account alias, which appears in the IAM sign-in URL and in
+# CloudTrail / billing reports. Helps humans identify which account they're
+# acting in. CIS 1.1 / #165 acceptance criterion.
+
+resource "aws_iam_account_alias" "this" {
+  count = var.account_alias != "" ? 1 : 0
+
+  account_alias = var.account_alias
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Root access key alarm — #165
+# ---------------------------------------------------------------------------------------------------------------------
+# AWS Config managed rule `iam-root-access-key-check` reports a NON_COMPLIANT
+# evaluation whenever the root user has an active access key in this account.
+# The rule itself does not raise a CloudWatch alarm — Config publishes findings
+# to its findings stream, which is forwarded to SecurityHub (#164) and to the
+# centralized findings bucket. Combined, that is the alarm pathway.
+#
+# Why a Config rule instead of a CloudWatch metric alarm?
+#  - There is no CloudWatch metric for "root access key exists." The supported
+#    AWS-native primitive is exactly this Config managed rule.
+#  - Config rules are organization-aware via aggregator (#162), so a single
+#    eval surfaces non-compliance across every account.
+#
+# The rule is gated on `enable_root_access_key_alarm = true` so accounts that
+# don't yet have Config enabled don't get a dangling resource. Once Config is
+# enabled per-account (see #162) the rule will automatically begin evaluating.
+
+resource "aws_config_config_rule" "iam_root_access_key_check" {
+  count = var.enable_root_access_key_alarm ? 1 : 0
+
+  name        = "${var.name_prefix}iam-root-access-key-check"
+  description = "Reports NON_COMPLIANT if the root user has an active access key. Closes #165."
+
+  source {
+    owner             = "AWS"
+    source_identifier = "IAM_ROOT_ACCESS_KEY_CHECK"
+  }
+
+  # The rule depends on Config being enabled in this account (a recorder must
+  # exist). The optional explicit dependency lets callers wire that ordering;
+  # if left empty, Terraform will plan/apply this rule independently and AWS
+  # will return the rule once Config exists.
+  depends_on = [aws_iam_account_password_policy.pci_dss]
+
+  tags = merge(var.tags, {
+    Name          = "${var.name_prefix}iam-root-access-key-check"
+    Purpose       = "iam-baseline-root-key-alarm"
+    pci-dss-scope = "true"
+  })
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
 # IAM Identity Center (SSO) MFA Configuration
 # ---------------------------------------------------------------------------------------------------------------------
 # SSO MFA enforcement MUST be configured via the AWS IAM Identity Center console.

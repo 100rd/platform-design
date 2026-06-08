@@ -7,6 +7,94 @@
 # Prerequisites:
 #   - EKS cluster must be created WITHOUT vpc-cni addon
 #   - Nodes must use Bottlerocket AMI (has Cilium support built-in)
+#   - IRSA must be enabled on the EKS cluster (enable_irsa = true)
+# ---------------------------------------------------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------------------------------------------------
+# IRSA — IAM Role for Cilium Operator (ENI mode)
+# ---------------------------------------------------------------------------------------------------------------------
+# Cilium operator needs EC2 ENI APIs to create/attach/detach network interfaces
+# for VPC-native pod IP assignment. Without this IAM role, ENI mode fails immediately.
+# Reference: https://docs.cilium.io/en/stable/network/concepts/ipam/eni/#required-iam-permissions
+
+data "aws_caller_identity" "current" {}
+
+resource "aws_iam_role" "cilium_operator" {
+  name = "${var.cluster_name}-cilium-operator"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Federated = var.cluster_oidc_provider_arn }
+      Action    = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "${replace(var.cluster_oidc_issuer_url, "https://", "")}:sub" = "system:serviceaccount:kube-system:cilium-operator"
+          "${replace(var.cluster_oidc_issuer_url, "https://", "")}:aud" = "sts.amazonaws.com"
+        }
+      }
+    }]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_policy" "cilium_operator" {
+  name        = "${var.cluster_name}-cilium-operator"
+  description = "EC2 ENI permissions for Cilium operator running on EKS cluster ${var.cluster_name}"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "CiliumENIDescribe"
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeVpcs",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeInstances",
+          "ec2:DescribeInstanceTypes",
+          "ec2:DescribeTags",
+          "ec2:DescribeAvailabilityZones",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "CiliumENIMutate"
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateNetworkInterface",
+          "ec2:AttachNetworkInterface",
+          "ec2:DetachNetworkInterface",
+          "ec2:DeleteNetworkInterface",
+          "ec2:ModifyNetworkInterfaceAttribute",
+          "ec2:UnassignPrivateIpAddresses",
+          "ec2:AssignPrivateIpAddresses",
+        ]
+        Resource = "*"
+      },
+      {
+        Sid      = "CiliumENITagNetworkInterface"
+        Effect   = "Allow"
+        Action   = "ec2:CreateTags"
+        Resource = "arn:aws:ec2:*:${data.aws_caller_identity.current.account_id}:network-interface/*"
+      },
+    ]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "cilium_operator" {
+  role       = aws_iam_role.cilium_operator.name
+  policy_arn = aws_iam_policy.cilium_operator.arn
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Cilium Helm Release
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "helm_release" "cilium" {
@@ -105,6 +193,39 @@ resource "helm_release" "cilium" {
             memory = "512Mi"
           }
         }
+
+        # Fix #4: Permissive toleration — operator must schedule even when nodes
+        # carry any combination of startup taints:
+        #   - node.cilium.io/agent-not-ready:NoExecute  (Cilium startup taint)
+        #   - node.kubernetes.io/not-ready:NoSchedule   (kubelet NotReady taint)
+        #   - node.kubernetes.io/unreachable:NoSchedule (kubelet unreachable taint)
+        #   - node-role.kubernetes.io/control-plane:NoSchedule
+        #
+        # Round 11 post-mortem: specific key-based tolerations were insufficient.
+        # The operator stayed Pending because nodes also carried not-ready /
+        # unreachable taints added by kubelet during the bootstrap window.
+        # A single {operator: Exists} covers all taints unconditionally.
+        tolerations = [
+          {
+            operator = "Exists"
+          }
+        ]
+
+        # Ensure the operator is scheduled with the highest system priority so it
+        # is not preempted or left Pending when cluster resources are constrained
+        # during node bootstrap.
+        priorityClassName = "system-cluster-critical"
+
+        # Round 13 finding: Cilium operator in ENI mode crashes with "Missing
+        # Region" when calling EC2 DescribeInstanceTypes via IRSA. The AWS SDK
+        # can't infer region from IMDS in operator pod context. Set AWS_REGION
+        # explicitly. Empty string => skip the env var (backward compat).
+        extraEnv = var.aws_region != "" ? [
+          {
+            name  = "AWS_REGION"
+            value = var.aws_region
+          }
+        ] : []
       }
 
       # Agent configuration
@@ -143,11 +264,19 @@ resource "helm_release" "cilium" {
         algorithm = "maglev"
       }
 
-      # ClusterMesh for multi-region service discovery
+      # ClusterMesh for multi-region service discovery.
+      # Both branches must have identical attribute structure for Terraform's type checker.
+      # When enable_clustermesh=false, Cilium ignores these values because useAPIServer=false.
       cluster = var.enable_clustermesh ? {
         name = var.cluster_mesh_name
         id   = var.cluster_mesh_id
-      } : {}
+        } : {
+        # Cilium chart validates cluster.name: non-empty, <= 32 chars.
+        # Truncate cluster_name to the first 32 chars when ClusterMesh
+        # is disabled (sufficient as local cluster identity).
+        name = substr(var.cluster_name, 0, 32)
+        id   = 0
+      }
 
       clustermesh = var.enable_clustermesh ? {
         useAPIServer = true
@@ -173,7 +302,28 @@ resource "helm_release" "cilium" {
             }
           }
         }
-      } : {}
+        } : {
+        useAPIServer = false
+        apiserver = {
+          replicas = 0
+          service = {
+            type        = "ClusterIP"
+            annotations = {}
+          }
+          tls = {
+            auto = {
+              enabled = false
+              method  = ""
+            }
+          }
+          etcd = {
+            resources = {
+              requests = { cpu = "100m", memory = "256Mi" }
+              limits   = { cpu = "500m", memory = "512Mi" }
+            }
+          }
+        }
+      }
 
       # Enable local redirect policy for node-local DNS
       localRedirectPolicy = true
@@ -189,7 +339,8 @@ resource "helm_release" "cilium" {
         }
       }
 
-      # Tolerations to run on all nodes
+      # Agent DaemonSet tolerations — permissive by Cilium chart default;
+      # explicitly set here to be self-documenting.
       tolerations = [
         {
           operator = "Exists"
@@ -206,19 +357,52 @@ resource "helm_release" "cilium" {
         "app.kubernetes.io/part-of" = "cilium"
       }
 
+      # IRSA — annotate both Cilium agent and operator service accounts with the
+      # IAM role ARN so the EKS pod identity webhook injects AWS credentials.
+      # Both need ENI permissions: operator manages ENI lifecycle, agent programs eBPF.
+      serviceAccounts = {
+        cilium = {
+          annotations = {
+            "eks.amazonaws.com/role-arn" = aws_iam_role.cilium_operator.arn
+          }
+        }
+        operator = {
+          annotations = {
+            "eks.amazonaws.com/role-arn" = aws_iam_role.cilium_operator.arn
+          }
+        }
+      }
+
       # Extra config
       extraConfig = var.extra_config
     })
   ]
 
-  depends_on = [var.module_depends_on]
+  # IAM role must exist before pods try to assume it via the IRSA webhook
+  depends_on = [
+    aws_iam_role_policy_attachment.cilium_operator,
+    var.module_depends_on,
+  ]
 }
 
-# Cilium ClusterwideNetworkPolicy for default deny (optional)
-resource "kubernetes_manifest" "default_deny_policy" {
+# ---------------------------------------------------------------------------------------------------------------------
+# Cilium ClusterwideNetworkPolicy — default deny (optional)
+# ---------------------------------------------------------------------------------------------------------------------
+# Fix #2: Uses gavinbunney/kubectl kubectl_manifest instead of
+# hashicorp/kubernetes kubernetes_manifest because:
+#   - kubernetes_manifest validates GVK (GroupVersionKind) at PLAN time
+#   - CiliumClusterwideNetworkPolicy CRD is installed by the helm_release above
+#     in the SAME apply — at plan time the CRD does not yet exist → plan fails
+#   - kubectl_manifest validates only at apply time, after the helm_release has
+#     installed the Cilium CRDs
+#
+# This allows enable_default_deny = true from the very first apply without a
+# two-phase workaround. The Round 11 workaround (enable_default_deny = false
+# in the catalog unit) can now be reverted to true if desired.
+resource "kubectl_manifest" "default_deny_policy" {
   count = var.enable_default_deny ? 1 : 0
 
-  manifest = {
+  yaml_body = yamlencode({
     apiVersion = "cilium.io/v2"
     kind       = "CiliumClusterwideNetworkPolicy"
     metadata = {
@@ -271,7 +455,7 @@ resource "kubernetes_manifest" "default_deny_policy" {
         }
       ]
     }
-  }
+  })
 
   depends_on = [helm_release.cilium]
 }

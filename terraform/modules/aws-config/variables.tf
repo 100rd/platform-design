@@ -78,6 +78,46 @@ variable "include_global_resource_types" {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
+# Organization aggregator + conformance pack (#162)
+# ---------------------------------------------------------------------------------------------------------------------
+
+variable "enable_organization_aggregator" {
+  description = "When true, create an aws_config_configuration_aggregator collecting findings from every member account. Typically applied in the security/aggregator account after Config admin has been delegated to it. Closes the #162 'Aggregator in security account' criterion."
+  type        = bool
+  default     = false
+}
+
+variable "organization_aggregator_name" {
+  description = "Name of the organization aggregator (only used when enable_organization_aggregator = true)."
+  type        = string
+  default     = "platform-design-org-aggregator"
+}
+
+variable "enable_organization_conformance_pack" {
+  description = "When true, deploy a baseline conformance pack across the organization. Must be applied in the org management account or in an account with delegated Config administration. Closes the #162 'Baseline conformance pack applied' criterion."
+  type        = bool
+  default     = false
+}
+
+variable "organization_conformance_pack_name" {
+  description = "Name of the baseline conformance pack."
+  type        = string
+  default     = "platform-design-baseline-best-practices"
+}
+
+variable "baseline_conformance_pack_template_body" {
+  description = "Inline YAML body for the baseline conformance pack. Mutually exclusive with baseline_conformance_pack_template_s3_uri."
+  type        = string
+  default     = ""
+}
+
+variable "baseline_conformance_pack_template_s3_uri" {
+  description = "S3 URI of the baseline conformance pack template (e.g. an AWS-published 'Operational Best Practices for AWS Foundational Security Best Practices' template). Mutually exclusive with baseline_conformance_pack_template_body."
+  type        = string
+  default     = ""
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
 # Common
 # ---------------------------------------------------------------------------------------------------------------------
 

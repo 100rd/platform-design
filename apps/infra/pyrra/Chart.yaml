@@ -1,0 +1,40 @@
+---
+# Pyrra SLO Operator — ADR-0026
+#
+# Pyrra was chosen over Sloth because it ships a built-in UI (SLO detail pages +
+# error-budget burn dashboards) in addition to emitting PrometheusRules.  Sloth is
+# a pure CLI generator; Pyrra is an operator + UI.  See docs/adrs/0026-*.md §Decision.
+#
+# Chart source: https://github.com/pyrra-dev/pyrra/tree/main/config/helm/pyrra
+# Helm repo:    https://pyrra-dev.github.io/pyrra
+# Pinned chart version: 0.10.0  (appVersion 0.10.0, released 2025-Q4)
+# Re-evaluate pinned version on each quarterly dependency update cycle.
+apiVersion: v2
+name: pyrra
+description: SLO operator and UI (Pyrra) — emits PrometheusRules from ServiceLevelObjective CRs (ADR-0026)
+type: application
+version: 1.0.0
+appVersion: "0.10.0"
+
+dependencies:
+  # pyrra chart v0.10.0 — pinned; matches appVersion above.
+  # Do NOT use "latest" in production; bump deliberately after testing.
+  - name: pyrra
+    version: "0.10.0"
+    repository: https://pyrra-dev.github.io/pyrra
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - slo
+  - observability
+  - prometheus
+  - pyrra
+  - error-budget
+
+annotations:
+  category: Observability
+  platform: EKS
+  adr: "ADR-0026"
