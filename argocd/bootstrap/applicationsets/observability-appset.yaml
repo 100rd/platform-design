@@ -21,9 +21,22 @@ spec:
       name: 'obs-{{.path.basename}}-{{.name}}'
       namespace: argocd
       labels:
+        # Existing fleet-routing labels
         app.kubernetes.io/part-of: observability
         cluster-role: '{{.metadata.labels.cluster-role}}'
         env: '{{.metadata.labels.env}}'
+        # ADR-0028: unified platform.* taxonomy on each generated Application.
+        # system     = "observability" (the logical service boundary for the
+        #              entire observability stack)
+        # component  = app directory basename (tempo-stack, otel-collector, obi, etc.)
+        # env        = deployment environment from cluster label
+        # owner      = "platform" (observability stack owned by platform team)
+        # managed-by = argocd
+        platform.system: observability
+        platform.component: '{{.path.basename}}'
+        platform.env: '{{.metadata.labels.env}}'
+        platform.owner: platform
+        platform.managed-by: argocd
       annotations:
         # Sync-wave ordering for trace-lane activation (ADR-0019/ADR-0026):
         #   tempo-stack     -> wave 10  (storage backend first)

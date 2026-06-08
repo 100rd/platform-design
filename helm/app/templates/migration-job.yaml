@@ -57,6 +57,7 @@ spec:
     metadata:
       labels:
         {{- include "app.selectorLabels" . | nindent 8 }}
+        {{- include "app.platformLabels" . | nindent 8 }}
         app.kubernetes.io/component: migration
     spec:
       serviceAccountName: {{ include "app.serviceAccountName" . }}
