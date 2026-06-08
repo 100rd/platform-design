@@ -83,6 +83,25 @@ yet-another-cloudwatch-exporter:
     apiVersion: v1alpha1
     sts-region: eu-central-1
     discovery:
+      # ADR-0028 Stream 4: exportedTagsOnMetrics is a DISCOVERY-LEVEL key (sibling of jobs),
+      # a map keyed by lowercase service alias. It surfaces AWS resource tags as
+      # tag_platform_* Prometheus labels on every metric from the matching discovery job.
+      exportedTagsOnMetrics:
+        s3:
+          - "platform:system"
+          - "platform:component"
+          - "platform:env"
+          - "platform:owner"
+        rds:
+          - "platform:system"
+          - "platform:component"
+          - "platform:env"
+          - "platform:owner"
+        dynamodb:
+          - "platform:system"
+          - "platform:component"
+          - "platform:env"
+          - "platform:owner"
       jobs:
         # NOTE: AWS/EKS is intentionally absent - YACE v0.61.2 does not support
         # it as a discovery service (not in its known-services list). EKS
@@ -144,14 +163,7 @@ yet-another-cloudwatch-exporter:
             # Remove to discover ALL buckets (raises CW API cost).
             - key: "platform:system"
               value: ".*"
-          exportedTagsOnMetrics:
-            # Translate AWS resource tags → Prometheus label tag_platform_<key>.
-            # e.g. AWS tag platform:system="auth" → label tag_platform_system="auth"
-            AWS/S3:
-              - "platform:system"
-              - "platform:component"
-              - "platform:env"
-              - "platform:owner"
+          # exportedTagsOnMetrics handled at discovery level above (alias: s3).
           metrics:
             - name: BucketSizeBytes
               statistics: [Average]
@@ -174,12 +186,7 @@ yet-another-cloudwatch-exporter:
           searchTags:
             - key: "platform:system"
               value: ".*"
-          exportedTagsOnMetrics:
-            AWS/RDS:
-              - "platform:system"
-              - "platform:component"
-              - "platform:env"
-              - "platform:owner"
+          # exportedTagsOnMetrics handled at discovery level above (alias: rds).
           metrics:
             - name: CPUUtilization
               statistics: [Average, Maximum]
@@ -205,12 +212,7 @@ yet-another-cloudwatch-exporter:
           searchTags:
             - key: "platform:system"
               value: ".*"
-          exportedTagsOnMetrics:
-            AWS/DynamoDB:
-              - "platform:system"
-              - "platform:component"
-              - "platform:env"
-              - "platform:owner"
+          # exportedTagsOnMetrics handled at discovery level above (alias: dynamodb).
           metrics:
             - name: ConsumedReadCapacityUnits
               statistics: [Sum, Average]

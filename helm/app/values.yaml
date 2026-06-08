@@ -393,31 +393,34 @@ migrations:
 #     owner: team-sec
 #     managedBy: argocd   # optional, already the default
 platform:
-  # REQUIRED — logical service / system boundary.
-  # Maps to: platform.system label on all K8s resources.
+  # Logical service / system boundary. Maps to platform.system label.
+  # Default "app" lets bare `helm template` / CI dry-run succeed; OVERRIDE per real release.
   # K8s label key constraint: no colon allowed; use dot notation (ADR-0028).
   # Examples: auth, payment, analytics, ingest
-  system: ""
+  system: "app"
 
-  # REQUIRED — architectural tier or role of this workload.
-  # Maps to: platform.component label on all K8s resources.
-  # Examples: compute, database, cache, ingress, worker, scheduler
-  component: ""
+  # Architectural tier or role of this workload. Maps to platform.component label.
+  # Default "compute"; OVERRIDE per real release. Examples: compute, database, cache, ingress, worker
+  component: "compute"
 
   # OPTIONAL — deployment environment. Defaults to .Release.Namespace.
   # Maps to: platform.env label on all K8s resources.
   # Examples: production, staging, dev, sandbox
   env: ""
 
-  # REQUIRED — engineering team responsible for this workload.
-  # Maps to: platform.owner label on all K8s resources.
-  # Examples: team-sec, team-checkout, team-data, team-platform
-  owner: ""
+  # Engineering team responsible for this workload. Maps to platform.owner label.
+  # Default "platform"; OVERRIDE per real release. Examples: team-sec, team-checkout, team-data
+  owner: "platform"
 
   # OPTIONAL — tool orchestrating this resource. Defaults to "argocd".
   # Maps to: platform.managed-by label on all K8s resources.
   # Override when deploying via Helm CLI directly (e.g. helm upgrade --install).
   managedBy: ""
+
+  # Opt-in strict validation (ADR-0028). Default false so default render never fails.
+  # When true: chart fails at render time if system/component/owner are empty.
+  # RECOMMENDED: set strict: true in every production Application values override.
+  strict: false
 
 # --- Labels & Annotations ---
 labels: {}
