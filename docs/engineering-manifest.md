@@ -95,14 +95,14 @@ Tools alone do not solve organizational friction. The operational processes gove
 Developers do not write Kubernetes manifests, CI/CD pipelines, or IAM roles from scratch.
 
 ```
-Developer ──► Developer Portal (Backstage) ──► Choose Template (NodeJS/Go)
+Developer ──► CLI Tooling / Git Templates ──► Choose Template (NodeJS/Go)
                                                       │
                                                       ▼
 Artifacts Provisioned ◄── Git Repo Scaffold ◄── Code & Pipeline Generation
 ```
 
 * **Process:**
-  1. The developer accesses the Developer Portal (Backstage) and selects a microservice template (e.g., "Go REST Service").
+  1. The developer triggers the self-service template via CLI/Git templates and selects a microservice template (e.g., "Go REST Service").
   2. The portal automatically provisions a new Git repository pre-configured with reusable CI pipelines ([ADR-0015](file:///Users/lo/Develop/multi-team-agentic/project/platform-design/docs/adrs/0015-reusable-ci-pipelines.md)).
   3. The platform registers the new service in an ArgoCD ApplicationSet ([ADR-0012](file:///Users/lo/Develop/multi-team-agentic/project/platform-design/docs/adrs/0012-cluster-role-label-scheme-for-appsets.md)), generating deployment manifests for `dev`, `staging`, and `prod` environments.
   4. An IAM role is automatically provisioned and mapped to EKS Pod Identity ([ADR-0018](file:///Users/lo/Develop/multi-team-agentic/project/platform-design/docs/adrs/0018-eks-pod-identity-as-default-workload-identity.md)) with ABAC-based scoping.
