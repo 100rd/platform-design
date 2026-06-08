@@ -190,6 +190,45 @@ until wired in. Tracked under epic
 | #252 | Observability target architecture (LGTM: Prometheus 3 + Thanos, Loki, Tempo, Alloy; one RED source; no Mimir/Coroot) | Accepted | PLANNED | [ADR-0026](docs/adrs/0026-observability-target-architecture.md) |
 | #252 | Kubernetes cost allocation via OpenCost + AWS CUR/Athena (amortized, discount-aware; optional Kubecost Free) | Accepted | PLANNED | [ADR-0027](docs/adrs/0027-kubernetes-cost-opencost-cur.md) |
 
+### Batch-B ADRs (0029–0032) — implemented 2026-06-08
+
+ADRs 0029–0032 were proposed, doc-verified, and implemented this session
+(2026-06-08) under epic [#252](https://github.com/100rd/platform-design/issues/252).
+Their modules and Helm templates are `synced` in-repo; no live AWS resources have
+been applied yet.
+
+| ADR | Title | Implementation status |
+|-----|-------|-----------------------|
+| [ADR-0029](docs/adrs/0029-ecr-pull-through-cache.md) | ECR Pull-Through Cache for public upstream registries | synced (module) — not applied |
+| [ADR-0030](docs/adrs/0030-bottlerocket-node-os.md) | Bottlerocket as the EKS node operating system | synced (module) / pending (manifests) |
+| [ADR-0031](docs/adrs/0031-secret-rotation.md) | Automated secret rotation via Secrets Manager rotation Lambda + ESO auto-refresh | synced (module) — not applied |
+| [ADR-0032](docs/adrs/0032-db-migrations-gitops.md) | DB migrations via ArgoCD PreSync Jobs | synced (helm) — not applied |
+
+### ADR-0034 Backstage IDP — Proposed, Deferred (on hold)
+
+[ADR-0034](docs/adrs/0034-backstage-idp.md) records the **Backstage Internal
+Developer Platform** decision, tracked by epic
+[#252](https://github.com/100rd/platform-design/issues/252). Backstage is a strong
+strategic fit — it would provide a Software Catalog and a Golden Path Scaffolder
+template that generates services pre-wired to the platform ADRs. The decision is
+**deferred / on hold** as of 2026-06-08 by the platform owner because Backstage is
+a self-owned Node.js application (not a Helm-install), and taking on the operational
+commitment without a dedicated owner would result in degradation.
+
+**Agreed Phase 1 scope** (when hold is lifted):
+
+- Software Catalog (`catalog-info.yaml` registration for all services).
+- ONE Golden Path Scaffolder template generating a new service conforming to the
+  platform ADRs: generic Helm/app chart + ArgoCD/Kargo promotion (ADR-0006,
+  ADR-0021) + Kyverno keyless-signed images (ADR-0020) + EKS Pod Identity
+  (ADR-0018) + observability wiring (ADR-0026).
+- Three plugins only: ArgoCD (sync status), Kubernetes (pod/rollout health),
+  OpenCost (per-service cost, ADR-0027).
+- TechDocs deferred to Phase 2.
+
+**Revisit trigger**: a dedicated Backstage owner is assigned and the platform
+backlog (ADRs 0017–0027) matures toward `synced`.
+
 ### Candidates / revisit (considered, NOT accepted)
 
 Recorded in ADR-0025's alternatives — tracked, not adopted:
@@ -221,10 +260,12 @@ Add new GATE umbrellas in pull-requests when initiating any multi-issue effort t
 ## Cross-cutting decisions
 
 ADRs live in `docs/adrs/` — see the [index](docs/adrs/README.md) for the full
-catalog (0001–0027) with each ADR's **platform-design status**. ADRs 0017–0027 are
-the **2026 modernization** set: research-backed + doc-verified 2026-06-07, all
+catalog (0001–0032, 0034) with each ADR's **platform-design status**. ADRs 0017–0027
+are the **2026 modernization** set: research-backed + doc-verified 2026-06-07, all
 ratified **Accepted** (implementation `pending` / PLANNED, tracked by Phase 8 above).
-The two native foundation ADRs:
+ADRs 0029–0032 are the **Batch-B** set: implemented 2026-06-08 (`synced` in modules /
+charts). ADR-0034 (Backstage) is **Proposed — Deferred (on hold)** — see Phase 8
+above. The two native foundation ADRs:
 - [ADR-0001 OU split](docs/adrs/0001-ou-split.md) — explains why `Prod` / `NonProd` aliases were preserved instead of renaming to canonical `Production` / `Non-Production`.
 - [ADR-0002 TF-only state backend bootstrap](docs/adrs/0002-tf-only-state-backend.md) — bootstrap chicken-and-egg resolution.
 
