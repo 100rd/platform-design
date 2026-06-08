@@ -2,6 +2,57 @@
 
 Deploys [Cilium](https://cilium.io/) as the Container Network Interface (CNI) for EKS clusters, replacing AWS VPC CNI.
 
+## Wave Provenance
+
+| Wave | Date | Summary |
+|------|------|---------|
+| W4 | 2026-06-07 | Cilium 1.17.1 -> 1.19.4; `gatewayAPI.enableAlpn: true` for BackendTLSPolicy (#264) |
+| W5 | 2026-06-07 (PILOT) | ClusterMesh scaffold (`cluster.name/id`; apiserver gated); netkit datapath (commented out, requires BR 6.12 per ADR-0030) |
+
+### W4 Breaking-changes note (1.17.1 -> 1.19.4)
+
+- `kubeProxyReplacement` is now a string field in the Cilium chart schema. The existing `false` boolean value is accepted for backwards compatibility; explicit string `"false"` is preferred in 1.19+.
+- `bpf.datapathMode` has updated defaults. The field is intentionally left unset (defaults to `veth`) in the base values; `netkit` is commented out in the W5 pilot block.
+- `clustermesh.apiserver` TLS bootstrap procedure changed in 1.16+. See `docs/runbooks/cilium-clustermesh-ca-rotation.md`.
+- Minimum kernel for base install unchanged at 5.10. netkit requires kernel >=6.8 (see W5 section).
+
+**Rollback (W4):** revert `Chart.yaml` `appVersion` and `Chart.lock` `version` to `1.17.1`; re-run `helm dependency update`; trigger ArgoCD sync. No values changes required.
+
+### W5 Pilot: ClusterMesh
+
+ClusterMesh is scaffolded but **disabled** until a second cluster is provisioned. Current state:
+
+- `cluster.name: primary`, `cluster.id: 1` (permanent identity; do not change after any nodes join the mesh)
+- `clustermesh.apiserver.enabled: false` -- flip to `true` only after:
+  1. Second cluster has `cluster.id: 2` and a distinct `cluster.name` set
+  2. Shared Cilium CA (`clustermesh-apiserver-ca-cert`) is pre-populated in `kube-system` on both clusters
+  3. Platform team approval
+
+When the apiserver is enabled it exposes via an internal NLB (no public endpoint) using the annotations in `values.yaml`. Full procedure: `docs/runbooks/cilium-clustermesh-ca-rotation.md`.
+
+**Rollback (ClusterMesh):** set `clustermesh.apiserver.enabled: false` and remove `cluster.id`/`cluster.name` overrides on both clusters. No persistent data loss; same-cluster policies are unaffected.
+
+### W5 Pilot: netkit datapath
+
+netkit is a BPF-native virtual device type replacing traditional veth pairs, reducing per-packet overhead for high-throughput workloads. It is **commented out** in `values.yaml` pending node replacement.
+
+Requirements before enabling:
+- Bottlerocket 6.12 nodes (kernel >=6.8, ADR-0030). Do NOT enable on AL2/AL2023 or Bottlerocket <6.8.
+- `kubeProxyReplacement: true` (set in per-cluster ArgoCD values override)
+- `routingMode: native` (already set)
+- `bpf.masquerade: true` (already set)
+
+Activation steps:
+1. Replace one node group with Bottlerocket 6.12 AMI
+2. Set `bpf.datapathMode: netkit` and `kubeProxyReplacement: true` in the pilot cluster's values override
+3. Rolling-restart Cilium agent DaemonSet (`kubectl rollout restart ds/cilium -n kube-system`)
+4. Run `cilium connectivity test` and validate
+5. Promote node group by node group
+
+**Rollback (netkit):** comment out `bpf.datapathMode: netkit`; restore `kubeProxyReplacement: false`; rolling-restart agent. Node replacement is required to return to veth if you want to reclaim clean BPF map state, but rolling restart with the flag removed is sufficient for functional rollback.
+
+---
+
 ## Why Cilium?
 
 - **eBPF-powered**: High-performance networking and observability without iptables overhead

@@ -1,0 +1,276 @@
+# -----------------------------------------------------------------------------
+# node-dep-scan
+#
+# Mirrors platform-workflows@3bb35df .github/actions/node-dep-scan
+# (2026-06 platform-workflows consolidation sync).
+# Completes the Tier-1 set started in PR #241 (ADR-0016): application-dependency
+# CVE scanning for Node projects (npm audit + osv-scanner), which the Trivy
+# image scan (OS/system libs only) does not cover.
+# -----------------------------------------------------------------------------
+name: "Node Dependency Scan"
+description: "Scan Node project dependencies for known CVEs using `npm audit --audit-level=high` plus `osv-scanner`. Honours a `.audit-ignore` allowlist and uploads osv-scanner SARIF to GitHub Security."
+
+inputs:
+  working-directory:
+    description: "Project root containing package.json + lockfile."
+    required: false
+    default: "."
+  package-manager:
+    description: "npm, pnpm, or yarn. Affects which audit command runs."
+    required: false
+    default: "npm"
+  ignore-file:
+    description: "Path (relative to working-directory) to a newline-delimited file of CVE/GHSA/OSV IDs to ignore. Blank lines and `#` comments are skipped."
+    required: false
+    default: ".audit-ignore"
+  audit-level:
+    description: "Severity threshold for `npm audit`. One of `info`, `low`, `moderate`, `high`, `critical`."
+    required: false
+    default: "high"
+  node-version:
+    description: "Node version to set up before scanning."
+    required: false
+    default: "20"
+  install-command:
+    description: "Install command run before scanning. Empty string skips install (assumes node_modules already present)."
+    required: false
+    default: ""
+  exit-code:
+    description: "Exit code when in-scope findings are present. Set 0 for advisory mode."
+    required: false
+    default: "1"
+  sarif-category:
+    description: "SARIF category for osv-scanner upload. Differentiates multiple Node scans on the same commit."
+    required: false
+    default: "node-dep-scan"
+  upload-sarif:
+    description: "Upload osv-scanner SARIF to GitHub Security."
+    required: false
+    default: "true"
+
+outputs:
+  npm-audit-report:
+    description: "Path to npm audit JSON report."
+    value: ${{ steps.npm-audit.outputs.report-path }}
+  osv-sarif:
+    description: "Path to osv-scanner SARIF output."
+    value: ${{ steps.osv.outputs.sarif-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js ${{ inputs.node-version }}
+      # actions/setup-node v4.1.0
+      uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: ${{ inputs.package-manager }}
+        cache-dependency-path: ${{ inputs.working-directory }}/${{ inputs.package-manager == 'pnpm' && 'pnpm-lock.yaml' || inputs.package-manager == 'yarn' && 'yarn.lock' || 'package-lock.json' }}
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        PM: ${{ inputs.package-manager }}
+        CUSTOM: ${{ inputs.install-command }}
+      run: |
+        set -euo pipefail
+        if [ -n "${CUSTOM}" ]; then
+          # Run via `bash -lc` instead of `eval` — one round of shell parsing
+          # only, no double expansion of variables already in CUSTOM.
+          bash -lc "${CUSTOM}"
+          exit 0
+        fi
+        case "${PM}" in
+          npm) npm ci ;;
+          pnpm) corepack enable && pnpm install --frozen-lockfile ;;
+          yarn) corepack enable && yarn install --immutable ;;
+          *) echo "::error::Unknown package-manager: ${PM}"; exit 1 ;;
+        esac
+
+    - name: Run npm audit
+      id: npm-audit
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        PM: ${{ inputs.package-manager }}
+        AUDIT_LEVEL: ${{ inputs.audit-level }}
+        REPORT_PATH: npm-audit-report.json
+      run: |
+        set -uo pipefail
+        # npm audit returns non-zero on findings; capture the JSON regardless.
+        case "${PM}" in
+          npm) npm audit --omit=dev --audit-level="${AUDIT_LEVEL}" --json > "${REPORT_PATH}" || true ;;
+          pnpm) corepack enable && pnpm audit --prod --audit-level="${AUDIT_LEVEL}" --json > "${REPORT_PATH}" || true ;;
+          yarn) corepack enable && yarn npm audit --severity "${AUDIT_LEVEL}" --json > "${REPORT_PATH}" || true ;;
+        esac
+        if [ ! -s "${REPORT_PATH}" ]; then
+          printf '{"vulnerabilities":{}}' > "${REPORT_PATH}"
+        fi
+        echo "report-path=${{ inputs.working-directory }}/${REPORT_PATH}" >> "$GITHUB_OUTPUT"
+
+    - name: Apply ignore-file + gate npm audit findings
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        REPORT_PATH: npm-audit-report.json
+        IGNORE_FILE: ${{ inputs.ignore-file }}
+        AUDIT_LEVEL: ${{ inputs.audit-level }}
+        EXIT_CODE: ${{ inputs.exit-code }}
+      run: |
+        set -euo pipefail
+
+        # NOTE: grep returns 1 on "no matches" which would trip `set -e`; suppress.
+        if [ -f "${IGNORE_FILE}" ]; then
+          IGNORES=$(grep -vE '^\s*(#|$)' "${IGNORE_FILE}" | tr '\n' ',' | sed 's/,$//' || true)
+        else
+          IGNORES=""
+        fi
+        export IGNORES
+
+        python3 - <<'PY'
+        import json
+        import os
+        import sys
+
+        with open(os.environ["REPORT_PATH"]) as fh:
+            data = json.load(fh)
+
+        ignores = {i.strip() for i in os.environ.get("IGNORES", "").split(",") if i.strip()}
+        audit_level = os.environ["AUDIT_LEVEL"].lower()
+        order = ["info", "low", "moderate", "high", "critical"]
+        threshold = order.index(audit_level)
+
+        in_scope = []
+        for pkg, info in (data.get("vulnerabilities") or {}).items():
+            sev = (info.get("severity") or "").lower()
+            if sev not in order or order.index(sev) < threshold:
+                continue
+            # `via` may be a list of advisories or transitive deps.
+            ids = set()
+            for v in info.get("via", []) or []:
+                if isinstance(v, dict):
+                    url = v.get("url", "")
+                    advisory_id = url.rsplit("/", 1)[-1] if url else ""
+                    if advisory_id:
+                        ids.add(advisory_id)
+                    src = v.get("source")
+                    if src:
+                        ids.add(f"npm-{src}")
+            if ids & ignores:
+                continue
+            in_scope.append({"package": pkg, "severity": sev, "advisories": sorted(ids)})
+
+        with open("npm-audit-in-scope.json", "w") as fh:
+            json.dump(in_scope, fh, indent=2)
+
+        print(f"npm audit in-scope findings: {len(in_scope)}", file=sys.stderr)
+        for f in in_scope:
+            print(f"  - {f['package']} severity={f['severity']} advisories={','.join(f['advisories']) or 'none'}", file=sys.stderr)
+
+        gh_out = os.environ.get("GITHUB_OUTPUT")
+        if gh_out:
+            with open(gh_out, "a") as fh:
+                fh.write(f"npm-in-scope-findings={len(in_scope)}\n")
+        PY
+
+        IN_SCOPE=$(python3 -c 'import json; print(len(json.load(open("npm-audit-in-scope.json"))))')
+        if [ "${IN_SCOPE}" -gt 0 ]; then
+          echo "::error::npm audit found ${IN_SCOPE} in-scope findings (level=${AUDIT_LEVEL}, ignore-file=${IGNORE_FILE})."
+          exit "${EXIT_CODE}"
+        fi
+        echo "npm audit clean at level ${AUDIT_LEVEL}."
+
+    - name: Install osv-scanner
+      shell: bash
+      env:
+        OSV_VERSION: "1.9.1"
+      run: |
+        set -euo pipefail
+        BIN_DIR="${RUNNER_TEMP}/osv-scanner-bin"
+        mkdir -p "${BIN_DIR}"
+        URL="https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64"
+        curl -fsSL -o "${BIN_DIR}/osv-scanner" "${URL}"
+        chmod +x "${BIN_DIR}/osv-scanner"
+        echo "${BIN_DIR}" >> "$GITHUB_PATH"
+        "${BIN_DIR}/osv-scanner" --version
+
+    - name: Run osv-scanner
+      id: osv
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SARIF_PATH: osv-scanner.sarif
+        IGNORE_FILE: ${{ inputs.ignore-file }}
+        EXIT_CODE: ${{ inputs.exit-code }}
+        PM: ${{ inputs.package-manager }}
+      run: |
+        set -uo pipefail
+
+        IGNORE_ARGS=()
+        if [ -f "${IGNORE_FILE}" ]; then
+          while IFS= read -r id; do
+            [ -z "${id}" ] && continue
+            case "${id}" in '#'*) continue;; esac
+            IGNORE_ARGS+=(--ignore-vuln "${id}")
+          done < "${IGNORE_FILE}"
+        fi
+
+        # osv-scanner returns 1 on vuln findings, 0 on clean, >1 on real errors.
+        # Select the lockfile matching the requested package manager — without
+        # this, pnpm/yarn projects would fail with "missing package-lock.json".
+        case "${PM}" in
+          pnpm) LOCKFILE="pnpm-lock.yaml" ;;
+          yarn) LOCKFILE="yarn.lock" ;;
+          *)    LOCKFILE="package-lock.json" ;;
+        esac
+        set +e
+        osv-scanner --lockfile="${LOCKFILE}" --format=sarif --output="${SARIF_PATH}" "${IGNORE_ARGS[@]}"
+        OSV_RC=$?
+        set -e
+
+        if [ ! -s "${SARIF_PATH}" ]; then
+          # osv-scanner did not produce SARIF (likely missing lockfile). Emit empty SARIF for upload step.
+          cat > "${SARIF_PATH}" <<'JSON'
+        {
+          "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+          "version": "2.1.0",
+          "runs": [{"tool": {"driver": {"name": "osv-scanner", "informationUri": "https://github.com/google/osv-scanner"}}, "results": []}]
+        }
+        JSON
+        fi
+
+        echo "sarif-path=${{ inputs.working-directory }}/${SARIF_PATH}" >> "$GITHUB_OUTPUT"
+
+        if [ "${OSV_RC}" -eq 1 ]; then
+          echo "::error::osv-scanner found vulnerabilities (after ignore-file filtering)."
+          exit "${EXIT_CODE}"
+        fi
+        if [ "${OSV_RC}" -gt 1 ]; then
+          echo "::error::osv-scanner exited ${OSV_RC} (unexpected error)."
+          exit "${OSV_RC}"
+        fi
+        echo "osv-scanner clean."
+
+    - name: Upload osv-scanner SARIF to GitHub Security
+      if: always() && inputs.upload-sarif == 'true'
+      # github/codeql-action/upload-sarif v3.27.0
+      # continue-on-error: upload may fail on repos without Code Scanning enabled.
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa
+      with:
+        sarif_file: ${{ steps.osv.outputs.sarif-path }}
+        category: ${{ inputs.sarif-category }}
+
+    - name: Upload raw reports as artifact
+      if: always()
+      # actions/upload-artifact v4.4.3
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: node-dep-scan-${{ github.run_id }}-${{ github.run_attempt }}
+        path: |
+          ${{ inputs.working-directory }}/npm-audit-report.json
+          ${{ inputs.working-directory }}/npm-audit-in-scope.json
+          ${{ inputs.working-directory }}/osv-scanner.sarif
+        if-no-files-found: warn
+        retention-days: 30

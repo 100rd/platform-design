@@ -1,0 +1,9 @@
+dependencies:
+- name: kube-prometheus-stack
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 86.2.0
+- name: thanos
+  repository: https://charts.bitnami.com/bitnami
+  version: 15.7.29
+digest: sha256:f425633ac65c1f990209cde66ef9894d3fe25478c80551c2bc248881cf098bf5
+generated: "2026-06-07T23:25:41.699267+02:00"

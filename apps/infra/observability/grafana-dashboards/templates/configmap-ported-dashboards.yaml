@@ -1,0 +1,36 @@
+{{/*
+Ported Grafana dashboards (argocd@c364c6c apps/observability, 2026-06 sync).
+
+These dashboards are loaded with .Files.Get, which returns the raw file bytes
+WITHOUT running them through the Go template engine. This means Grafana
+legend-format strings like {{ node }} or {{ dimension_LoadBalancer }} are
+preserved verbatim and never mis-interpreted as Helm template actions (which is
+why these dashboards live under dashboards/ and are NOT inlined into a template
+like the legacy configmap-dashboards.yaml).
+
+The dashboards/ directory is a Helm "files" directory (not templates/), so Helm
+never auto-renders its contents. .Files.Glob finds every *.json inside it;
+.Files.Get pulls the raw content; indent 4 aligns the multi-line JSON block under
+the YAML data key.
+
+Adding a new ported dashboard = drop a new *.json into dashboards/ and push.
+No changes to this template file are needed.
+*/}}
+{{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
+{{- $name := base $path | trimSuffix ".json" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-{{ $name }}
+  namespace: {{ $.Values.grafanaNamespace }}
+  labels:
+    {{- range $key, $val := $.Values.dashboardLabels }}
+    {{ $key }}: {{ $val | quote }}
+    {{- end }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+data:
+  {{ base $path }}: |-
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}

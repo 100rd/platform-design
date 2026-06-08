@@ -1,0 +1,64 @@
+# -----------------------------------------------------------------------------
+# reusable-pipeline-demo.yml
+#
+# Thin caller demonstrating the consolidated reusable pipeline end to end:
+#   reusable-build-and-push (build → trivy → SBOM → push → cosign sign)
+#     -> reusable-deploy-via-argocd (open GitOps image-bump PR in 100rd/argocd)
+#
+# In the real estate these reusable workflows live in the shared
+# platform-workflows repo and are referenced as
+# `uses: platform-workflows/.github/workflows/<wf>.yml@<ref>`. In this
+# mock they live in-repo and are called via local `./.github/workflows/...`.
+#
+# Manual-only (workflow_dispatch) so it never runs unattended; it shows wiring,
+# not a production trigger. See docs/ci-cd/README.md.
+# -----------------------------------------------------------------------------
+
+name: reusable-pipeline-demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: "Application name (e.g. hello-world)."
+        required: true
+        default: "hello-world"
+      build_context:
+        description: "Docker build context path (e.g. services/hello-world)."
+        required: true
+        default: "services/hello-world"
+      env:
+        description: "Target environment for the GitOps deploy PR."
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - stage
+          - prod
+
+permissions: {}
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable-build-and-push.yml
+    permissions:
+      id-token: write
+      contents: read
+      security-events: write
+    with:
+      app_name: ${{ inputs.app_name }}
+      ecr_repository: ${{ inputs.app_name }}
+      build_context: ${{ inputs.build_context }}
+
+  deploy:
+    needs: build
+    uses: ./.github/workflows/reusable-deploy-via-argocd.yml
+    with:
+      app_name: ${{ inputs.app_name }}
+      env: ${{ inputs.env }}
+      image_tag: ${{ needs.build.outputs.image_tag }}
+      image_digest: ${{ needs.build.outputs.image_digest }}
+      values_path: envs/{env}/values/{app}.yaml
+    secrets:
+      argocd_bot_token: ${{ secrets.ARGOCD_BOT_TOKEN }}

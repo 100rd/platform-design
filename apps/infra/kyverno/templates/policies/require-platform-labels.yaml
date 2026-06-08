@@ -1,0 +1,227 @@
+---
+# ClusterPolicy — require platform taxonomy labels (OBSERVE / Audit mode)
+#
+# ADR-0028: Unified Platform Tagging and Labeling Taxonomy
+#
+# Purpose: Alert on any Pod, Service, Deployment, or Argo Rollout that is
+# missing the required platform taxonomy labels:
+#   platform.system    — logical service boundary (e.g. "auth", "payment")
+#   platform.component — architectural tier/role   (e.g. "compute", "database")
+#   platform.owner     — engineering team owner    (e.g. "team-sec", "team-data")
+#
+# Keys platform.env and platform.managed-by are OPTIONAL — they may be injected
+# by the ArgoCD ApplicationSet or Helm values layer rather than per-resource.
+#
+# Phase: OBSERVE (Audit mode)
+#   validationFailureAction: Audit — violations are recorded in PolicyReport /
+#   ClusterPolicyReport and surfaced as Grafana/Alertmanager alerts, but
+#   admission is NOT blocked. This gives teams time to retrofit labels before
+#   the policy is promoted to Enforce.
+#
+#   TODO(platform): promote validationFailureAction to Enforce in the next
+#   phase (after a clean Audit window — target: one sprint after all workloads
+#   show zero violations in PolicyReports). Update enforcement history table
+#   in README.md and this header comment when promoting.
+#
+# failurePolicy: Ignore — if the Kyverno webhook is unavailable, admission
+# proceeds without evaluation (fail-open for this observe-phase policy only).
+# Flip to Fail when promoting to Enforce.
+#
+# Namespace exclusions: system and infra namespaces that do not carry
+# workload labels are excluded so they do not flood PolicyReports with
+# expected-empty violations. Exclusion list mirrors the webhook
+# namespaceSelector in values.yaml plus gatekeeper-system and monitoring.
+#
+# Pattern: the (pattern) anchor requires the key to be present AND non-empty.
+# A key with an empty value ("") does NOT satisfy the pattern "?*".
+# "?*" = one or more characters — blank or whitespace-only values are rejected.
+#
+# References:
+#   https://kyverno.io/docs/policy-types/cluster-policy/validate/
+#   https://kyverno.io/docs/writing-policies/validate/#patterns
+#   ADR-0028 — unified platform tagging and labeling taxonomy
+#   ADR-0020 — Kyverno + VAP policy engine (parent framework)
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-platform-labels
+  annotations:
+    policies.kyverno.io/title: Require platform taxonomy labels
+    policies.kyverno.io/category: Platform Governance
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod,Service,Deployment,Rollout
+    policies.kyverno.io/description: >-
+      Validates that Pods, Services, Deployments, and Argo Rollouts carry
+      the three required platform taxonomy labels (platform.system,
+      platform.component, platform.owner) as defined in ADR-0028. Runs in
+      Audit/observe mode — violations are recorded in PolicyReports but do
+      not block admission. Promote to Enforce after a clean soak window.
+    adr: ADR-0028
+spec:
+  # OBSERVE phase — record violations without blocking admission.
+  # TODO(platform): change to Enforce after clean Audit window; also flip
+  # failurePolicy below from Ignore to Fail when promoting.
+  validationFailureAction: Audit
+
+  # Fail-open during the observe phase; tighten to Fail at Enforce promotion.
+  failurePolicy: Ignore
+
+  # Scan existing resources for violations (background PolicyReport).
+  background: true
+
+  rules:
+    # -----------------------------------------------------------------------
+    # Rule 1 — Pods must carry the three required platform labels
+    # -----------------------------------------------------------------------
+    - name: require-platform-labels-pods
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      # Exclude system and infra namespaces — they do not carry workload labels
+      # and are not subject to the platform taxonomy requirement.
+      exclude:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+                - cert-manager
+                - gatekeeper-system
+                - external-secrets
+                - argocd
+                - monitoring
+      validate:
+        message: >-
+          Pod is missing required platform taxonomy labels (ADR-0028).
+          Every workload Pod must carry: platform.system, platform.component,
+          and platform.owner with non-empty values. See
+          docs/adrs/0028-unified-platform-tagging-and-labeling-taxonomy.md.
+        pattern:
+          metadata:
+            labels:
+              # (pattern) anchor — key must be present AND value must be
+              # at least one character (non-empty). Blank values are rejected.
+              platform.system: "?*"
+              platform.component: "?*"
+              platform.owner: "?*"
+
+    # -----------------------------------------------------------------------
+    # Rule 2 — Services must carry the three required platform labels
+    # -----------------------------------------------------------------------
+    - name: require-platform-labels-services
+      match:
+        any:
+          - resources:
+              kinds:
+                - Service
+      exclude:
+        any:
+          - resources:
+              kinds:
+                - Service
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+                - cert-manager
+                - gatekeeper-system
+                - external-secrets
+                - argocd
+                - monitoring
+      validate:
+        message: >-
+          Service is missing required platform taxonomy labels (ADR-0028).
+          Every workload Service must carry: platform.system, platform.component,
+          and platform.owner with non-empty values. See
+          docs/adrs/0028-unified-platform-tagging-and-labeling-taxonomy.md.
+        pattern:
+          metadata:
+            labels:
+              platform.system: "?*"
+              platform.component: "?*"
+              platform.owner: "?*"
+
+    # -----------------------------------------------------------------------
+    # Rule 3 — Deployments must carry the three required platform labels
+    #          (spec.template labels are validated separately via Pod rule;
+    #           this validates the Deployment object itself so kubectl describe
+    #           and kube-state-metrics expose the correct label set)
+    # -----------------------------------------------------------------------
+    - name: require-platform-labels-deployments
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+      exclude:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+                - cert-manager
+                - gatekeeper-system
+                - external-secrets
+                - argocd
+                - monitoring
+      validate:
+        message: >-
+          Deployment is missing required platform taxonomy labels (ADR-0028).
+          Every workload Deployment must carry: platform.system, platform.component,
+          and platform.owner with non-empty values on both the Deployment and its
+          pod template. See
+          docs/adrs/0028-unified-platform-tagging-and-labeling-taxonomy.md.
+        pattern:
+          metadata:
+            labels:
+              platform.system: "?*"
+              platform.component: "?*"
+              platform.owner: "?*"
+
+    # -----------------------------------------------------------------------
+    # Rule 4 — Argo Rollouts must carry the three required platform labels
+    # -----------------------------------------------------------------------
+    - name: require-platform-labels-rollouts
+      match:
+        any:
+          - resources:
+              kinds:
+                - Rollout
+      exclude:
+        any:
+          - resources:
+              kinds:
+                - Rollout
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+                - cert-manager
+                - gatekeeper-system
+                - external-secrets
+                - argocd
+                - monitoring
+      validate:
+        message: >-
+          Argo Rollout is missing required platform taxonomy labels (ADR-0028).
+          Every workload Rollout must carry: platform.system, platform.component,
+          and platform.owner with non-empty values. See
+          docs/adrs/0028-unified-platform-tagging-and-labeling-taxonomy.md.
+        pattern:
+          metadata:
+            labels:
+              platform.system: "?*"
+              platform.component: "?*"
+              platform.owner: "?*"

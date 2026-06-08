@@ -1,0 +1,56 @@
+{{- if .Values.networkPolicy.enabled }}
+---
+# Network Policy: YACE CloudWatch exporter
+# Egress: AWS APIs (CloudWatch / STS / tagging over HTTPS) + DNS.
+# Ingress: Prometheus scrape of the YACE metrics port (5000 in the upstream
+#          chart's Service).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: yace
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: yet-another-cloudwatch-exporter
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: cloudwatch-exporter
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: yet-another-cloudwatch-exporter
+
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Allow Prometheus to scrape the exporter.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 5000
+
+  egress:
+    # Allow access to AWS service endpoints (CloudWatch, STS, tagging) over HTTPS.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+
+    # Allow DNS resolution.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}

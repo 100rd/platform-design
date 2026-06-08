@@ -1,0 +1,28 @@
+apiVersion: v2
+name: obi
+description: >
+  Grafana Beyla (OBI) — eBPF zero-code auto-instrumentation DaemonSet.
+  Captures HTTP/gRPC RED signals at the kernel and exports OTLP traces to
+  Tempo via the otel-collector gateway. Implements ADR-0019.
+type: application
+# chart version — bump when values/templates change
+version: 1.0.0
+# Beyla 1.9.3 released 2025-05-13; latest stable as of 2026-06-07
+appVersion: "1.9.3"
+
+keywords:
+  - observability
+  - tracing
+  - ebpf
+  - beyla
+  - obi
+  - opentelemetry
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+annotations:
+  category: Observability
+  platform: EKS
+  adr: ADR-0019

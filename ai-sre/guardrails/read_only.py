@@ -161,10 +161,9 @@ class ToolCallGuard:
                 f"{self.guardrails.max_tool_calls}"
             )
             logger.warning(
-                "tool_call_blocked",
-                reason="call_limit_exceeded",
-                agent=self.guardrails.agent_role,
-                tool=tool_name,
+                "tool_call_blocked: reason=call_limit_exceeded agent=%s tool=%s",
+                self.guardrails.agent_role,
+                tool_name,
             )
             return False, reason
 
@@ -178,10 +177,9 @@ class ToolCallGuard:
                 f"agent '{self.guardrails.agent_role}'"
             )
             logger.warning(
-                "tool_call_blocked",
-                reason="not_in_allowlist",
-                agent=self.guardrails.agent_role,
-                tool=tool_name,
+                "tool_call_blocked: reason=not_in_allowlist agent=%s tool=%s",
+                self.guardrails.agent_role,
+                tool_name,
             )
             return False, reason
 
@@ -192,10 +190,9 @@ class ToolCallGuard:
                 f"agent '{self.guardrails.agent_role}'"
             )
             logger.warning(
-                "tool_call_blocked",
-                reason="write_in_readonly",
-                agent=self.guardrails.agent_role,
-                tool=tool_name,
+                "tool_call_blocked: reason=write_in_readonly agent=%s tool=%s",
+                self.guardrails.agent_role,
+                tool_name,
             )
             return False, reason
 

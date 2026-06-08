@@ -1,0 +1,112 @@
+---
+# ClusterPolicy — keyless cosign image verification (verifyImages rule)
+#
+# ADR-0020: Image-signature enforcement belongs at ADMISSION, not in ArgoCD.
+# ArgoCD can only verify GnuPG-signed git commits; it cannot verify cosign /
+# OCI image signatures. This policy is the verification layer ADR-0016 requires.
+#
+# NOTE on API evolution:
+#   Kyverno v1.18 promotes ImageValidatingPolicy (kyverno.io/v1alpha1 → Stable)
+#   as a first-class alternative to ClusterPolicy with a verifyImages rule.
+#   This resource uses the ClusterPolicy / spec.rules[].verifyImages form
+#   (kyverno.io/v1) which remains fully supported and is the stable path for
+#   Kyverno <1.18 clusters. For new clusters on v1.18+ the ImageValidatingPolicy
+#   kind (kyverno.io/v1) is the preferred approach.
+#
+# Design:
+#   issuer  — https://token.actions.githubusercontent.com  (GitHub Actions OIDC)
+#   subject — glob matching CI workflow path for this org
+#   rekor   — https://rekor.sigstore.dev  (public Sigstore transparency log)
+#   mutateDigest: true — rewrites tag reference to the verified digest so the
+#     admitted pod is pinned to the exact verified image (not just the tag).
+#   failureAction: Enforce — graduated from Audit after clean soak window (W3/ADR-0020).
+#     Rollback: set validationFailureAction back to Audit and re-apply.
+#
+# Scope: first-party images in our ECR registry (*.dkr.ecr.*.amazonaws.com/*).
+#   Third-party / upstream images (registry.k8s.io, quay.io, ghcr.io, etc.)
+#   are NOT included — they are not signed by our GitHub Actions identity and
+#   would generate spurious Audit findings or block admission.
+#   Upstream images are covered separately by vulnerability scanning (Trivy)
+#   and digest-pinning (Gatekeeper block-latest-tag policy).
+#   public.ecr.aws (AWS-managed pause/CNI images) is also excluded for the
+#   same reason.
+#
+# Exclusions (kyverno / cert-manager / argocd / ...) are handled by the
+# webhook namespaceSelector in values.yaml.
+#
+# References:
+#   https://kyverno.io/docs/policy-types/cluster-policy/verify-images/
+#   ADR-0020 section: verifyImages (ClusterPolicy with verifyImages rule)
+#   ADR-0016 — cosign signing
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-images-keyless-cosign
+  annotations:
+    policies.kyverno.io/title: Verify container image signatures (keyless cosign)
+    policies.kyverno.io/category: Supply Chain Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Verifies that every first-party container image (our ECR registry:
+      *.dkr.ecr.*.amazonaws.com/*) carries a valid keyless cosign signature
+      issued by GitHub Actions (Fulcio issuer) and recorded in the Rekor
+      transparency log. Third-party/upstream images (registry.k8s.io, quay.io,
+      public.ecr.aws, ghcr.io, etc.) are out of scope — they are not signed by
+      our CI identity. Pairs with ADR-0016 cosign signing.
+      mutateDigest rewrites the tag reference to the verified digest.
+    adr: ADR-0020
+spec:
+  # W3/ADR-0020: graduated from Audit to Enforce after clean soak window.
+  # Rollback: set this back to Audit and re-apply (see README Rollback section).
+  validationFailureAction: Enforce
+
+  # Image verification is admission-time only; background scan not applicable.
+  background: false
+
+  rules:
+    - name: check-image-signature
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      verifyImages:
+        - imageReferences:
+            # Scope to first-party ECR images only.
+            # Pattern covers all accounts and all regions:
+            #   <account>.dkr.ecr.<region>.amazonaws.com/<repo>[:<tag>|@sha256:...]
+            # Explicitly excludes:
+            #   - public.ecr.aws        (AWS-managed pause, CNI images)
+            #   - registry.k8s.io       (upstream Kubernetes images)
+            #   - quay.io / ghcr.io     (upstream third-party images)
+            # Those registries are not signed by our GitHub Actions identity;
+            # including them in this policy would block admission for unsigned
+            # upstream images.
+            - "*.dkr.ecr.*.amazonaws.com/*"
+
+          # Rewrite the admitted tag reference to the verified digest.
+          # Ensures the pod runs the exact image that was signed, not a
+          # later push to the same tag.
+          mutateDigest: true
+
+          # Reject pods where the digest cannot be resolved.
+          verifyDigest: true
+
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    # Fulcio OIDC identity — GitHub Actions OIDC provider.
+                    # issuer must exactly match the token issuer from ADR-0016.
+                    issuer: https://token.actions.githubusercontent.com
+
+                    # Subject glob: matches all workflow paths under the org.
+                    # Tighten to a specific repo/workflow path once rollout is
+                    # stable, e.g.:
+                    #   "https://github.com/100rd/your-repo/.github/workflows/*"
+                    subject: "https://github.com/100rd/*"
+
+                    # Rekor public transparency log — inclusion proof required.
+                    rekor:
+                      url: https://rekor.sigstore.dev

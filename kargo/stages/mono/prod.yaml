@@ -60,3 +60,5 @@ spec:
       - name: health-check
       - name: smoke-test
       - name: integration-test
+      - name: prometheus-5xx-error-rate
+      - name: prometheus-p95-latency

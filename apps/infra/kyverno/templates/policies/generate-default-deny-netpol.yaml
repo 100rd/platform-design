@@ -1,0 +1,99 @@
+---
+# ClusterPolicy — generate default-deny NetworkPolicy per new namespace
+#
+# ADR-0020: Kyverno generates a default-deny NetworkPolicy into each new
+# namespace so every namespace starts with a deny-all posture without
+# operators having to remember to create it manually.
+#
+# Generated resource:
+#   kind: NetworkPolicy
+#   name: default-deny-all
+#   spec: podSelector: {} + policyTypes: [Ingress, Egress]
+#   Blocks all ingress and egress by default; workloads add their own
+#   NetworkPolicies (or Cilium NetworkPolicies) on top.
+#
+# Sync: Kyverno's background controller reconciles the generated policy
+# back if someone deletes it (synchronize: true).
+#
+# Exclusions: kube-system, kube-public, kube-node-lease, kyverno,
+# cert-manager, external-secrets, argocd, monitoring, observability —
+# these need cluster-level connectivity and must not be locked down by
+# a blanket deny.
+#
+# failureAction: Audit — start in Audit; promote to Enforce after clean window.
+#   TODO(ops): promote validationFailureAction to Enforce in prod.
+#
+# Kyverno JMESPath expressions are wrapped in backtick raw-string Helm actions
+# so Helm passes them through verbatim instead of interpreting them as Go templates.
+#
+# References:
+#   https://kyverno.io/docs/policy-types/cluster-policy/generate/
+#   ADR-0020 section: generate — default-deny NetworkPolicy per new namespace
+#   ADR-0003 — Cilium baseline NetworkPolicy
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: generate-default-deny-netpol
+  annotations:
+    policies.kyverno.io/title: Generate default-deny NetworkPolicy per namespace
+    policies.kyverno.io/category: Network Security
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Namespace
+    policies.kyverno.io/description: >-
+      Generates a default-deny-all NetworkPolicy into every new namespace
+      that is not a system or infra namespace. Provides a deny-all baseline;
+      workloads must explicitly allow traffic via their own NetworkPolicies
+      or Cilium NetworkPolicies. Pairs with ADR-0003 Cilium baseline.
+    adr: ADR-0020
+spec:
+  # TODO(ops): change to Enforce after a clean Audit window in each env.
+  validationFailureAction: Audit
+
+  background: true  # Background controller reconciles generated resources
+
+  rules:
+    - name: generate-default-deny-all
+      match:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+      # Exclude system and infra namespaces that need open connectivity.
+      exclude:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+              names:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+                - cert-manager
+                - external-secrets
+                - argocd
+                - monitoring
+                - observability
+
+      generate:
+        # synchronize: true — Kyverno re-creates the policy if deleted.
+        # Set to false if namespaces need to opt out by deleting the policy.
+        synchronize: true
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        name: default-deny-all
+        # Generated into the namespace that triggered this rule.
+        namespace: "{{`{{ request.object.metadata.name }}`}}"
+        data:
+          metadata:
+            labels:
+              app.kubernetes.io/managed-by: kyverno
+              policy.kyverno.io/policy-name: generate-default-deny-netpol
+          spec:
+            # Empty podSelector matches all pods in the namespace.
+            podSelector: {}
+            policyTypes:
+              - Ingress
+              - Egress
+            # No ingress or egress rules — all traffic denied by default.
+            # Workloads add their own NetworkPolicies on top of this baseline.

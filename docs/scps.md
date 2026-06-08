@@ -179,4 +179,4 @@ aws organizations describe-policy --policy-id p-XXXXXXXX \
 
 - AWS data perimeter docs: <https://aws.amazon.com/identity/data-perimeters-on-aws/>
 - AWS SCP documentation: <https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_scps.html>
-- Original issues this builds on: qbiq-ai/infra#5, #67, #110
+- Original issues this builds on: infra#5, #67, #110
