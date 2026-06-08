@@ -13,6 +13,27 @@ We have configured four specialized NodePools to handle different workload types
 3. **c-series-compute** - Compute-intensive workloads (C series only)
 4. **spot-flexible** - Maximum cost savings with 100% spot instances
 
+### Node Operating System: Bottlerocket (ADR-0030)
+
+All NodePools run on **Bottlerocket**, the EKS node OS adopted in **ADR-0030**.
+Bottlerocket is a minimal, **immutable**, container-purpose Linux: **read-only
+root**, **SELinux-enforcing**, no SSH/shell/package-manager — a radical reduction
+of host attack surface versus a general-purpose distro.
+
+- `EC2NodeClass.spec.amiSelectorTerms` uses `alias: bottlerocket@latest`
+  (AL2023 is kept as a **commented fallback** for the VPC-CNI escape hatch).
+- **Two-volume layout**: `/dev/xvda` = small OS volume, `/dev/xvdb` = data volume
+  for container storage (both `gp3`, encrypted).
+- Nodes are configured via **Bottlerocket TOML userData** (`[settings.kubernetes]`),
+  not a bash bootstrap.
+- Bottlerocket `aws-k8s-1.33+` ships **kernel 6.12** (`aws-k8s-1.36` ships 6.18),
+  which also **unblocks Cilium netkit** (ADR-0019 / #272).
+- **FIPS** variant for FIPS 140-3 pools; **NVIDIA** variant for GPU pools.
+
+The `karpenter-nodepools` Terraform module already defaults
+`ami_family = "Bottlerocket"` and emits all of the above; the example manifests
+and templates in this directory match it.
+
 ## NodePool Comparison
 
 | NodePool | Architecture | Instance Types | Capacity Type | Best For | Cost Savings |
@@ -476,7 +497,10 @@ verified against AWS / Karpenter documentation on 2026-06-07.
   `spot-flexible` NodePools.
 - Graviton3 **7g** families are retained as **fallback** so Karpenter can still
   provision when 8g capacity is unavailable in an AZ.
-- AL2023 EKS AMI now ships **kernel 6.12**, which fully supports Graviton4.
+- The node OS is **Bottlerocket** (ADR-0030); Bottlerocket `aws-k8s-1.33+`
+  ships **kernel 6.12** (`aws-k8s-1.36` ships 6.18), fully supporting
+  Graviton4 and clearing the netkit kernel floor (ADR-0019 / #272). The
+  AL2023 EKS AMI also ships kernel 6.12 and remains the commented fallback.
 - `karpenter.k8s.aws/instance-cpu` on the arm64 NodePool was widened (up to 192)
   to allow the larger 8g sizes (e.g. `*8g.48xlarge`).
 

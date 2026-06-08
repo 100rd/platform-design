@@ -9,9 +9,14 @@ metadata:
     architecture: arm64
     purpose: cost-optimized-workloads
 spec:
-  # AMI selection - using Amazon Linux 2023 (AL2023) for ARM64
+  # AMI selection (ADR-0030): Bottlerocket as the EKS node OS for ARM64/Graviton.
+  # Immutable, minimal, SELinux-enforcing; kernel 6.12 (aws-k8s-1.33+) also
+  # unblocks netkit (ADR-0019 / #272). Use the FIPS variant for FIPS-scoped
+  # pools and the NVIDIA variant for GPU pools.
   amiSelectorTerms:
-    - alias: al2023@latest
+    - alias: bottlerocket@latest
+  # Fallback (VPC-CNI escape hatch) - Amazon Linux 2023:
+  #   - alias: al2023@latest
 
   # IAM role created by Karpenter Terraform module
   # Injected from Terraform output: karpenter_node_iam_role_name
@@ -27,10 +32,15 @@ spec:
     - tags:
         karpenter.sh/discovery: "${cluster_name}"
 
-  # User data for node configuration
+  # User data (Bottlerocket TOML - settings.kubernetes). Bottlerocket is
+  # configured declaratively via TOML, not a bash bootstrap (ADR-0030).
   userData: |
-    #!/bin/bash
-    echo "ARM64 Graviton node initialized for cluster ${cluster_name}"
+    [settings.kubernetes]
+    cluster-name = "${cluster_name}"
+
+    [settings.kubernetes.node-labels]
+    "karpenter.sh/nodepool" = "arm64-graviton"
+    "architecture" = "arm64"
 
   # Tags to apply to EC2 instances
   tags:
@@ -41,9 +51,16 @@ spec:
     NodePool: arm64-graviton
     Cluster: "${cluster_name}"
 
-  # Block device mappings
+  # Block device mappings (Bottlerocket two-volume layout - ADR-0030):
+  #   /dev/xvda = OS volume (small), /dev/xvdb = data volume (container storage).
   blockDeviceMappings:
     - deviceName: /dev/xvda
+      ebs:
+        volumeSize: 4Gi
+        volumeType: gp3
+        encrypted: true
+        deleteOnTermination: true
+    - deviceName: /dev/xvdb
       ebs:
         volumeSize: 50Gi
         volumeType: gp3
