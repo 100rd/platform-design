@@ -5,7 +5,7 @@
 # hard-code values. Consumed by `root.hcl` and (optionally) by individual
 # units that need access to project metadata or canonical tag sets.
 #
-# Mirrors qbiq-ai/infra `common.hcl`. Read via:
+# Mirrors infra `common.hcl`. Read via:
 #   locals {
 #     common = read_terragrunt_config(find_in_parent_folders("common.hcl"))
 #   }
@@ -29,6 +29,30 @@ locals {
 
   # Compliance frameworks tracked in tags for resource-level reporting.
   default_compliance_frameworks = "pci-dss,soc2,iso27001"
+
+  # ---- Unified Platform Taxonomy (ADR-0028) ----
+  # The five core platform:* tag keys that link the AWS infrastructure plane
+  # (these tags) to the Kubernetes workload plane (platform.* labels). These
+  # keys MUST match the K8s labels exactly (casing/format) so Prometheus/Grafana
+  # joins, FinOps allocation, and incident response correlation work.
+  #
+  #   platform:system     -> logical service boundary    (auth, payment, ...)
+  #   platform:component  -> architectural tier/role      (database, cache, ...)
+  #   platform:env        -> deployment environment       (driven by account.hcl)
+  #   platform:owner      -> responsible engineering team (driven by account.hcl)
+  #   platform:managed-by -> orchestrating tool           (terragrunt on AWS plane)
+  #
+  # `system` and `component` are overridable repo-wide defaults: most units
+  # belong to no single logical system and should be overridden per-unit via the
+  # unit's `tags` input. `env`, `owner`, and `managed-by` are derived in root.hcl
+  # from account context so they cannot drift.
+  platform_managed_by = "terragrunt"
+
+  # Sensible overridable defaults. A unit that hosts a specific logical service
+  # (e.g. the `auth` RDS/S3 stack) sets these via its own `tags` input, which the
+  # root merges on top of these defaults (unit wins).
+  default_platform_system    = "shared"
+  default_platform_component = "shared"
 
   # ---- Region catalog ----
   # Canonical 4-region EU footprint. Used by region.hcl files for short codes.

@@ -1,0 +1,64 @@
+---
+# ArgoCD Application for OBI / Grafana Beyla eBPF DaemonSet
+# Sync-wave 20: last in trace-lane chain, after Tempo (wave 10) and
+# otel-collector (wave 15) are healthy and ready to receive spans.
+# ADR-0019 / ADR-0026 -- trace lane activation
+#
+# Usage:
+#   kubectl apply -f argocd-application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: obi
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: obi
+    app.kubernetes.io/component: ebpf-autoinstrument
+    team: platform
+  annotations:
+    # Wave 20 -- after Tempo (wave 10) and otel-collector (wave 15)
+    # OBI starts producing spans only after its destination is healthy
+    argocd.argoproj.io/sync-wave: "20"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/100rd/platform-design.git
+    targetRevision: HEAD
+    path: apps/infra/observability/obi
+
+    helm:
+      valueFiles:
+        - values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # DaemonSet does not have replicas in spec; ignore any controller drift
+  ignoreDifferences:
+    - group: apps
+      kind: DaemonSet
+      jsonPointers:
+        - /spec/updateStrategy

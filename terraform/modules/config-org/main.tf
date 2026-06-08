@@ -5,7 +5,7 @@
 # supports organization aggregation and baseline conformance packs.
 #
 # Why a wrapper instead of renaming `aws-config`?
-#   - Issue #162 asks for `modules/config-org` (mirroring qbiq-ai/infra
+#   - Issue #162 asks for `modules/config-org` (mirroring infra
 #     naming).
 #   - The existing `aws-config` module already creates the recorder +
 #     delivery channel + S3 + IAM role + CIS managed rules; renaming would

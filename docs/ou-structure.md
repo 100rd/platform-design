@@ -124,7 +124,7 @@ operations and offboarding runbooks.
 
 - Issue #158 (this implementation)
 - Issue #157 (Control Tower account structure)
-- Source repo: `qbiq-ai/infra` issues #114, #115, #116, #117
+- Source repo: `infra` issues #114, #115, #116, #117
 - AWS docs: <https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_ous.html>
 - AWS Control Tower OU best practices:
   <https://docs.aws.amazon.com/controltower/latest/userguide/organizations.html>

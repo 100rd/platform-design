@@ -138,7 +138,7 @@ The script:
 ## References
 
 - Issue #169
-- Source repo: `qbiq-ai/infra` issue #68
+- Source repo: `infra` issue #68
 - AWS root user best practices:
   <https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#lock-away-credentials>
 - `scripts/break-glass.sh`

@@ -9,9 +9,14 @@ metadata:
     architecture: arm64
     purpose: cost-optimized-workloads
 spec:
-  # AMI selection - using Amazon Linux 2023 (AL2023) for ARM64
+  # AMI selection (ADR-0030): Bottlerocket as the EKS node OS for ARM64/Graviton.
+  # Immutable, minimal, SELinux-enforcing; kernel 6.12 (aws-k8s-1.33+) also
+  # unblocks netkit (ADR-0019 / #272). Use the FIPS variant for FIPS-scoped
+  # pools and the NVIDIA variant for GPU pools.
   amiSelectorTerms:
-    - alias: al2023@latest
+    - alias: bottlerocket@latest
+  # Fallback (VPC-CNI escape hatch) - Amazon Linux 2023:
+  #   - alias: al2023@latest
 
   # IAM role created by Karpenter Terraform module
   # Injected from Terraform output: karpenter_node_iam_role_name
@@ -27,10 +32,15 @@ spec:
     - tags:
         karpenter.sh/discovery: "${cluster_name}"
 
-  # User data for node configuration
+  # User data (Bottlerocket TOML - settings.kubernetes). Bottlerocket is
+  # configured declaratively via TOML, not a bash bootstrap (ADR-0030).
   userData: |
-    #!/bin/bash
-    echo "ARM64 Graviton node initialized for cluster ${cluster_name}"
+    [settings.kubernetes]
+    cluster-name = "${cluster_name}"
+
+    [settings.kubernetes.node-labels]
+    "karpenter.sh/nodepool" = "arm64-graviton"
+    "architecture" = "arm64"
 
   # Tags to apply to EC2 instances
   tags:
@@ -41,9 +51,16 @@ spec:
     NodePool: arm64-graviton
     Cluster: "${cluster_name}"
 
-  # Block device mappings
+  # Block device mappings (Bottlerocket two-volume layout - ADR-0030):
+  #   /dev/xvda = OS volume (small), /dev/xvdb = data volume (container storage).
   blockDeviceMappings:
     - deviceName: /dev/xvda
+      ebs:
+        volumeSize: 4Gi
+        volumeType: gp3
+        encrypted: true
+        deleteOnTermination: true
+    - deviceName: /dev/xvdb
       ebs:
         volumeSize: 50Gi
         volumeType: gp3
@@ -105,17 +122,20 @@ spec:
           values: ["5"]
 
         # Graviton instance families
-        # m7g/c7g/r7g = Graviton3
+        # Tier-1 (doc-verified 2026-06-07): Graviton4 (8g) is GA — prefer it,
+        # keep Graviton3 (7g) as fallback for capacity/AZ availability.
+        # m8g/c8g/r8g = Graviton4 (preferred)
+        # m7g/c7g/r7g = Graviton3 (fallback)
         # m6g/c6g/r6g = Graviton2
         # t4g = Graviton2 burstable
         - key: karpenter.k8s.aws/instance-family
           operator: In
-          values: ["m7g", "m7gd", "c7g", "c7gd", "c7gn", "r7g", "r7gd", "m6g", "m6gd", "c6g", "c6gd", "c6gn", "r6g", "r6gd", "t4g"]
+          values: ["c8g", "c8gd", "c8gn", "m8g", "m8gd", "r8g", "r8gd", "m7g", "m7gd", "c7g", "c7gd", "c7gn", "r7g", "r7gd", "m6g", "m6gd", "c6g", "c6gd", "c6gn", "r6g", "r6gd", "t4g"]
 
-        # CPU options
+        # CPU options (Graviton4 8g families scale up to 192 vCPU)
         - key: karpenter.k8s.aws/instance-cpu
           operator: In
-          values: ["2", "4", "8", "16", "32", "64"]
+          values: ["2", "4", "8", "16", "32", "48", "64", "96", "192"]
 
         # Capacity type: Prefer spot for maximum cost savings
         # 90% spot, 10% on-demand for better cost optimization

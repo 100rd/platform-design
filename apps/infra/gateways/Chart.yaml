@@ -1,0 +1,29 @@
+apiVersion: v2
+name: gateways
+description: External and internal Cilium Gateways + BackendTLSPolicy (ADR-0009, refs #252)
+version: 0.2.0
+type: application
+# Cluster ingress entrypoints for the shared EKS cluster (ADR-0009).
+#
+# Prerequisites (must sync before this chart -- enforced via sync-waves):
+#   - apps/infra/gateway-api-crds  (Gateway API CRDs v1.4.0 + Cilium GatewayClass)
+#   - apps/infra/cilium            (gatewayAPI.enabled=true + gatewayAPI.enableAlpn=true)
+#   - apps/infra/aws-lb-controller (provisions the NLB from Gateway infra annotations)
+#   - apps/infra/cert-manager      (provides the `selfsigned` ClusterIssuer used by
+#                                   gw-external TLS cert and BackendTLSPolicy CA)
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - gateway-api
+  - ingress
+  - cilium
+  - nlb
+  - networking
+  - backendtlspolicy
+
+annotations:
+  category: Networking
+  platform: Kubernetes

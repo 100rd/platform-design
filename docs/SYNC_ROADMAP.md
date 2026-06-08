@@ -1,7 +1,7 @@
 # Synchronization Roadmap: infra → platform-design
 
 > Generated: 2026-04-05
-> Source: `project/infra` (qbiq-ai/infra — production source of truth)
+> Source: `project/infra` (infra — production source of truth)
 > Target: `project/platform-design`
 >
 > Effort scale: Low = <0.5 day | Medium = 0.5–2 days | High = 2–5 days
@@ -74,7 +74,7 @@ These items represent gaps where platform-design has **no equivalent** to infra'
 - For `deny-s3-public` and `require-ebs-encryption`, attach at root level (all accounts), mirroring infra's attachment strategy.
 - For `deny-guardduty-changes`, attach at the Workloads OU level.
 - For `deny-all-suspended`, add an input variable `suspended_ou_id` and attach only when non-empty (the OU must exist first — see 1.4).
-- Review the region-restriction SCP in platform-design: infra adds exemptions for `OrganizationAccountAccessRole` (for global IAM/ACM calls) and `qbiq-terraform-*` roles. Apply the same pattern to avoid breaking Terraform workflows that operate on global services.
+- Review the region-restriction SCP in platform-design: infra adds exemptions for `OrganizationAccountAccessRole` (for global IAM/ACM calls) and `platform-terraform-*` roles. Apply the same pattern to avoid breaking Terraform workflows that operate on global services.
 
 ---
 

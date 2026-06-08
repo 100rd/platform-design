@@ -20,17 +20,31 @@ locals {
   transit_gateway_id    = ""    # Populate after network account deployment
   tgw_route_table_id    = ""    # prod route table ID from network account
 
-  single_nat_gateway      = false
-  eks_public_access       = false
-  eks_public_access_cidrs = []
-  eks_instance_types      = ["m6i.2xlarge"]
-  eks_min_size            = 3
-  eks_max_size            = 10
-  eks_desired_size        = 5
-  rds_instance_class      = "db.r6g.xlarge"
-  rds_allocated_storage   = 100
-  rds_multi_az            = true
-  monitoring_replicas     = 3
+  single_nat_gateway = false
+
+  # ---------------------------------------------------------------------------
+  # EKS public API endpoint (ADR-0010)
+  # Prod is private-endpoint-only by default (strongest posture). If public
+  # access is ever enabled for break-glass/operator reach, it MUST be locked to
+  # a narrow, org-driven allow-list and NEVER 0.0.0.0/0. The catalog EKS unit
+  # wires `eks_public_access_cidrs` into `cluster_endpoint_public_access_cidrs`,
+  # so this list is the only source of public reachability for prod.
+  #
+  # TODO: replace the placeholder corp range with the real office / VPN egress
+  # CIDRs (mirror of _org/account.hcl `admin_cidr_allowlist`) before flipping
+  # `eks_public_access` to true.
+  eks_public_access = false
+  eks_public_access_cidrs = [
+    "10.0.0.0/8", # PLACEHOLDER: corporate / VPN egress range — restricted, NOT 0.0.0.0/0
+  ]
+  eks_instance_types    = ["m6i.2xlarge"]
+  eks_min_size          = 3
+  eks_max_size          = 10
+  eks_desired_size      = 5
+  rds_instance_class    = "db.r6g.xlarge"
+  rds_allocated_storage = 100
+  rds_multi_az          = true
+  monitoring_replicas   = 3
 
   # --- Scaling stack ---
   karpenter_controller_replicas = 3

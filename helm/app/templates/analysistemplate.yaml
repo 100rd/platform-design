@@ -1,0 +1,47 @@
+---
+{{- /*
+  AnalysisTemplate — the metric gate between canary steps. Referenced by the
+  inline analysis steps in templates/rollout.yaml (templateName = app.fullname).
+  Renders only when rollout.enabled AND rollout.analysis.enabled, so pure workers
+  (no HTTP metrics) can disable it via rollout.analysis.enabled=false.
+
+  Two metrics gate each promotion: 5xx error-rate (<1%) and p95 latency (<500ms),
+  both scoped to the canary Service so stable traffic is not counted. Queries are
+  parametrised on {{`{{args.service}}`}} (the canary Service, injected per-step).
+
+  Ported from argocd@c364c6c charts/app (2026-06 sync), adapted to
+  platform-design's app.* helpers.
+*/}}
+{{- if and .Values.rollout.enabled .Values.rollout.analysis.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ include "app.fullname" . }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  args:
+    # The canary Service name is passed by the inline analysis step in the Rollout.
+    - name: service          # canary Service, injected per-step
+  metrics:
+    - name: error-rate
+      interval: {{ .Values.rollout.analysis.interval | default "30s" }}
+      count: {{ .Values.rollout.analysis.count | default 5 }}
+      failureLimit: {{ .Values.rollout.analysis.failureLimit | default 1 }}
+      successCondition: {{ .Values.rollout.analysis.errorRate.successCondition | quote }}
+      provider:
+        prometheus:
+          address: {{ .Values.rollout.analysis.prometheusAddress | quote }}
+          query: |
+            {{- .Values.rollout.analysis.errorRate.query | nindent 12 }}
+    - name: latency-p95
+      interval: {{ .Values.rollout.analysis.interval | default "30s" }}
+      count: {{ .Values.rollout.analysis.count | default 5 }}
+      failureLimit: {{ .Values.rollout.analysis.failureLimit | default 1 }}
+      successCondition: {{ .Values.rollout.analysis.latencyP95.successCondition | quote }}
+      provider:
+        prometheus:
+          address: {{ .Values.rollout.analysis.prometheusAddress | quote }}
+          query: |
+            {{- .Values.rollout.analysis.latencyP95.query | nindent 12 }}
+{{- end }}

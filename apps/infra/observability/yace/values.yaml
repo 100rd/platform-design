@@ -1,0 +1,256 @@
+# YACE (Yet Another CloudWatch Exporter) - shared defaults.
+# Ported from argocd@c364c6c apps/observability/yace (2026-06 sync) and
+# adapted to platform-design conventions (placeholder IRSA role/account, no
+# hardcoded org identifiers; eu-central-1 to match the prometheus-stack
+# ClusterSecretStore default region).
+#
+# Workload identity: EKS Pod Identity (ADR-0018), NOT IRSA. The IAM role + the
+# PodIdentityAssociation for (cluster, observability, yace) are provisioned by
+# terraform/modules/pod-identity-yace (catalog/units/pod-identity-yace). The SA
+# below therefore carries NO eks.amazonaws.com/role-arn annotation - the
+# eks-pod-identity-agent addon injects credentials directly.
+# Coexistence (ADR-0018): IRSA remains supported for not-yet-migrated workloads,
+# but a single SA must never carry both an IRSA annotation and an association.
+# Until the association exists, YACE starts but CloudWatch calls fail with
+# AccessDeniedException - non-fatal (metrics absent, no crashloop).
+#
+# Chart = nerdswords/yet-another-cloudwatch-exporter 0.38.0 (YACE app v0.61.2).
+# The chart renders `.Values.config` through `tpl` and expects a STRING - the
+# YACE config below is therefore a YAML block scalar (config: |-), NOT a mapping.
+#
+# Cost control: CloudWatch GetMetricData is billed per 1000 metrics requested.
+# Discovery jobs use period/length 300 (5-min resolution) with delay 120, so
+# YACE makes ~1 CW call per period window regardless of the 60s Prometheus
+# scrape interval (YACE caches results for the period).
+#
+# ARM64/Graviton: YACE 0.61.x ships a multi-arch manifest - no image override.
+
+yet-another-cloudwatch-exporter:
+  enabled: true
+
+  # ---- AWS region -------------------------------------------------------
+  # Override per-environment (values-<env>.yaml) where clusters live in a
+  # different region.
+  aws:
+    region: eu-central-1
+
+  # ---- Service account (EKS Pod Identity) ------------------------------
+  # No role-arn annotation (ADR-0018). The PodIdentityAssociation provisioned by
+  # terraform/modules/pod-identity-yace binds this SA (observability/yace) to its
+  # CloudWatch-read role; the agent injects credentials. ABAC on the injected
+  # kubernetes-namespace session tag scopes the role's permissions.
+  serviceAccount:
+    create: true
+    name: yace
+    # IRSA annotation intentionally REMOVED (ADR-0018). Identity is now bound via
+    # an EKS PodIdentityAssociation (terraform/modules/pod-identity-yace +
+    # catalog/units/pod-identity-yace), which targets this SA
+    # (observability/yace) directly. Do NOT re-add `eks.amazonaws.com/role-arn`:
+    # a SA carrying BOTH an IRSA annotation and a Pod Identity association is
+    # unsupported (AWS leaves the precedence undocumented — ADR-0018).
+    # The eks-pod-identity-agent addon injects credentials with no annotation.
+    annotations: {}
+
+  # ---- Resources --------------------------------------------------------
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+  # ---- Node affinity (Graviton / ARM64) ---------------------------------
+  nodeSelector:
+    kubernetes.io/arch: arm64
+
+  # ---- ServiceMonitor ---------------------------------------------------
+  # The prometheus-stack discovers ServiceMonitors carrying the
+  # `prometheus: kube-prometheus` label (serviceMonitorSelector). The upstream
+  # YACE chart lets us attach extra labels so the operator selects this monitor.
+  serviceMonitor:
+    enabled: true
+    interval: 60s
+    scrapeTimeout: 30s
+    additionalLabels:
+      prometheus: kube-prometheus
+
+  # ---- YACE configuration (STRING - rendered via tpl by the chart) ------
+  # period: 300  - 5-minute CloudWatch resolution
+  # length: 300  - fetch last 5 minutes per poll
+  # delay:  120  - start 2 minutes in the past (CloudWatch propagation lag)
+  # Metrics are scoped to key operational signals only, to bound CW API cost.
+  config: |-
+    apiVersion: v1alpha1
+    sts-region: eu-central-1
+    discovery:
+      # ADR-0028 Stream 4: exportedTagsOnMetrics is a DISCOVERY-LEVEL key (sibling of jobs),
+      # a map keyed by lowercase service alias. It surfaces AWS resource tags as
+      # tag_platform_* Prometheus labels on every metric from the matching discovery job.
+      exportedTagsOnMetrics:
+        s3:
+          - "platform:system"
+          - "platform:component"
+          - "platform:env"
+          - "platform:owner"
+        rds:
+          - "platform:system"
+          - "platform:component"
+          - "platform:env"
+          - "platform:owner"
+        dynamodb:
+          - "platform:system"
+          - "platform:component"
+          - "platform:env"
+          - "platform:owner"
+      jobs:
+        # NOTE: AWS/EKS is intentionally absent - YACE v0.61.2 does not support
+        # it as a discovery service (not in its known-services list). EKS
+        # cluster/node/pod CPU/memory are already collected in-cluster by the
+        # prometheus-stack (node-exporter, kube-state-metrics, kubelet), so
+        # CloudWatch AWS/EKS metrics would be redundant anyway.
+
+        # Network Load Balancer
+        - type: AWS/NetworkELB
+          regions: [eu-central-1]
+          roles: []
+          period: 300
+          length: 300
+          delay: 120
+          metrics:
+            - name: HealthyHostCount
+              statistics: [Minimum]
+            - name: UnHealthyHostCount
+              statistics: [Maximum]
+            - name: ActiveFlowCount
+              statistics: [Average]
+            - name: NewFlowCount
+              statistics: [Sum]
+            - name: ProcessedBytes
+              statistics: [Sum]
+
+        # Application Load Balancer
+        - type: AWS/ApplicationELB
+          regions: [eu-central-1]
+          roles: []
+          period: 300
+          length: 300
+          delay: 120
+          metrics:
+            - name: HealthyHostCount
+              statistics: [Minimum]
+            - name: UnHealthyHostCount
+              statistics: [Maximum]
+            - name: RequestCount
+              statistics: [Sum]
+            - name: TargetResponseTime
+              statistics: [Average, p99]
+            - name: HTTPCode_Target_5XX_Count
+              statistics: [Sum]
+
+        # S3 (24h resolution - daily aggregation)
+        # ADR-0028 Stream 4: searchTags scopes discovery to buckets carrying
+        # platform:system; exportedTagsOnMetrics surfaces all five platform:*
+        # tag keys as tag_platform_* Prometheus labels so dashboards can filter
+        # by tag_platform_system="auth" (etc.).
+        - type: AWS/S3
+          regions: [eu-central-1]
+          roles: []
+          period: 86400
+          length: 86400
+          delay: 7200
+          searchTags:
+            # Only discover buckets that carry at least platform:system.
+            # Remove to discover ALL buckets (raises CW API cost).
+            - key: "platform:system"
+              value: ".*"
+          # exportedTagsOnMetrics handled at discovery level above (alias: s3).
+          metrics:
+            - name: BucketSizeBytes
+              statistics: [Average]
+            - name: NumberOfObjects
+              statistics: [Average]
+          dimensionNameRequirements: [BucketName, StorageType]
+
+        # RDS — ADR-0028 Stream 4: tag propagation for platform:* tags.
+        # searchTags scopes discovery to RDS instances carrying platform:system.
+        # exportedTagsOnMetrics translates tag platform:system=auth →
+        # label tag_platform_system="auth" in every aws_rds_* metric so the
+        # unified $system dashboard can filter aws_rds_cpu_utilization_average
+        # {tag_platform_system="$system"}.
+        - type: AWS/RDS
+          regions: [eu-central-1]
+          roles: []
+          period: 300
+          length: 300
+          delay: 120
+          searchTags:
+            - key: "platform:system"
+              value: ".*"
+          # exportedTagsOnMetrics handled at discovery level above (alias: rds).
+          metrics:
+            - name: CPUUtilization
+              statistics: [Average, Maximum]
+            - name: FreeableMemory
+              statistics: [Average, Minimum]
+            - name: ReadIOPS
+              statistics: [Average]
+            - name: WriteIOPS
+              statistics: [Average]
+            - name: DatabaseConnections
+              statistics: [Average, Maximum]
+            - name: FreeStorageSpace
+              statistics: [Average, Minimum]
+
+        # DynamoDB — ADR-0028 Stream 4: tag propagation for platform:* tags.
+        # Exposes consumed capacity + throttles per table, tagged with platform:*.
+        - type: AWS/DynamoDB
+          regions: [eu-central-1]
+          roles: []
+          period: 300
+          length: 300
+          delay: 120
+          searchTags:
+            - key: "platform:system"
+              value: ".*"
+          # exportedTagsOnMetrics handled at discovery level above (alias: dynamodb).
+          metrics:
+            - name: ConsumedReadCapacityUnits
+              statistics: [Sum, Average]
+            - name: ConsumedWriteCapacityUnits
+              statistics: [Sum, Average]
+            - name: ReadThrottleEvents
+              statistics: [Sum]
+            - name: WriteThrottleEvents
+              statistics: [Sum]
+            - name: SuccessfulRequestLatency
+              statistics: [Average, p99]
+
+        # EBS
+        - type: AWS/EBS
+          regions: [eu-central-1]
+          roles: []
+          period: 300
+          length: 300
+          delay: 120
+          metrics:
+            - name: BurstBalance
+              statistics: [Minimum]
+            - name: VolumeReadOps
+              statistics: [Sum]
+            - name: VolumeWriteOps
+              statistics: [Sum]
+            - name: VolumeQueueLength
+              statistics: [Average]
+
+        # NOTE: AWS/CertificateManager intentionally omitted - this platform uses
+        # an internal CA (cert-manager private issuer), not ACM, so there are no
+        # ACM certs to discover and YACE would log "No tagged resources" every
+        # scrape. Re-add a CertificateManager job if ACM certs are introduced.
+
+# ----------------------------------------------------------------------------
+# Wrapper-chart values (consumed by templates/ in THIS chart, not the subchart).
+# ----------------------------------------------------------------------------
+networkPolicy:
+  # NetworkPolicy restricting YACE egress to AWS APIs + DNS and ingress to
+  # Prometheus scrape. Disable on clusters without a CNI that enforces policy.
+  enabled: true
