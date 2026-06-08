@@ -17,3 +17,8 @@ output "transit_gateway_owner_id" {
   description = "The AWS account ID of the TGW owner"
   value       = aws_ec2_transit_gateway.this.owner_id
 }
+
+output "ram_resource_share_arn" {
+  description = "ARN of the RAM resource share created for cross-account TGW access (null when ram_principals is empty)."
+  value       = length(aws_ram_resource_share.tgw) > 0 ? aws_ram_resource_share.tgw[0].arn : null
+}

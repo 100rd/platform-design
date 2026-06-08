@@ -1,0 +1,68 @@
+name: Generate Infrastructure Diagrams
+
+# Regenerates docs/diagrams/<account>.md from Terragrunt unit metadata
+# whenever a unit file changes on main. The diagrams are committed back
+# to the repo via a same-branch push so they always reflect the current
+# tree. Issue #176.
+#
+# For PRs, the workflow runs in dry-run mode and uploads the rendered
+# diagrams as a workflow artifact — no commit. This keeps the diff
+# review clean.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "terragrunt/**/terragrunt.hcl"
+      - "scripts/generate-infra-diagrams.py"
+      - ".github/workflows/generate-diagrams.yml"
+  pull_request:
+    paths:
+      - "terragrunt/**/terragrunt.hcl"
+      - "scripts/generate-infra-diagrams.py"
+      - ".github/workflows/generate-diagrams.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    name: Generate diagrams
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need full history for the commit step.
+          fetch-depth: 0
+          # Use a token that can push back to the branch on main.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Render diagrams
+        run: python3 scripts/generate-infra-diagrams.py
+
+      - name: Upload diagrams as artifact (PRs)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: infra-diagrams
+          path: docs/diagrams/
+          retention-days: 14
+
+      - name: Commit regenerated diagrams (push-to-main)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          if git diff --quiet docs/diagrams/; then
+            echo "No diagram changes; skipping commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/diagrams/
+          git commit -m "docs: regenerate infrastructure diagrams"
+          git push

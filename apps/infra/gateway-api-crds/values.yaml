@@ -1,0 +1,19 @@
+# Gateway API CRDs + Cilium GatewayClass (ADR-0009)
+#
+# There are no per-cluster configurable values for the CRD chart — the Gateway
+# API CRDs are cluster-scoped and identical on every cluster, and the Cilium
+# GatewayClass is static. CRDs are vendored under crds/ (standard channel,
+# v1.4.0) so ArgoCD applies them with ServerSideApply ahead of any Gateway,
+# HTTPRoute, BackendTLSPolicy, or the Cilium gatewayAPI feature.
+#
+# v1.4.0 adds BackendTLSPolicy to the Standard channel (graduated from
+# Experimental in v1.3.0). This enables encrypted gateway->backend hops via
+# apps/infra/gateways/templates/backendtlspolicy-grafana.yaml.
+#
+# controllerName for the GatewayClass must match the value Cilium registers
+# with (io.cilium/gateway-controller); it is set in templates/gatewayclass.yaml.
+gatewayClass:
+  # Name of the cluster-scoped GatewayClass that Gateways reference.
+  name: cilium
+  # Must match Cilium's registered Gateway API controller name.
+  controllerName: io.cilium/gateway-controller

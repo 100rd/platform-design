@@ -1,0 +1,40 @@
+apiVersion: v2
+name: tetragon
+description: |
+  Cilium Tetragon - eBPF-based runtime security observability and enforcement.
+  Deployed in observe-mode per ADR-0019. Chosen over Falco because Tetragon
+  shares the same eBPF kernel stack as Cilium (no duplicate kernel hooks) and
+  supports in-kernel enforcement via BPF programs when graduated to enforce-mode.
+  Falco relies on kernel modules (or eBPF co-pilot) but runs outside the Cilium
+  data-plane, adding complexity; Tetragon integrates natively.
+type: application
+# Wrapper chart version — bump when values or templates change.
+version: 1.0.0
+appVersion: "1.3.0"
+
+dependencies:
+  # Tetragon 1.3.0 — pinned for supply-chain reproducibility.
+  # Chart ships CRDs (TracingPolicy, TracingPolicyNamespaced, PodInfo).
+  # Upgrade path: bump version + appVersion together; run `helm dep update`.
+  # Upstream: https://github.com/cilium/tetragon/releases/tag/v1.3.0
+  - name: tetragon
+    version: "1.3.0"
+    repository: https://helm.cilium.io
+    condition: tetragon.enabled
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - security
+  - runtime-security
+  - ebpf
+  - tetragon
+  - cilium
+  - observability
+
+annotations:
+  category: Security
+  platform: Kubernetes
+  adr: "0019"

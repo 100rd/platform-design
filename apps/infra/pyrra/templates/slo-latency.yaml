@@ -1,0 +1,47 @@
+---
+# ServiceLevelObjective: API Latency
+#
+# ADR-0026 — SLO slice: latency SLO using native histograms (Prometheus 3.x).
+#
+# Metric: http_request_duration_seconds (native histogram; requires Prometheus 3.x
+# with native-histogram scraping enabled — see prometheus-stack/values.yaml).
+# With classic histograms the same query works via histogram_quantile; native
+# histograms give better accuracy with lower cardinality.
+#
+# Target: 99% of requests complete within 500 ms over a 28-day rolling window.
+#
+# NOTE: Update `job` and the `le` bucket boundary to match your actual histogram
+# instrumentation before rolling out to production.
+apiVersion: pyrra.dev/v1alpha1
+kind: ServiceLevelObjective
+metadata:
+  name: api-latency-p99
+  namespace: observability
+  labels:
+    pyrra: "true"
+    app.kubernetes.io/name: api
+    app.kubernetes.io/component: slo
+    team: platform
+    adr: "0026"
+spec:
+  description: "99% of API requests complete in under 500 ms over a 28-day window."
+
+  window: 28d
+
+  # SLO target: 99 % of requests within the latency budget
+  target: "99"
+
+  serviceLevel:
+    objectives:
+      # Latency SLO: good events = requests that finished in <= 0.5 s.
+      # Uses the classic histogram_quantile representation for broad compatibility.
+      # When Prometheus native histograms are enabled (ADR-0026 prometheus-stack
+      # values), Pyrra will automatically use the more accurate nhcb() representation
+      # if the metric exposes a native histogram.
+      - latency:
+          success:
+            metric: http_request_duration_seconds_bucket{job="api-server",le="0.5"}
+          total:
+            metric: http_request_duration_seconds_count{job="api-server"}
+          grouping:
+            - handler

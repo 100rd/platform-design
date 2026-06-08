@@ -1,0 +1,165 @@
+# -----------------------------------------------------------------------------
+# argocd-wait-sync-and-smoke
+#
+# Mirrors platform-workflows@3bb35df
+# .github/actions/argocd-wait-sync-and-smoke
+# (2026-06 platform-workflows consolidation sync).
+# -----------------------------------------------------------------------------
+name: "ArgoCD Wait Sync and Smoke"
+description: "Wait for an ArgoCD Application to become Synced + Healthy, then probe an HTTP endpoint for 2xx. Used as a post-deploy gate to catch broken rollouts before they sit unnoticed."
+
+inputs:
+  app-name:
+    description: "ArgoCD Application name to wait on."
+    required: true
+  argocd-server:
+    description: "ArgoCD server hostname (e.g. `argocd.platform-design.local`). No scheme."
+    required: true
+  argocd-auth-token:
+    description: "ArgoCD auth token (read-only, project-scoped). Pass via secrets."
+    required: true
+  smoke-url:
+    description: "HTTP(S) URL to probe after Sync+Healthy. Empty string skips the HTTP probe (argocd wait only)."
+    required: false
+    default: ""
+  timeout-seconds:
+    description: "Max seconds to wait for argocd Healthy AND smoke HTTP 2xx combined."
+    required: false
+    default: "300"
+  smoke-method:
+    description: "HTTP method for the smoke probe."
+    required: false
+    default: "GET"
+  smoke-expected-status:
+    description: "Expected HTTP status code(s). Comma-separated list of codes or ranges (e.g. `200,204` or `200-299`)."
+    required: false
+    default: "200-299"
+  smoke-retry-delay-seconds:
+    description: "Delay between smoke probe retries."
+    required: false
+    default: "5"
+  argocd-version:
+    description: "argocd CLI version to install."
+    required: false
+    default: "v2.13.0"
+  insecure:
+    description: "If `true`, pass `--insecure` to argocd CLI (skips TLS verification). Use only for internal/dev clusters."
+    required: false
+    default: "false"
+
+outputs:
+  app-status:
+    description: "Final ArgoCD app status (e.g. `Synced/Healthy` or `OutOfSync/Degraded`)."
+    value: ${{ steps.wait.outputs.status }}
+  smoke-http-status:
+    description: "Final HTTP status from the smoke probe, when smoke-url is set."
+    value: ${{ steps.smoke.outputs.http-status }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install argocd CLI
+      shell: bash
+      env:
+        ARGOCD_VERSION: ${{ inputs.argocd-version }}
+      run: |
+        set -euo pipefail
+        BIN_DIR="${RUNNER_TEMP}/argocd-bin"
+        mkdir -p "${BIN_DIR}"
+        URL="https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-amd64"
+        curl -fsSL -o "${BIN_DIR}/argocd" "${URL}"
+        chmod +x "${BIN_DIR}/argocd"
+        echo "${BIN_DIR}" >> "$GITHUB_PATH"
+        "${BIN_DIR}/argocd" version --client
+
+    - name: Mask argocd auth token
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.argocd-auth-token }}
+      run: |
+        set -euo pipefail
+        # Belt-and-braces: register the token as a secret in the log mask layer
+        # in addition to GitHub's automatic masking for secret-typed inputs.
+        echo "::add-mask::${TOKEN}"
+
+    - name: Wait for ArgoCD app Synced + Healthy
+      id: wait
+      shell: bash
+      env:
+        APP_NAME: ${{ inputs.app-name }}
+        ARGOCD_SERVER: ${{ inputs.argocd-server }}
+        ARGOCD_AUTH_TOKEN: ${{ inputs.argocd-auth-token }}
+        TIMEOUT: ${{ inputs.timeout-seconds }}
+        INSECURE: ${{ inputs.insecure }}
+      run: |
+        set -uo pipefail
+
+        ARGS=(app wait "${APP_NAME}" --sync --health --timeout "${TIMEOUT}")
+        if [ "${INSECURE}" = "true" ]; then
+          ARGS+=(--insecure)
+        fi
+
+        set +e
+        argocd "${ARGS[@]}" --server "${ARGOCD_SERVER}" --auth-token "${ARGOCD_AUTH_TOKEN}" --grpc-web
+        RC=$?
+        set -e
+
+        STATUS=$(argocd app get "${APP_NAME}" --server "${ARGOCD_SERVER}" --auth-token "${ARGOCD_AUTH_TOKEN}" --grpc-web -o json 2>/dev/null \
+          | python3 -c 'import json,sys; d=json.load(sys.stdin); print(f"{d[\"status\"][\"sync\"][\"status\"]}/{d[\"status\"][\"health\"][\"status\"]}")' \
+          || echo "Unknown/Unknown")
+        echo "status=${STATUS}" >> "$GITHUB_OUTPUT"
+
+        if [ "${RC}" -ne 0 ]; then
+          echo "::error::argocd app wait failed (rc=${RC}, status=${STATUS})."
+          exit "${RC}"
+        fi
+        echo "ArgoCD app ${APP_NAME} is ${STATUS}."
+
+    - name: HTTP smoke probe
+      id: smoke
+      if: inputs.smoke-url != ''
+      shell: bash
+      env:
+        URL: ${{ inputs.smoke-url }}
+        METHOD: ${{ inputs.smoke-method }}
+        EXPECTED: ${{ inputs.smoke-expected-status }}
+        TIMEOUT: ${{ inputs.timeout-seconds }}
+        DELAY: ${{ inputs.smoke-retry-delay-seconds }}
+      run: |
+        set -euo pipefail
+
+        # Expand EXPECTED into a regex that matches any single status code.
+        EXPECTED_REGEX=$(python3 - <<PY
+        import os, re
+        spec = os.environ["EXPECTED"]
+        parts = []
+        for chunk in spec.split(","):
+            chunk = chunk.strip()
+            if "-" in chunk:
+                lo, hi = chunk.split("-", 1)
+                parts.extend(str(x) for x in range(int(lo), int(hi)+1))
+            else:
+                parts.append(chunk)
+        print("^(" + "|".join(re.escape(p) for p in parts) + ")$")
+        PY
+        )
+
+        END_TS=$(( $(date +%s) + TIMEOUT ))
+        HTTP_STATUS=""
+        while [ "$(date +%s)" -lt "${END_TS}" ]; do
+          set +e
+          HTTP_STATUS=$(curl -sk -o /dev/null -w '%{http_code}' -X "${METHOD}" --max-time 10 "${URL}")
+          RC=$?
+          set -e
+          if [ "${RC}" -eq 0 ] && [[ "${HTTP_STATUS}" =~ ${EXPECTED_REGEX} ]]; then
+            echo "Smoke probe ${URL} -> ${HTTP_STATUS} (matches ${EXPECTED})."
+            echo "http-status=${HTTP_STATUS}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "  attempt: status=${HTTP_STATUS:-<curl-fail>} rc=${RC} — retrying in ${DELAY}s..."
+          sleep "${DELAY}"
+        done
+
+        echo "::error::Smoke probe ${URL} did not reach expected status ${EXPECTED} within ${TIMEOUT}s (last status: ${HTTP_STATUS:-<no-response>})."
+        echo "http-status=${HTTP_STATUS:-}" >> "$GITHUB_OUTPUT"
+        exit 1

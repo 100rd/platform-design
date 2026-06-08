@@ -94,6 +94,31 @@ variable "ebs_kms_key_arn" {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
+# Account alias (CIS 1.1, #165)
+# ---------------------------------------------------------------------------------------------------------------------
+
+variable "account_alias" {
+  description = "Account alias to set on the AWS account (lowercase, 3-63 chars, hyphens allowed). Empty to skip. Closes #165 'Account alias set' acceptance criterion."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.account_alias == "" || can(regex("^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$", var.account_alias))
+    error_message = "account_alias must be 3-63 chars, lowercase alphanumerics or hyphens, and must not start or end with a hyphen."
+  }
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Root access key alarm (#165)
+# ---------------------------------------------------------------------------------------------------------------------
+
+variable "enable_root_access_key_alarm" {
+  description = "Create an AWS Config managed rule (`iam-root-access-key-check`) that flags non-compliant accounts whenever a root user has an access key. The rule fires periodically; non-compliance is surfaced via Config's findings stream and (when wired) SecurityHub. Closes #165 'Root access keys check (alarm if present)' acceptance criterion. Set to false in accounts where AWS Config is not yet enabled — the rule plan/applies fine but only evaluates once Config is recording."
+  type        = bool
+  default     = true
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
 # Common
 # ---------------------------------------------------------------------------------------------------------------------
 

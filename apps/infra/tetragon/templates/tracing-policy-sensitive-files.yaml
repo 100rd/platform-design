@@ -1,0 +1,207 @@
+# TracingPolicy: Sensitive File Access
+# ADR-0019: Graduated observe→enforce after 72 h soak (Wave 3, feat/w3-tetragon-enforce).
+#
+# OBSERVE-mode behaviour (enforce.enabled=false):
+#   All path-match selectors fire without matchActions — events flow to SIEM only.
+#
+# ENFORCE-mode behaviour (enforce.enabled=true, default):
+#   Writes to /etc/shadow, /etc/gshadow, /etc/passwd, /etc/group by binaries not
+#   in the allowlist are blocked with Override -EPERM.
+#   Reads are NOT blocked — denying reads on /etc/passwd breaks too many system
+#   calls (getpwuid, getent, etc.); write enforcement limits blast radius.
+#
+# Rollback (hot — no DaemonSet restart needed):
+#   helm upgrade tetragon . --set enforce.enabled=false
+#   Tetragon operator reconciles the TracingPolicy CRD in < 30 s.
+#
+# Binary allowlists:
+#   Derived from 72 h observation on staging cluster. Add entries when baselining
+#   new workloads. Keep the list minimal; every additional binary widens the
+#   attack surface.
+#
+# Upstream CRD reference: https://tetragon.io/docs/concepts/tracing-policy/
+---
+{{- $enforce := .Values.enforce.enabled }}
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: sensitive-file-access
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: tetragon
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: tetragon
+    tetragon.io/policy-mode: {{ if $enforce }}enforce{{ else }}observe{{ end }}
+    adr: "0019"
+  annotations:
+    tetragon.io/description: "{{ if $enforce }}ENFORCE{{ else }}OBSERVE{{ end }}: writes to /etc/{shadow,gshadow,passwd,group}; reads always observe"
+    tetragon.io/observe-only: {{ if $enforce }}"false"{{ else }}"true"{{ end }}
+    tetragon.io/enforce-wave: "3"
+    tetragon.io/soak-hours: "72"
+spec:
+  kprobes:
+    # -------------------------------------------------------------------------
+    # sys_openat — covers the vast majority of file opens on Linux 3.x+.
+    #
+    # Enforce path:
+    #   matchPaths targets the write-sensitive subset (/etc/shadow, /etc/gshadow,
+    #   /etc/passwd, /etc/group). SSH host keys and the SA token are NOT blocked
+    #   on write here: they are written only at provisioning time by known binaries
+    #   (sshd-keygen, kubelet); a dedicated soak cycle is needed before enforcement.
+    #
+    # Write-flag detection:
+    #   O_WRONLY = 1 (0x1), O_RDWR = 2 (0x2). Any open with flags != 0 is a
+    #   write-intent open. The matchArgs filter on index 2 isolates these.
+    #
+    # Allowlist (observed legitimate write callers from 72 h staging soak):
+    #   /usr/bin/passwd          — user password change
+    #   /sbin/unix_chkpwd        — PAM password validation helper
+    #   /usr/sbin/useradd        — user provisioning
+    #   /usr/sbin/usermod        — user modification
+    #   /usr/sbin/userdel        — user deletion
+    #   /usr/sbin/groupadd       — group provisioning
+    #   /usr/sbin/groupmod       — group modification
+    #   /usr/bin/chage           — password aging
+    # -------------------------------------------------------------------------
+    - call: "sys_openat"
+      syscall: true
+      args:
+        - index: 0
+          type: "int"     # dirfd
+        - index: 1
+          type: "string"  # pathname
+        - index: 2
+          type: "int"     # flags (O_RDONLY=0, O_WRONLY=1, O_RDWR=2)
+      selectors:
+        {{- if $enforce }}
+        # ENFORCE: block unlisted binaries that open credential files for writing.
+        - matchPaths:
+            - operator: "In"
+              values:
+                - "/etc/shadow"
+                - "/etc/gshadow"
+                - "/etc/passwd"
+                - "/etc/group"
+          matchArgs:
+            - index: 2
+              operator: "NotEqual"
+              values:
+                - "0"   # reject any open that is not O_RDONLY
+          matchBinaries:
+            - operator: "NotIn"
+              values:
+                - "/usr/bin/passwd"
+                - "/sbin/unix_chkpwd"
+                - "/usr/sbin/useradd"
+                - "/usr/sbin/usermod"
+                - "/usr/sbin/userdel"
+                - "/usr/sbin/groupadd"
+                - "/usr/sbin/groupmod"
+                - "/usr/bin/chage"
+          matchActions:
+            - action: Override
+              argError: -1   # EPERM
+        # OBSERVE: full sensitive-path set for SIEM (reads + writes, all callers).
+        - matchPaths:
+            - operator: "In"
+              values:
+                # Password and shadow databases
+                - "/etc/shadow"
+                - "/etc/gshadow"
+                - "/etc/passwd"
+                - "/etc/group"
+                # PAM and sudo config
+                - "/etc/pam.d/common-auth"
+                - "/etc/sudoers"
+                # SSH host private keys
+                - "/etc/ssh/ssh_host_rsa_key"
+                - "/etc/ssh/ssh_host_ecdsa_key"
+                - "/etc/ssh/ssh_host_ed25519_key"
+                # Kubernetes service-account token
+                - "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        {{- else }}
+        # OBSERVE only — path match for SIEM ingestion, no enforcement
+        - matchPaths:
+            - operator: "In"
+              values:
+                - "/etc/shadow"
+                - "/etc/gshadow"
+                - "/etc/passwd"
+                - "/etc/group"
+                - "/etc/pam.d/common-auth"
+                - "/etc/sudoers"
+                - "/etc/ssh/ssh_host_rsa_key"
+                - "/etc/ssh/ssh_host_ecdsa_key"
+                - "/etc/ssh/ssh_host_ed25519_key"
+                - "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        {{- end }}
+
+    # -------------------------------------------------------------------------
+    # sys_open (non-at variant) — vestigial on x86_64 but retained for
+    # completeness and for any 32-bit compat binaries in the cluster.
+    #
+    # Enforcement mirrors sys_openat above.
+    # -------------------------------------------------------------------------
+    - call: "sys_open"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"  # pathname
+        - index: 1
+          type: "int"     # flags
+      selectors:
+        {{- if $enforce }}
+        # ENFORCE: block unlisted binaries opening credential files for writing
+        - matchPaths:
+            - operator: "In"
+              values:
+                - "/etc/shadow"
+                - "/etc/gshadow"
+                - "/etc/passwd"
+                - "/etc/group"
+          matchArgs:
+            - index: 1
+              operator: "NotEqual"
+              values:
+                - "0"   # reject any open that is not O_RDONLY
+          matchBinaries:
+            - operator: "NotIn"
+              values:
+                - "/usr/bin/passwd"
+                - "/sbin/unix_chkpwd"
+                - "/usr/sbin/useradd"
+                - "/usr/sbin/usermod"
+                - "/usr/sbin/userdel"
+                - "/usr/sbin/groupadd"
+                - "/usr/sbin/groupmod"
+                - "/usr/bin/chage"
+          matchActions:
+            - action: Override
+              argError: -1   # EPERM
+        # OBSERVE: full sensitive-path set for SIEM
+        - matchPaths:
+            - operator: "In"
+              values:
+                - "/etc/shadow"
+                - "/etc/gshadow"
+                - "/etc/passwd"
+                - "/etc/group"
+                - "/etc/sudoers"
+                - "/etc/ssh/ssh_host_rsa_key"
+                - "/etc/ssh/ssh_host_ecdsa_key"
+                - "/etc/ssh/ssh_host_ed25519_key"
+                - "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        {{- else }}
+        - matchPaths:
+            - operator: "In"
+              values:
+                - "/etc/shadow"
+                - "/etc/gshadow"
+                - "/etc/passwd"
+                - "/etc/group"
+                - "/etc/sudoers"
+                - "/etc/ssh/ssh_host_rsa_key"
+                - "/etc/ssh/ssh_host_ecdsa_key"
+                - "/etc/ssh/ssh_host_ed25519_key"
+                - "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        {{- end }}

@@ -1,13 +1,13 @@
-FROM golang:1.26-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 COPY . .
 RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -o dns-monitor .
 
-FROM alpine:3.23
+FROM alpine:3.21
 RUN apk --no-cache add ca-certificates
-RUN adduser -D -u 65534 nonroot
+RUN adduser -D -u 65532 nonroot
 WORKDIR /app
 COPY --from=builder /app/dns-monitor .
 

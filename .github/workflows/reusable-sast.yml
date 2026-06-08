@@ -1,0 +1,92 @@
+# -----------------------------------------------------------------------------
+# reusable-sast.yml
+#
+# Reusable workflow: run CodeQL static application security testing (SAST) over
+# a matrix of languages. Wraps the `sast-codeql` composite from
+# .github/actions/* in this repo.
+#
+# Completes the Tier-1 set started in PR #241 (ADR-0016). Per ADR-0016 the SAST
+# gate is ADVISORY at the workflow level — SARIF flows to GitHub Code Scanning
+# and merge-blocking is enforced by branch protection on the Code Scanning
+# check, not by failing this job. Set `fail_on_error: true` to hard-fail the
+# job on a CodeQL analysis error.
+#
+# Mirrors platform-workflows@3bb35df SAST wiring (2026-06 consolidation sync).
+# In the real estate this lives in the shared platform-workflows repo
+# (`uses: platform-workflows/.github/workflows/reusable-sast.yml@<ref>`); in this
+# mock it lives in-repo and the composite is called via local `./.github/...`.
+#
+# Caller example:
+#
+#   jobs:
+#     sast:
+#       uses: ./.github/workflows/reusable-sast.yml
+#       permissions:
+#         contents: read
+#         security-events: write
+#         actions: read
+#       with:
+#         languages: '["python","javascript"]'
+#
+# See: docs/ci-cd/README.md
+# -----------------------------------------------------------------------------
+
+name: reusable-sast
+
+on:
+  workflow_call:
+    inputs:
+      languages:
+        description: "JSON array of CodeQL languages to analyse. e.g. '[\"go\",\"python\"]'."
+        type: string
+        required: false
+        default: '["go"]'
+      queries:
+        description: "CodeQL query suite. Default security-and-quality."
+        type: string
+        required: false
+        default: "security-and-quality"
+      working_directory:
+        description: "Subdirectory to focus the build on. Empty = whole repo."
+        type: string
+        required: false
+        default: ""
+      config_file:
+        description: "Optional CodeQL config file path (relative to repo root)."
+        type: string
+        required: false
+        default: ""
+      fail_on_error:
+        description: "Hard-fail the job on a CodeQL analysis error. Default false (advisory; findings gate via branch protection on the Code Scanning check)."
+        type: boolean
+        required: false
+        default: false
+
+permissions: {}
+
+jobs:
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    # Advisory by default: a CodeQL extractor/analysis error must not block the
+    # build (findings gate via branch protection on the Code Scanning check, not
+    # this job). Flip fail_on_error to make analysis errors hard-fail.
+    continue-on-error: ${{ !inputs.fail_on_error }}
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(inputs.languages) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: CodeQL SAST
+        uses: ./.github/actions/sast-codeql
+        with:
+          language: ${{ matrix.language }}
+          queries: ${{ inputs.queries }}
+          working-directory: ${{ inputs.working_directory }}
+          config-file: ${{ inputs.config_file }}

@@ -292,7 +292,7 @@ gateway:
 
       # Prometheus Remote Write for metrics
       prometheusremotewrite:
-        endpoint: http://prometheus-server.monitoring.svc.cluster.local:9090/api/v1/write
+        endpoint: http://prometheus-stack-kube-prom-prometheus.observability.svc.cluster.local:9090/api/v1/write
         resource_to_telemetry_conversion:
           enabled: true
         target_info:
@@ -311,7 +311,7 @@ gateway:
 
       # Loki exporter for logs
       loki:
-        endpoint: http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push
+        endpoint: http://loki-stack-gateway.observability.svc.cluster.local/loki/api/v1/push
         format: json
         labels:
           resource:
@@ -327,7 +327,7 @@ gateway:
 
       # OTLP exporter for Tempo (traces)
       otlp/tempo:
-        endpoint: tempo-distributor.monitoring.svc.cluster.local:4317
+        endpoint: tempo-distributor.observability.svc.cluster.local:4317
         tls:
           insecure: true
         compression: gzip
@@ -342,7 +342,7 @@ gateway:
 
       # OTLP exporter for Pyroscope (profiling)
       otlp/pyroscope:
-        endpoint: pyroscope.monitoring.svc.cluster.local:4317
+        endpoint: pyroscope-distributor.observability.svc.cluster.local:4317
         tls:
           insecure: true
         compression: gzip
@@ -541,7 +541,7 @@ networkPolicy:
     - to:
         - namespaceSelector:
             matchLabels:
-              name: monitoring
+              name: observability
       ports:
         - protocol: TCP
           port: 9090  # Prometheus

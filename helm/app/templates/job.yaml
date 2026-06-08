@@ -17,6 +17,7 @@ spec:
     metadata:
       labels:
         {{- include "app.selectorLabels" $ | nindent 8 }}
+        {{- include "app.platformLabels" $ | nindent 8 }}
     spec:
       serviceAccountName: {{ include "app.serviceAccountName" $ }}
       {{- with $.Values.podSecurityContext }}

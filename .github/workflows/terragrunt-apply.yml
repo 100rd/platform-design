@@ -36,6 +36,10 @@ permissions:
 env:
   TF_VERSION: "1.14.8"
   TG_VERSION: "0.99.5"
+  # Slack webhook is OPTIONAL. Steps that notify Slack are gated on this
+  # being non-empty so fork PRs and forks of this repo without the secret
+  # don't fail the workflow. Issue #180.
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -140,7 +144,9 @@ jobs:
         run: terragrunt apply -no-color -auto-approve tfplan
 
       - name: Notify Slack on failure
-        if: failure()
+        # Skip Slack notification when webhook secret is not configured
+        # (e.g. forks, scratch repos). Issue #180.
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v2.1.0
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
@@ -167,8 +173,15 @@ jobs:
     needs: apply
     if: success()
     runs-on: ubuntu-latest
+    env:
+      # Re-export here so step-level `if: env.SLACK_WEBHOOK_URL != ''` can
+      # gate the notification — secrets are not directly accessible in `if`.
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     steps:
       - name: Notify Slack on success
+        # Skip when webhook secret is not configured (forks, scratch repos).
+        # Issue #180.
+        if: env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v2.1.0
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}

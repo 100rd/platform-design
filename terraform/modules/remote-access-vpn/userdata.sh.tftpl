@@ -1,0 +1,204 @@
+#!/bin/bash
+# =============================================================================
+# Remote-Access VPN — cloud-init userdata (Amazon Linux 2023 x86_64)
+# ADR-0013 | Network account | Region: ${aws_region}
+#
+# Default VPN software is Pritunl OSS with a local single-node MongoDB datastore.
+# This script is idempotent: running it again on an existing instance is safe.
+# All sensitive values are fetched from Secrets Manager at runtime — never
+# stored in this template or in the Terraform state.
+# =============================================================================
+
+# No `-e`: a non-critical step failure must not abort the whole VPN bring-up;
+# critical steps are checked/logged explicitly.
+set -uo pipefail
+exec > >(tee /var/log/remote-access-vpn-userdata.log | logger -t ravpn-userdata) 2>&1
+
+echo "=== Remote-access VPN userdata starting: $(date -Iseconds) ==="
+
+# IMDSv2 token (required; hop_limit=1 — SSRF protection)
+IMDS_TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -m5)
+INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" \
+  http://169.254.169.254/latest/meta-data/instance-id -m5)
+echo "Instance: $INSTANCE_ID"
+
+# ─── 1. System packages ───────────────────────────────────────────────────────
+echo "--- Installing dependencies ---"
+dnf update -y --security
+# AL2023 ships curl-minimal (provides the curl command) and amazon-ssm-agent
+# preinstalled. Installing `curl` conflicts with curl-minimal and aborts dnf;
+# omit it. --allowerasing guards against any other transient conflicts.
+dnf install -y --allowerasing \
+  gnupg2 \
+  jq \
+  unzip \
+  xfsprogs \
+  amazon-cloudwatch-agent
+
+# ─── 2. Datastore data volume ─────────────────────────────────────────────────
+DATASTORE_MOUNT="${datastore_mount}"
+mkdir -p "$DATASTORE_MOUNT"
+
+# Resolve the dedicated datastore EBS volume. On Nitro the configured device name
+# (${datastore_device}) may surface under a different /dev/nvme* name, so fall back
+# to the first unmounted data disk. If none is found, the datastore uses root.
+DATASTORE_DEVICE=""
+for cand in "${datastore_device}" $(lsblk -dpn -o NAME,MOUNTPOINT,TYPE | awk '$3=="disk" && $2=="" {print $1}'); do
+  if [ -b "$cand" ]; then DATASTORE_DEVICE="$cand"; break; fi
+done
+
+if [ -n "$DATASTORE_DEVICE" ]; then
+  echo "--- Datastore data volume: $DATASTORE_DEVICE ---"
+  blkid "$DATASTORE_DEVICE" &>/dev/null || mkfs.xfs -f "$DATASTORE_DEVICE"
+  grep -q "$DATASTORE_DEVICE" /etc/fstab || echo "$DATASTORE_DEVICE  $DATASTORE_MOUNT  xfs  defaults,nofail  0  2" >> /etc/fstab
+  mountpoint -q "$DATASTORE_MOUNT" || mount "$DATASTORE_DEVICE" "$DATASTORE_MOUNT"
+else
+  echo "--- No dedicated data volume found; datastore will use the root volume ---"
+fi
+
+# ─── 3. MongoDB (VPN datastore backend) ───────────────────────────────────────
+echo "--- Installing MongoDB ---"
+cat > /etc/yum.repos.d/mongodb-org-7.0.repo <<'EOF'
+[mongodb-org-7.0]
+name=MongoDB Repository
+baseurl=https://repo.mongodb.org/yum/amazon/2023/mongodb-org/7.0/x86_64/
+gpgcheck=1
+enabled=1
+gpgkey=https://www.mongodb.org/static/pgp/server-7.0.asc
+EOF
+
+dnf install -y mongodb-org
+
+# Point the datastore data dir to the dedicated volume.
+mkdir -p "$DATASTORE_MOUNT"
+chown -R mongod:mongod "$DATASTORE_MOUNT"
+
+# Minimal mongod config (single-node, bind to loopback; the VPN app manages auth).
+cat > /etc/mongod.conf <<EOF
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod.log
+storage:
+  dbPath: ${datastore_mount}
+net:
+  port: ${datastore_port}
+  bindIp: 127.0.0.1
+EOF
+
+systemctl enable --now mongod
+
+# ─── 4. VPN software (Pritunl OSS) ────────────────────────────────────────────
+echo "--- Installing Pritunl OSS ---"
+cat > /etc/yum.repos.d/pritunl.repo <<'EOF'
+[pritunl]
+name=Pritunl Repository
+baseurl=https://repo.pritunl.com/stable/yum/amazonlinux/2023/
+gpgcheck=1
+enabled=1
+EOF
+
+# Import the Pritunl GPG key.
+rpm --import https://raw.githubusercontent.com/pritunl/pgp/master/pritunl_repo_pub.asc
+dnf install -y pritunl
+
+# ─── 5. Fetch secrets from Secrets Manager ────────────────────────────────────
+echo "--- Fetching secrets ---"
+REGION="${aws_region}"
+SECRETS_PREFIX="${secrets_prefix}"
+
+# Datastore URI — set only if the secret has a value (out-of-band injection).
+DATASTORE_URI=$(aws secretsmanager get-secret-value \
+  --region "$REGION" \
+  --secret-id "$${SECRETS_PREFIX}/datastore-uri" \
+  --query SecretString --output text 2>/dev/null || echo "")
+
+# Default to the local single-node datastore when no URI is injected.
+if [ -z "$DATASTORE_URI" ]; then
+  DATASTORE_URI="mongodb://localhost:${datastore_port}/pritunl"
+fi
+echo "--- Configuring VPN datastore URI ---"
+pritunl set-mongodb "$DATASTORE_URI" || true
+
+# Web console on vpn_ui_port (the NLB health-checks this). Default would clash
+# with the data plane; also disable the :80 redirect server.
+pritunl set app.server_port ${vpn_ui_port} || true
+pritunl set app.redirect_server false || true
+
+# ─── 6. Enable and start the VPN service ──────────────────────────────────────
+echo "--- Starting VPN service ---"
+systemctl enable --now pritunl
+
+# ─── 7. mongodump nightly backup cron ─────────────────────────────────────────
+echo "--- Installing datastore backup cron ---"
+cat > /etc/cron.d/ravpn-datastore-backup <<'CRON'
+# Nightly mongodump to S3 — 01:30 UTC (before the DLM snapshot at 02:00)
+30 1 * * * root /usr/local/bin/ravpn-datastore-backup.sh >> /var/log/ravpn-backup.log 2>&1
+CRON
+
+cat > /usr/local/bin/ravpn-datastore-backup.sh <<SCRIPT
+#!/bin/bash
+set -euo pipefail
+DATE=\$(date +%Y%m%d-%H%M%S)
+BACKUP_DIR="/tmp/datastore-backup-\$DATE"
+S3_BUCKET="${backup_s3_bucket}"
+
+mongodump --host 127.0.0.1 --port ${datastore_port} --out "\$BACKUP_DIR"
+tar czf "/tmp/ravpn-datastore-\$DATE.tar.gz" -C /tmp "datastore-backup-\$DATE"
+aws s3 cp "/tmp/ravpn-datastore-\$DATE.tar.gz" "s3://\$S3_BUCKET/${name}/\$DATE.tar.gz" \
+  --region ${aws_region}
+rm -rf "\$BACKUP_DIR" "/tmp/ravpn-datastore-\$DATE.tar.gz"
+echo "Backup completed: \$DATE"
+SCRIPT
+
+chmod +x /usr/local/bin/ravpn-datastore-backup.sh
+
+# ─── 8. CloudWatch agent config ───────────────────────────────────────────────
+echo "--- Configuring CloudWatch agent ---"
+cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'CWCONFIG'
+{
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/remote-access-vpn*.log",
+            "log_group_name": "/remote-access-vpn/${name}",
+            "log_stream_name": "{instance_id}/vpn",
+            "timezone": "UTC"
+          },
+          {
+            "file_path": "/var/log/mongodb/mongod.log",
+            "log_group_name": "/remote-access-vpn/${name}",
+            "log_stream_name": "{instance_id}/datastore",
+            "timezone": "UTC"
+          },
+          {
+            "file_path": "/var/log/ravpn-backup.log",
+            "log_group_name": "/remote-access-vpn/${name}",
+            "log_stream_name": "{instance_id}/backup",
+            "timezone": "UTC"
+          }
+        ]
+      }
+    }
+  },
+  "metrics": {
+    "namespace": "RemoteAccessVPN",
+    "metrics_collected": {
+      "mem": { "measurement": ["mem_used_percent"] },
+      "disk": {
+        "measurement": ["disk_used_percent"],
+        "resources": ["/", "${datastore_mount}"]
+      }
+    }
+  }
+}
+CWCONFIG
+
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config -m ec2 \
+  -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+
+echo "=== Remote-access VPN userdata complete: $(date -Iseconds) ==="

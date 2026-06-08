@@ -300,6 +300,36 @@ Each workload environment deploys to 4 EU regions: `eu-central-1`, `eu-west-1`, 
 - kubectl
 - Helm
 
+### Bootstrap State Backends (one-time, per account)
+
+Before any Terragrunt unit can run, every account needs an S3 bucket and
+DynamoDB lock table for remote state. The bootstrap stack at
+[`bootstrap/state-backend/`](bootstrap/state-backend/README.md) creates them.
+
+```bash
+# Authenticate to the management account, then:
+./scripts/deploy-state-backends.sh plan              # plan all member accounts
+./scripts/deploy-state-backends.sh apply             # apply all
+./scripts/deploy-state-backends.sh plan dev          # single account
+```
+
+The script assumes `OrganizationAccountAccessRole` into each member account,
+runs the bootstrap stack with **local state** (no chicken-and-egg), and
+provisions:
+
+- `tfstate-<account>-<region>` — versioned, encrypted, public-access blocked,
+  TLS-only, with `prevent_destroy`
+- `terraform-locks-<account>` — DynamoDB PAY_PER_REQUEST + PITR + SSE,
+  `prevent_destroy`
+
+These names are **load-bearing** — they match the `remote_state` block in
+[`terragrunt/root.hcl`](terragrunt/root.hcl). After bootstrap, every
+Terragrunt unit picks up the backend automatically.
+
+See [`terraform/modules/state-backend/README.md`](terraform/modules/state-backend/README.md)
+for module-level details and [`bootstrap/state-backend/README.md`](bootstrap/state-backend/README.md)
+for the bootstrap workflow and rollback procedure.
+
 ### Deploy a Platform Stack
 
 ```bash

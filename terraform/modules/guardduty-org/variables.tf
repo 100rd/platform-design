@@ -62,6 +62,18 @@ variable "auto_enable_org_members" {
 # Common
 # ---------------------------------------------------------------------------------------------------------------------
 
+variable "findings_destination_bucket_arn" {
+  description = "S3 bucket ARN (typically in the log-archive account) where GuardDuty findings are published. If null/empty, findings stay in the GuardDuty service only — set this for centralized retention. Closes the #163 'findings published to centralized location' criterion."
+  type        = string
+  default     = null
+}
+
+variable "findings_destination_kms_key_arn" {
+  description = "KMS CMK ARN used to encrypt findings on write to the destination bucket. Required when findings_destination_bucket_arn is set."
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)

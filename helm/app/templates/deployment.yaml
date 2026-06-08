@@ -1,4 +1,13 @@
 ---
+{{- /*
+  Deployment is the default workload kind. It is mutually exclusive with the
+  Argo Rollouts Rollout (templates/rollout.yaml): when rollout.enabled=true this
+  Deployment is suppressed and a Rollout takes over. Default rollout.enabled is
+  false, so existing releases keep getting a plain Deployment (backward compat).
+  The pod spec is rendered from the shared `app.podSpec` helper so the container
+  definition never diverges between Deployment and Rollout.
+*/}}
+{{- if not .Values.rollout.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,7 +15,7 @@ metadata:
   labels:
     {{- include "app.labels" . | nindent 4 }}
     {{- with .Values.labels }}
-      {{- toYaml . | nindent 4 }}
+    {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
@@ -16,111 +25,7 @@ spec:
     matchLabels:
       {{- include "app.selectorLabels" . | nindent 6 }}
   template:
-    metadata:
-      labels:
-        {{- include "app.selectorLabels" . | nindent 8 }}
-        {{- with .Values.labels }}
-          {{- toYaml . | nindent 8 }}
-        {{- end }}
-      {{- with .Values.podAnnotations }}
-      annotations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+    {{- include "app.podTemplateMeta" . | nindent 4 }}
     spec:
-      serviceAccountName: {{ include "app.serviceAccountName" . }}
-      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds | default 30 }}
-      {{- with .Values.podSecurityContext }}
-      securityContext:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.initContainers }}
-      initContainers:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      containers:
-        - name: {{ .Chart.Name }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- with .Values.containerSecurityContext }}
-          securityContext:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          ports:
-            - name: http
-              containerPort: {{ .Values.containerPort }}
-              protocol: TCP
-          {{- with .Values.resources }}
-          resources:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- if .Values.probes.liveness.enabled }}
-          livenessProbe:
-            httpGet:
-              path: {{ .Values.probes.liveness.httpGet.path }}
-              port: {{ .Values.probes.liveness.httpGet.port }}
-            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
-            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
-            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
-            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
-          {{- end }}
-          {{- if .Values.probes.readiness.enabled }}
-          readinessProbe:
-            httpGet:
-              path: {{ .Values.probes.readiness.httpGet.path }}
-              port: {{ .Values.probes.readiness.httpGet.port }}
-            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
-            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
-            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
-            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
-          {{- end }}
-          {{- if .Values.probes.startup.enabled }}
-          startupProbe:
-            httpGet:
-              path: {{ .Values.probes.startup.httpGet.path }}
-              port: {{ .Values.probes.startup.httpGet.port }}
-            initialDelaySeconds: {{ .Values.probes.startup.initialDelaySeconds }}
-            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
-            timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
-            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
-          {{- end }}
-          {{- with .Values.lifecycle }}
-          lifecycle:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- if or .Values.externalSecrets.enabled .Values.envFrom }}
-          envFrom:
-            {{- if .Values.externalSecrets.enabled }}
-            - secretRef:
-                name: {{ include "app.fullname" . }}-secrets
-            {{- end }}
-            {{- with .Values.envFrom }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
-          {{- end }}
-          {{- with .Values.env }}
-          env:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-      {{- with .Values.topologySpreadConstraints }}
-      topologySpreadConstraints:
-        {{- range . }}
-        - maxSkew: {{ .maxSkew }}
-          topologyKey: {{ .topologyKey }}
-          whenUnsatisfiable: {{ .whenUnsatisfiable }}
-          labelSelector:
-            matchLabels:
-              {{- include "app.selectorLabels" $ | nindent 14 }}
-        {{- end }}
-      {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+      {{- include "app.podSpec" . | nindent 6 }}
+{{- end }}

@@ -52,8 +52,9 @@ spec:
       - name: kube-prometheus-stack.prometheus.prometheusSpec.externalLabels.region
         value: us-east-1
 
-      - name: thanos.serviceAccount.annotations.eks\.amazonaws\.io/role-arn
-        value: arn:aws:iam::123456789012:role/thanos-s3-access
+      # Thanos S3 access is granted by EKS Pod Identity (ADR-0018,
+      # pod-identity-thanos module #267), NOT IRSA — so no
+      # thanos.serviceAccount.annotations role-arn parameter is set here.
 
       # Skip CRDs installation (manage separately)
       skipCrds: false
