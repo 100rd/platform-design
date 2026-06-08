@@ -1,4 +1,4 @@
-{"generated_at": "2026-06-08T08:38:52Z", "applications": [
+{"generated_at": "2026-06-08T11:52:01Z", "applications": [
 {
   "name": "aws-lb-controller",
   "chartVersion": "3.1.0",
