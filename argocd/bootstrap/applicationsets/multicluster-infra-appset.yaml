@@ -18,6 +18,9 @@
 #   begins. On any degraded Application the rollout pauses automatically.
 #   Rollback: delete or pause the ApplicationSet; ArgoCD halts promotion.
 #
+# ADR-0028: platform.* taxonomy labels are stamped on every generated Application
+# so the ArgoCD Application resources themselves are taxonomy-tagged.
+#
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -81,9 +84,21 @@ spec:
       name: '{{ .path.basename }}-{{ .values.regionShort }}'
       namespace: argocd
       labels:
+        # Existing fleet-routing labels
         app.kubernetes.io/part-of: multicluster-infra
         env: '{{ .values.env }}'
         region: '{{ .values.region }}'
+        # ADR-0028: unified platform.* taxonomy on each generated Application.
+        # system     = app directory basename (the infra component name)
+        # component  = "infra" (all apps managed by this AppSet are infra-tier)
+        # env        = deployment environment from cluster values
+        # owner      = "platform" (multi-cluster infra owned by platform team)
+        # managed-by = argocd
+        platform.system: '{{ .path.basename }}'
+        platform.component: infra
+        platform.env: '{{ .values.env }}'
+        platform.owner: platform
+        platform.managed-by: argocd
     spec:
       project: default
       source:

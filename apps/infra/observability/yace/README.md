@@ -6,9 +6,28 @@ re-exposes the metrics in Prometheus format so the prometheus-stack can scrape
 them via a ServiceMonitor. It feeds the **AWS Infrastructure Overview** Grafana
 dashboard (`grafana-dashboards` chart).
 
+## ADR-0028 Stream 4: Tag Propagation
+
+Tag propagation for the unified platform taxonomy (ADR-0028) is enabled on
+three discovery jobs:
+
+| Namespace       | searchTags filter         | exportedTagsOnMetrics labels        |
+|-----------------|---------------------------|--------------------------------------|
+| `AWS/RDS`       | `platform:system` present | platform:system/component/env/owner |
+| `AWS/S3`        | `platform:system` present | platform:system/component/env/owner |
+| `AWS/DynamoDB`  | `platform:system` present | platform:system/component/env/owner |
+
+AWS tag `platform:system=auth` becomes Prometheus label `tag_platform_system="auth"`.
+This allows the unified `platform-system-overview` Grafana dashboard to filter
+`aws_rds_*` / `aws_s3_*` / `aws_dynamodb_*` metrics by `tag_platform_system="$system"`.
+
+Requires `tag:GetResources` permission in the YACE IAM role (already needed for
+discovery; no additional permissions required).
+
 ## Discovery jobs
 
-Four CloudWatch discovery jobs are configured (period/length `300`, delay `120`
+Five CloudWatch discovery jobs are configured (four original + RDS + DynamoDB added
+by ADR-0028 stream 4; S3 updated to add tag propagation) (period/length `300`, delay `120`
 for the 5-min-resolution jobs):
 
 | Namespace             | Key metrics                                                           |

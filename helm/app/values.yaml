@@ -364,6 +364,61 @@ migrations:
   #     memory: 512Mi
   resources: {}
 
+# --- ADR-0028: Unified Platform Tagging and Labeling Taxonomy (K8s Plane) ----
+#
+# These five labels are emitted on EVERY resource rendered by this chart
+# (Deployment/Rollout/Service/ServiceAccount/HPA/PDB/Jobs/CronJobs/etc.) and on
+# every Pod via the podTemplateMeta helper. They enable:
+#
+#   • kube_pod_labels PromQL join for unified Grafana dashboards
+#   • Cilium NetworkPolicy selectors using platform.system / platform.component
+#   • OpenCost cost allocation by system and owner
+#   • Trivy / Inspector vulnerability grouping by system and owner
+#   • Velero / AWS Backup label-selector targeting
+#
+# REQUIRED: system, component, and owner MUST be set. The chart fails at render
+# time (helm template / helm lint) if any of these three are empty, preventing
+# misconfigured releases from being generated.
+#
+# env defaults to .Release.Namespace when left empty — suitable for namespaced
+# deployments where the namespace name equals the environment (e.g. production).
+#
+# managedBy defaults to "argocd"; override only when deploying via another tool.
+#
+# Example (per-app values override):
+#   platform:
+#     system: auth
+#     component: compute
+#     env: production
+#     owner: team-sec
+#     managedBy: argocd   # optional, already the default
+platform:
+  # REQUIRED — logical service / system boundary.
+  # Maps to: platform.system label on all K8s resources.
+  # K8s label key constraint: no colon allowed; use dot notation (ADR-0028).
+  # Examples: auth, payment, analytics, ingest
+  system: ""
+
+  # REQUIRED — architectural tier or role of this workload.
+  # Maps to: platform.component label on all K8s resources.
+  # Examples: compute, database, cache, ingress, worker, scheduler
+  component: ""
+
+  # OPTIONAL — deployment environment. Defaults to .Release.Namespace.
+  # Maps to: platform.env label on all K8s resources.
+  # Examples: production, staging, dev, sandbox
+  env: ""
+
+  # REQUIRED — engineering team responsible for this workload.
+  # Maps to: platform.owner label on all K8s resources.
+  # Examples: team-sec, team-checkout, team-data, team-platform
+  owner: ""
+
+  # OPTIONAL — tool orchestrating this resource. Defaults to "argocd".
+  # Maps to: platform.managed-by label on all K8s resources.
+  # Override when deploying via Helm CLI directly (e.g. helm upgrade --install).
+  managedBy: ""
+
 # --- Labels & Annotations ---
 labels: {}
 podAnnotations: {}

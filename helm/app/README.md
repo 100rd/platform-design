@@ -10,6 +10,51 @@ This Helm chart deploys a generic application container with optional Nginx ingr
 - Optional Gateway API `HTTPRoute` for internal ingress and canary traffic shifting.
 - Optional ExternalSecret resource to fetch secrets from AWS Secrets Manager via External Secrets Operator.
 - **ArgoCD PreSync DB migration Job** (`migrations.enabled` toggle) — runs schema migrations before the workload rollout on every sync, replacing the unsafe per-pod init-container migration pattern.
+- **Unified platform taxonomy labels** (ADR-0028) — all rendered resources carry the five `platform.*` labels required by the K8s-plane taxonomy.
+
+## ADR-0028: Unified Platform Tagging and Labeling Taxonomy
+
+See `docs/adrs/0028-unified-platform-tagging-and-labeling-taxonomy.md` for the full decision record.
+
+Every resource rendered by this chart (Deployment, Rollout, Service, ServiceAccount, HPA, PDB, Jobs, CronJobs, and their Pod templates) carries the following five labels:
+
+| Label | Source | Required |
+|---|---|---|
+| `platform.system` | `platform.system` value | **Yes** |
+| `platform.component` | `platform.component` value | **Yes** |
+| `platform.env` | `platform.env` value, or `.Release.Namespace` | No (defaulted) |
+| `platform.owner` | `platform.owner` value | **Yes** |
+| `platform.managed-by` | `platform.managedBy` value, or `"argocd"` | No (defaulted) |
+
+### Required values
+
+The chart **fails at render time** (`helm template` / `helm lint`) if `platform.system`, `platform.component`, or `platform.owner` are empty. This is intentional: a misconfigured release never makes it past CI.
+
+### Minimal example
+
+```yaml
+# values-auth.yaml
+platform:
+  system: auth
+  component: compute
+  env: production
+  owner: team-sec
+```
+
+### Why these labels matter
+
+- **Grafana dashboards**: `kube_pod_labels` PromQL join on `label_platform_system` gives a unified service view across EKS compute and AWS databases (tagged with the matching `platform:system` AWS tag).
+- **Cilium NetworkPolicies**: `platform.system` and `platform.component` selectors enforce micro-segmentation (e.g., only `platform.system: payment` pods may connect to `platform.system: payment` databases).
+- **OpenCost**: cost allocation by `platform.system` / `platform.owner` shows true TCO per service and team.
+- **Velero / AWS Backup**: label-selector targeting backs up all resources for a given `platform.system` atomically.
+- **Trivy / Inspector**: vulnerability reports grouped by `platform.system` and `platform.owner` produce team-scoped CVE backlogs.
+
+### Namespace labels
+
+When ArgoCD creates namespaces via `CreateNamespace=true` in the ApplicationSet syncOptions, the namespace itself is not a Helm-rendered resource, so this chart does not directly label it. To propagate taxonomy labels to namespaces:
+
+1. Add a `Namespace` manifest alongside the chart (e.g., `apps/<system>/namespace.yaml`) with the five `platform.*` labels set explicitly.
+2. Or use a Kyverno `ClusterPolicy` to mutate namespace creation events and inherit labels from the sync Application (ADR-0028 implementation note 2).
 
 ## Workload kind: Deployment vs Argo Rollouts canary
 
@@ -199,6 +244,11 @@ Key settings in `values.yaml`:
 - `migrations.activeDeadlineSeconds` — wall-clock timeout for the migration Job (default: 300).
 - `migrations.backoffLimit` — retry count on failure (default: 0).
 - `migrations.resources` — resource requests/limits for the migration container (default: inherit from `resources`).
+- `platform.system` — **REQUIRED** logical service boundary (ADR-0028).
+- `platform.component` — **REQUIRED** architectural tier (ADR-0028).
+- `platform.env` — deployment environment; defaults to `.Release.Namespace` (ADR-0028).
+- `platform.owner` — **REQUIRED** responsible engineering team (ADR-0028).
+- `platform.managedBy` — orchestration tool; defaults to `"argocd"` (ADR-0028).
 
 Consult the `values.yaml` file for the full list of configuration options.
 
@@ -213,3 +263,8 @@ chart's `app.*` helper templates and naming conventions.
 The DB migration machinery (`migration-job.yaml`, `migrations` values block) was
 **added 2026-06-08** per **ADR-0032**, replacing the unsafe per-pod init-container
 migration pattern with an ArgoCD PreSync Job.
+
+The platform taxonomy labels (`platform.*` values block, `app.platformLabels` /
+`app.validatePlatformLabels` helpers, `app.podTemplateMeta` update) were
+**added 2026-06-08** per **ADR-0028**, implementing the K8s-plane unified tagging
+taxonomy and enabling the `kube_pod_labels` PromQL join for cross-plane dashboards.
