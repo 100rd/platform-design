@@ -1,0 +1,48 @@
+---
+# ServiceLevelObjective: API Availability
+#
+# ADR-0026 — SLO slice: Pyrra operator watches this CR and emits a PrometheusRule
+# containing recording rules + multi-window burn-rate alert rules.
+#
+# Metric: http_requests_total (standard Prometheus HTTP instrumentation label set).
+# Target: 99.9% availability over a 28-day rolling window (3 nines).
+#
+# The `pyrra: "true"` label is required by the Pyrra operator to distinguish its
+# own generated PrometheusRules from hand-authored ones; do not remove it.
+#
+# Adjust `selector.matchLabels` to match the actual service labels in your cluster.
+apiVersion: pyrra.dev/v1alpha1
+kind: ServiceLevelObjective
+metadata:
+  name: api-availability
+  namespace: observability
+  labels:
+    # Required by Pyrra operator for ownership tracking
+    pyrra: "true"
+    app.kubernetes.io/name: api
+    app.kubernetes.io/component: slo
+    team: platform
+    adr: "0026"
+spec:
+  # Human-readable description shown in the Pyrra UI
+  description: "99.9% of API HTTP requests succeed (non-5xx) over a 28-day window."
+
+  # 28-day rolling window (standard; aligns with most SLA reporting periods)
+  window: 28d
+
+  # SLO target: 99.9 % availability (0.1 % error budget)
+  target: "99.9"
+
+  serviceLevel:
+    objectives:
+      # Ratio SLO: good events / total events
+      # good  = requests that are NOT 5xx
+      # total = all requests
+      - ratio:
+          errors:
+            metric: http_requests_total{job="api-server",code=~"5.."}
+          total:
+            metric: http_requests_total{job="api-server"}
+          grouping:
+            # Break down error budget by handler for actionable alerts
+            - handler

@@ -37,6 +37,11 @@ output "suspended_ou_id" {
   value       = aws_organizations_organizational_unit.suspended.id
 }
 
+output "policy_staging_ou_id" {
+  description = "The ID of the Policy-Staging OU — wire this into the rcps module's target_ou_ids to STAGE the org-perimeter RCP before promoting to root (ADR-0017)"
+  value       = aws_organizations_organizational_unit.policy_staging.id
+}
+
 output "account_ids" {
   description = "Map of account name to account ID"
   value       = { for k, v in aws_organizations_account.members : k => v.id }

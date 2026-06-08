@@ -47,3 +47,13 @@ run "deployed_to_kube_system" {
     error_message = "Karpenter should be deployed to kube-system namespace"
   }
 }
+
+run "node_repair_enabled_by_default" {
+  command = plan
+
+  # Tier-1: Karpenter NodeRepair (Node Auto-Repair) feature gate defaults on.
+  assert {
+    condition     = var.enable_node_repair == true
+    error_message = "NodeRepair (Node Auto-Repair) should be enabled by default"
+  }
+}

@@ -105,7 +105,7 @@ spec:
 
         # Wide range of instance families for spot diversity
         # x86: m7i, m7a, m6i, m6a, c7i, c7a, c6i, c6a, r7i, r7a, r6i, r6a, t3
-        # ARM64: m7g, c7g, r7g, m6g, c6g, r6g, t4g
+        # ARM64: c8g/m8g/r8g (Graviton4, preferred), m7g, c7g, r7g, m6g, c6g, r6g, t4g
         - key: karpenter.k8s.aws/instance-family
           operator: In
           values:
@@ -123,6 +123,14 @@ spec:
             - "r6i"
             - "r6a"
             - "t3"
+            # ARM64/Graviton4 (8g) — Tier-1, doc-verified 2026-06-07, preferred (7g below = fallback)
+            - "c8g"
+            - "c8gd"
+            - "c8gn"
+            - "m8g"
+            - "m8gd"
+            - "r8g"
+            - "r8gd"
             # ARM64/Graviton instances
             - "m7g"
             - "m7gd"

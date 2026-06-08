@@ -422,6 +422,62 @@ kubectl get configmaps -n observability -l grafana_dashboard=1 -o yaml > dashboa
 kubectl apply -f dashboards-backup.yaml
 ```
 
+## Provenance
+
+The following dashboards were **ported from `argocd@c364c6c`
+`apps/observability`, 2026-06 sync**:
+
+- **`kubernetes-overview.json`** (uid `k8s-cluster-overview`) - node & pod
+  CPU/memory from node-exporter and kube-state-metrics.
+- **`aws-infra-overview.json`** (uid `aws-infra-overview`) - AWS infrastructure
+  fed by the YACE CloudWatch exporter (`yace` chart): EKS node CPU/mem, NLB
+  healthy/unhealthy hosts + active/new flows + processed bytes, S3 bucket
+  size/object count, EBS burst balance/IOPS. The ACM certificate-expiry row from
+  the source dashboard is intentionally omitted because the YACE config drops the
+  `AWS/CertificateManager` job (internal CA, not ACM).
+- **`argocd-platform-overview.json`** (uid `argocd-platform-overview`) - ArgoCD
+  app health/sync, application-controller reconciliation queue/duration,
+  repo-server git-fetch/RPC, and component CPU/memory.
+
+These are inlined into `templates/configmap-dashboards.yaml` as `data` keys,
+matching the existing dashboards in this chart.
+
+## ADR-0028 Stream 4: Platform System Overview Dashboard
+
+The `platform-system-overview.json` dashboard (uid `platform-system-overview`)
+implements ADR-0028 section 4 — a single `$system` template variable drives all
+panels, joining EKS and AWS data planes via the unified taxonomy.
+
+### How it works
+
+| Plane | Mechanism | Prometheus label |
+|-------|-----------|-----------------|
+| EKS pods | kube-state-metrics `metricLabelsAllowlist` exposes `platform.system` → | `label_platform_system` |
+| RDS | YACE `exportedTagsOnMetrics` translates AWS tag `platform:system` → | `tag_platform_system` |
+| S3 | YACE `exportedTagsOnMetrics` translates AWS tag `platform:system` → | `tag_platform_system` |
+| DynamoDB | YACE `exportedTagsOnMetrics` translates AWS tag `platform:system` → | `tag_platform_system` |
+
+Selecting `$system=auth` renders:
+- **EKS CPU/RAM**: `container_cpu_usage_seconds_total * on(pod,namespace) group_left(label_platform_system,label_platform_component) kube_pod_labels{label_platform_system="auth"}`
+- **RDS**: `aws_rds_cpuutilization_average{tag_platform_system="auth"}`
+- **S3**: `aws_s3_bucket_size_bytes_average{tag_platform_system="auth"}`
+- **Cost**: placeholder panel — replace with OpenCost query once ADR-0027 is deployed.
+
+The dashboard is loaded via the `.Files.Glob "dashboards/*.json"` loop in
+`templates/configmap-ported-dashboards.yaml` — no template changes required,
+it is auto-discovered as `grafana-dashboard-platform-system-overview` ConfigMap.
+
+### Prerequisites
+
+1. `kube-state-metrics` subchart configured with `metricLabelsAllowlist` (see
+   `prometheus-stack/values.yaml` `kube-state-metrics:` block, ADR-0028).
+2. YACE `AWS/RDS`, `AWS/S3`, `AWS/DynamoDB` jobs with `exportedTagsOnMetrics`
+   carrying `platform:system` (see `yace/values.yaml`, ADR-0028).
+3. AWS resources tagged with `platform:system`, `platform:component`,
+   `platform:env`, `platform:owner`.
+4. EKS pods labeled with `platform.system`, `platform.component`,
+   `platform.env`, `platform.owner`.
+
 ## Resources
 
 - [Grafana Documentation](https://grafana.com/docs/)

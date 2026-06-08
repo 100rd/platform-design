@@ -1,0 +1,93 @@
+# -----------------------------------------------------------------------------
+# reusable-manifest-validate.yml
+#
+# Validate a Helm chart with helm lint + helm template | kubeconform + conftest.
+# Designed to run on tag-bump PRs created by reusable-deploy-via-argocd.yml, and
+# usable directly from any chart-owning repo.
+#
+# Mirrors platform-workflows@3bb35df reusable-manifest-validate.yml
+# (2026-06 consolidation sync).
+#
+# Caller example:
+#
+#   jobs:
+#     validate:
+#       uses: ./.github/workflows/reusable-manifest-validate.yml
+#       with:
+#         chart_path: charts/hello-world
+#         values_files: |
+#           charts/hello-world/values-dev.yaml
+#         kubernetes_version: "1.32.0"
+#         policies_path: tests/opa
+#         fail_on_policy_violations: false
+#
+# See: docs/ci-cd/README.md
+# -----------------------------------------------------------------------------
+
+name: reusable-manifest-validate
+
+on:
+  workflow_call:
+    inputs:
+      chart_path:
+        description: "Filesystem path to the Helm chart directory (containing Chart.yaml)."
+        type: string
+        required: true
+      values_files:
+        description: "Newline-separated list of values files to apply during helm template."
+        type: string
+        required: false
+        default: ""
+      release_name:
+        description: "Helm release name used during template rendering."
+        type: string
+        required: false
+        default: "validate"
+      namespace:
+        description: "Namespace passed to helm template."
+        type: string
+        required: false
+        default: "default"
+      kubernetes_version:
+        description: "Target Kubernetes API version for kubeconform schema selection."
+        type: string
+        required: false
+        default: "1.32.0"
+      policies_path:
+        description: "Directory of conftest/Rego policies. Empty string skips conftest."
+        type: string
+        required: false
+        default: "tests/opa"
+      fail_on_policy_violations:
+        description: "If true, conftest violations fail the job."
+        type: boolean
+        required: false
+        default: false
+      skip_conftest:
+        description: "Skip the conftest step entirely."
+        type: boolean
+        required: false
+        default: false
+
+permissions: {}
+
+jobs:
+  manifest-validate:
+    name: Validate ${{ inputs.chart_path }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Manifest validate
+        uses: ./.github/actions/manifest-validate
+        with:
+          chart-path: ${{ inputs.chart_path }}
+          values-files: ${{ inputs.values_files }}
+          release-name: ${{ inputs.release_name }}
+          namespace: ${{ inputs.namespace }}
+          kubernetes-version: ${{ inputs.kubernetes_version }}
+          policies-path: ${{ inputs.policies_path }}
+          fail-on-policy-violations: ${{ inputs.fail_on_policy_violations }}
+          skip-conftest: ${{ inputs.skip_conftest }}

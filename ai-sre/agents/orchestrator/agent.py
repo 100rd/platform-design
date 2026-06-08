@@ -34,6 +34,42 @@ class Advisory:
 
 
 @dataclass
+class Blackboard:
+    """Shared Blackboard pattern for collaborative incident investigation.
+
+    Holds incident signals, the target infrastructure subgraph, and agent findings.
+    """
+
+    incident_signals: list[dict[str, Any]] = field(default_factory=list)
+    infrastructure_subgraph: dict[str, Any] = field(default_factory=dict)
+    findings: list[Advisory] = field(default_factory=list)
+
+    def add_signal(self, signal: dict[str, Any]) -> None:
+        """Add an incident signal (e.g., alerts, logs, metrics) to the blackboard."""
+        self.incident_signals.append(signal)
+
+    def update_infrastructure_subgraph(self, key: str, value: Any) -> None:
+        """Update/enrich the target infrastructure subgraph with resources or topology details."""
+        self.infrastructure_subgraph[key] = value
+
+    def add_finding(self, finding: Advisory) -> None:
+        """Write an agent finding (advisory) to the blackboard."""
+        self.findings.append(finding)
+
+    def get_findings(self) -> list[Advisory]:
+        """Read all agent findings (advisories) from the blackboard."""
+        return self.findings
+
+    def get_signals(self) -> list[dict[str, Any]]:
+        """Read all incident signals from the blackboard."""
+        return self.incident_signals
+
+    def get_subgraph(self) -> dict[str, Any]:
+        """Read the target infrastructure subgraph from the blackboard."""
+        return self.infrastructure_subgraph
+
+
+@dataclass
 class InvestigationContext:
     """Context for an ongoing investigation."""
 
@@ -48,6 +84,20 @@ class InvestigationContext:
     created_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
+    blackboard: Blackboard = field(default_factory=Blackboard)
+
+    def __post_init__(self) -> None:
+        # Link the findings of the blackboard to the advisories list to ensure full backward compatibility
+        self.blackboard.findings = self.advisories
+        # Seed the blackboard with the initial incident alert signal
+        self.blackboard.add_signal({
+            "type": "alert",
+            "alert_id": self.alert_id,
+            "alert_name": self.alert_name,
+            "cluster": self.cluster,
+            "namespace": self.namespace,
+            "labels": self.labels,
+        })
 
 
 class SREOrchestrator:
@@ -129,9 +179,7 @@ class SREOrchestrator:
         """Start an investigation for an incoming alert.
 
         Creates an investigation context, routes to the appropriate agent,
-        and returns the context with advisory. In production, this will
-        invoke the Claude Agent SDK to run the specialized agent with
-        its MCP tools.
+        and runs the specialized agents using the shared Blackboard context.
         """
         alert_id = alert.get("alert_id", "unknown")
         alert_name = alert.get("labels", {}).get("alertname", "unknown")
@@ -158,6 +206,9 @@ class SREOrchestrator:
             target_role.value,
         )
 
+        # Run primary specialist SRE agent on the shared blackboard
+        await self._run_agent(target_role, context.blackboard)
+
         # For AWS cloud alerts, also request cross-layer enrichment
         # from the AWS Cloud Agent even when routing to another agent
         if target_role != AgentRole.AWS_CLOUD:
@@ -168,12 +219,83 @@ class SREOrchestrator:
                     "Also requesting AWS cloud enrichment for alert '%s'",
                     alert_name,
                 )
-
-        # In production, this calls the Claude Agent SDK:
-        # advisory = await self._run_agent(target_role, context)
-        # context.advisories.append(advisory)
+                # Run the AWS Cloud Agent on the same blackboard context
+                await self._run_agent(AgentRole.AWS_CLOUD, context.blackboard)
 
         return context
+
+    async def _run_agent(self, role: AgentRole, blackboard: Blackboard) -> None:
+        """Run a specialized SRE agent, allowing it to read from and write findings to the shared blackboard.
+
+        In production, this would invoke the Claude Agent SDK to run the specialized agent
+        with its specific MCP tools. Here, we simulate the agent logic where it reads from
+        the blackboard, updates the infrastructure subgraph, and writes findings.
+        """
+        # Read incident signals and target infrastructure subgraph from the blackboard
+        signals = blackboard.get_signals()
+        subgraph = blackboard.get_subgraph()
+
+        logger.info(
+            "Running specialist SRE agent '%s' on shared blackboard context. Signals: %d, Subgraph keys: %s",
+            role.value,
+            len(signals),
+            list(subgraph.keys()),
+        )
+
+        # 1. Analyze signals to determine the context
+        alert_name = "unknown"
+        cluster = "unknown"
+        for signal in signals:
+            if signal.get("type") == "alert":
+                alert_name = signal.get("alert_name", "unknown")
+                cluster = signal.get("cluster", "unknown")
+                break
+
+        # 2. Simulate agent updating the target infrastructure subgraph on the blackboard
+        if role == AgentRole.AWS_CLOUD:
+            blackboard.update_infrastructure_subgraph(
+                "aws_resources",
+                {
+                    "nodes": [
+                        {"id": f"aws-ec2-{cluster}", "type": "EC2Instance", "status": "running"},
+                        {"id": f"aws-ebs-{cluster}", "type": "EBSVolume", "status": "attached"},
+                    ],
+                    "edges": [
+                        {"source": f"aws-ec2-{cluster}", "target": f"aws-ebs-{cluster}", "relation": "uses"}
+                    ]
+                }
+            )
+        else:
+            # For K8s or other layers, update the K8s subgraph
+            blackboard.update_infrastructure_subgraph(
+                "k8s_resources",
+                {
+                    "nodes": [
+                        {"id": f"k8s-pod-{alert_name}", "type": "Pod", "status": "CrashLoopBackOff"},
+                        {"id": f"k8s-node-{cluster}", "type": "Node", "status": "Ready"},
+                    ],
+                    "edges": [
+                        {"source": f"k8s-pod-{alert_name}", "target": f"k8s-node-{cluster}", "relation": "scheduled_on"}
+                    ]
+                }
+            )
+
+        # 3. Simulate writing findings (Advisory) back to the blackboard
+        summary = f"Specialist SRE Agent {role.value} analyzed the incident."
+        root_cause = f"Potential root cause related to {alert_name} in cluster {cluster} identified by {role.value}."
+
+        advisory = Advisory(
+            agent_role=role.value,
+            summary=summary,
+            root_cause=root_cause,
+            confidence=0.8,
+            recommended_actions=[
+                f"Check logs for {role.value} related components",
+                "Review recent platform deployment metrics"
+            ],
+            severity="warning"
+        )
+        blackboard.add_finding(advisory)
 
     def _needs_aws_enrichment(self, alert: dict[str, Any]) -> bool:
         """Determine if an alert would benefit from AWS cloud context.
@@ -227,6 +349,7 @@ class SREOrchestrator:
                 }
                 for a in context.advisories
             ],
+            "infrastructure_subgraph": context.blackboard.get_subgraph(),
             "aws_enrichment": context.enrichment.get(
                 "aws_cloud_check_requested", False
             ),

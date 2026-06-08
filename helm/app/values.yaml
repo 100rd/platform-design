@@ -105,6 +105,74 @@ service:
   # Shared: when true, load-balances across local AND remote pods simultaneously
   shared: false
 
+# --- Progressive delivery (Argo Rollouts canary) -----------------------------
+# Ported from argocd@c364c6c charts/app (2026-06 sync).
+#
+# rollout.enabled=false → a plain Deployment (templates/deployment.yaml).
+# rollout.enabled=true  → an Argo Rollouts canary Rollout replaces the
+#   Deployment. The Rollout uses a stableService (this app's Service, behind the
+#   HTTPRoute at 100%) plus a canaryService (the weighted fraction). The Gateway
+#   API plugin (argoproj-labs/gatewayAPI) shifts the HTTPRoute backendRef weights
+#   as the canary progresses; Cilium drains connections on each weight shift.
+#
+# Default is OFF for backward compatibility — existing releases keep their
+# Deployment unchanged. Kargo remains the planned promotion layer ABOVE this:
+# Kargo promotes verified artifacts between environments; this rollout block
+# governs the in-cluster canary once a new version lands in an environment.
+rollout:
+  enabled: false
+  # Seconds the canary ReplicaSet stays alive after an abort so in-flight
+  # requests (up to the app's own request timeout) drain before SIGKILL.
+  abortScaleDownDelaySeconds: 30
+  canary:
+    # Progressive weight ladder. List of integer weights; the template inserts
+    # an analysis gate between each weight (when analysis.enabled=true) and a
+    # final setWeight: 100. Default ladder: 10 → 30 → 50 → 100.
+    weights: [10, 30, 50]
+    # Full override: when non-empty, `weights` is ignored and these steps are
+    # rendered verbatim. Use for non-standard ladders (e.g. workers with no
+    # analysis gates).
+    customSteps: []
+  # Metric gate (Argo Rollouts AnalysisTemplate). ON by default for any app that
+  # uses the canary rollout. Only renders when rollout.enabled too, so pure
+  # workers with no HTTP metrics are unaffected. Set analysis.enabled: false for
+  # workers that expose no flask_http_request_* / latency metrics.
+  analysis:
+    enabled: true
+    # kube-prometheus-stack Service in the observability namespace. Adjust to the
+    # actual release-prefixed Service name for this platform.
+    prometheusAddress: "http://kube-prometheus-stack-prometheus.observability.svc:9090"
+    interval: 30s
+    count: 5
+    failureLimit: 1
+    # Queries are parametrised — {{args.service}} is the canary Service so stable
+    # traffic is not counted. Tune the label selectors to the real scrape labels.
+    errorRate:
+      successCondition: "result[0] < 0.01"   # <1% 5xx
+      query: |
+        sum(rate(flask_http_request_total{service="{{args.service}}",status=~"5.."}[1m]))
+        /
+        sum(rate(flask_http_request_total{service="{{args.service}}"}[1m]))
+    latencyP95:
+      successCondition: "result[0] < 0.5"     # p95 < 500ms
+      query: |
+        histogram_quantile(0.95,
+          sum(rate(flask_http_request_duration_seconds_bucket{service="{{args.service}}"}[1m])) by (le))
+
+# --- Internal ingress via Gateway API (Cilium) -------------------------------
+# Off by default. Required when rollout.enabled=true (the Gateway API plugin
+# shifts traffic by rewriting this HTTPRoute's backendRef weights). When the
+# Rollout is active, both the stable and canary Services are listed as
+# backendRefs. This is independent of the legacy `ingress` (Nginx/ALB) block.
+httpRoute:
+  enabled: false
+  gateway:
+    name: gw-internal
+    namespace: kube-system
+    sectionName: http
+  path: /
+  hostnames: []
+
 # --- Ingress ---
 ingress:
   enabled: false
@@ -224,10 +292,135 @@ cronJobs: []
   #   failedJobsHistoryLimit: 3
 
 # --- Init Containers ---
+# NOTE: do NOT use initContainers for DB schema migrations when
+# migrations.enabled=true — per ADR-0032, the PreSync Job is the authoritative
+# migration mechanism. Use initContainers for other purposes (e.g.,
+# wait-for-dependency, config-rendering).
 initContainers: []
-  # - name: migrate
-  #   image: ""
-  #   command: ["/app/migrate", "up"]
+  # - name: wait-for-db
+  #   image: busybox:1.36
+  #   command: ["sh", "-c", "until nc -z postgres 5432; do sleep 2; done"]
+
+# --- DB Migrations via ArgoCD PreSync Job (ADR-0032) -------------------------
+# When migrations.enabled=true the chart renders a batch/v1 Job annotated as
+# an ArgoCD PreSync hook. ArgoCD runs this Job to completion BEFORE applying
+# any Sync-phase resources (Deployment/Rollout/Service/etc.), so the schema is
+# always up to date before the new application version starts serving traffic.
+#
+# A failed migration marks the Application sync Failed and blocks the rollout;
+# existing pods continue serving traffic uninterrupted. The Job is deleted
+# automatically on success (HookSucceeded) and cleaned up before re-creation
+# (BeforeHookCreation).
+#
+# Prerequisites:
+#   - externalSecrets.enabled: true  — DB credentials must be available via the
+#     ESO secret. The migration Job inherits envFrom so DATABASE_URL / DB_*
+#     variables are present at migration runtime.
+#
+# Recommended migration tools (idempotent, track applied versions):
+#   golang-migrate: ["migrate", "-path", "/migrations", "-database", "$(DATABASE_URL)", "up"]
+#   alembic:        ["alembic", "upgrade", "head"]
+#   flyway:         ["flyway", "migrate"]
+#   atlas:          ["atlas", "migrate", "apply", "--url", "$(DATABASE_URL)"]
+migrations:
+  # Set to true to render the PreSync migration Job. Default off — existing
+  # releases without migrations are unaffected (backward compatible).
+  enabled: false
+
+  # command: migration entrypoint. Required when enabled=true. Must exit 0 on
+  # success and non-zero on failure. Should be idempotent (safe to re-run).
+  # Example (golang-migrate):
+  #   command: ["migrate", "-path", "/migrations", "-database", "$(DATABASE_URL)", "up"]
+  command: []
+
+  # args: optional extra arguments appended after command. Leave empty when
+  # command already encodes all arguments.
+  args: []
+
+  # image: override the migration container image. Leave empty ("") to reuse
+  # the main application image (common case — migration binary is bundled).
+  # Example: "ghcr.io/myorg/myapp-migrations:1.2.3"
+  image: ""
+
+  # backoffLimit: retries on failure. Default 0 — no retries. Increase only
+  # when migration tool is idempotent and transient connectivity failures are
+  # a concern (e.g., cold-start DB in a non-prod environment).
+  backoffLimit: 0
+
+  # activeDeadlineSeconds: hard wall-clock timeout for the Job. A hung
+  # migration blocks the entire ArgoCD sync. Increase for large backfills.
+  # Default: 300 (5 minutes).
+  activeDeadlineSeconds: 300
+
+  # resources: resource requests/limits for the migration container. When
+  # empty ({}), the main app `resources` block is reused. Override here when
+  # migrations need more memory (ORM introspection, large schema diffs).
+  # resources:
+  #   requests:
+  #     cpu: 100m
+  #     memory: 256Mi
+  #   limits:
+  #     cpu: 500m
+  #     memory: 512Mi
+  resources: {}
+
+# --- ADR-0028: Unified Platform Tagging and Labeling Taxonomy (K8s Plane) ----
+#
+# These five labels are emitted on EVERY resource rendered by this chart
+# (Deployment/Rollout/Service/ServiceAccount/HPA/PDB/Jobs/CronJobs/etc.) and on
+# every Pod via the podTemplateMeta helper. They enable:
+#
+#   • kube_pod_labels PromQL join for unified Grafana dashboards
+#   • Cilium NetworkPolicy selectors using platform.system / platform.component
+#   • OpenCost cost allocation by system and owner
+#   • Trivy / Inspector vulnerability grouping by system and owner
+#   • Velero / AWS Backup label-selector targeting
+#
+# REQUIRED: system, component, and owner MUST be set. The chart fails at render
+# time (helm template / helm lint) if any of these three are empty, preventing
+# misconfigured releases from being generated.
+#
+# env defaults to .Release.Namespace when left empty — suitable for namespaced
+# deployments where the namespace name equals the environment (e.g. production).
+#
+# managedBy defaults to "argocd"; override only when deploying via another tool.
+#
+# Example (per-app values override):
+#   platform:
+#     system: auth
+#     component: compute
+#     env: production
+#     owner: team-sec
+#     managedBy: argocd   # optional, already the default
+platform:
+  # Logical service / system boundary. Maps to platform.system label.
+  # Default "app" lets bare `helm template` / CI dry-run succeed; OVERRIDE per real release.
+  # K8s label key constraint: no colon allowed; use dot notation (ADR-0028).
+  # Examples: auth, payment, analytics, ingest
+  system: "app"
+
+  # Architectural tier or role of this workload. Maps to platform.component label.
+  # Default "compute"; OVERRIDE per real release. Examples: compute, database, cache, ingress, worker
+  component: "compute"
+
+  # OPTIONAL — deployment environment. Defaults to .Release.Namespace.
+  # Maps to: platform.env label on all K8s resources.
+  # Examples: production, staging, dev, sandbox
+  env: ""
+
+  # Engineering team responsible for this workload. Maps to platform.owner label.
+  # Default "platform"; OVERRIDE per real release. Examples: team-sec, team-checkout, team-data
+  owner: "platform"
+
+  # OPTIONAL — tool orchestrating this resource. Defaults to "argocd".
+  # Maps to: platform.managed-by label on all K8s resources.
+  # Override when deploying via Helm CLI directly (e.g. helm upgrade --install).
+  managedBy: ""
+
+  # Opt-in strict validation (ADR-0028). Default false so default render never fails.
+  # When true: chart fails at render time if system/component/owner are empty.
+  # RECOMMENDED: set strict: true in every production Application values override.
+  strict: false
 
 # --- Labels & Annotations ---
 labels: {}

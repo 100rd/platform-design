@@ -1,0 +1,21 @@
+# Cilium GatewayClass — registers Cilium as the Gateway API controller for the
+# shared cluster (ADR-0009). Must be applied AFTER the Gateway API CRDs
+# (standard-install.yaml in crds/, which ArgoCD applies at the earliest wave).
+#
+# sync-wave "0" ensures the GatewayClass is created after the CRDs land.
+#
+# controllerName must match the value Cilium was installed with:
+#   io.cilium/gateway-controller  (Cilium 1.13+ default; see apps/infra/cilium
+#   values gatewayAPI.enabled=true).
+#
+# This GatewayClass is cluster-scoped and shared; individual team namespaces
+# attach their HTTPRoute/TCPRoute to a Gateway (apps/infra/gateways), not to
+# the GatewayClass directly.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: {{ .Values.gatewayClass.name }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  controllerName: {{ .Values.gatewayClass.controllerName }}

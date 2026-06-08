@@ -7,7 +7,7 @@ Logs integration.
 Closes #161. This is the canonically-named wrapper around the
 [`cloudtrail`](../cloudtrail/) module which already produces an
 organization trail; new code should reference this module name to match
-the source repo (qbiq-ai/infra) convention.
+the source repo (infra) convention.
 
 ## What it produces
 

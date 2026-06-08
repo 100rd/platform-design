@@ -1,0 +1,42 @@
+{{- if .Values.backendTrafficPolicy.enabled }}
+---
+# BackendTrafficPolicy — global rate-limiting example.
+# This is the primary ADR-0025 capability rationale: Cilium Gateway API does not
+# support global (cross-pod, shared-counter) rate-limiting natively; Envoy Gateway
+# exposes it via this CRD backed by a Redis rate-limit service.
+#
+# Rate-limit rule below: 1000 requests/minute per distinct x-forwarded-for value
+# (i.e., per remote IP as seen by an upstream LB).
+#
+# For ext-proc, WASM, and circuit-breaking examples see docs/adrs/0025-*.md.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: {{ .Values.backendTrafficPolicy.name }}
+  namespace: {{ .Values.exampleGateway.namespace }}
+  labels:
+    {{- include "envoy-gateway.labels" . | nindent 4 }}
+spec:
+  # Attach to the example Gateway defined in gateway.yaml.
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: {{ .Values.exampleGateway.name }}
+  rateLimit:
+    type: {{ .Values.backendTrafficPolicy.rateLimit.type }}
+    global:
+      rules:
+        {{- range .Values.backendTrafficPolicy.rateLimit.global.rules }}
+        - clientSelectors:
+            {{- range .clientSelectors }}
+            - headers:
+                {{- range .headers }}
+                - name: {{ .name }}
+                  type: {{ .type }}
+                {{- end }}
+            {{- end }}
+          limit:
+            requests: {{ .limit.requests }}
+            unit: {{ .limit.unit }}
+        {{- end }}
+{{- end }}

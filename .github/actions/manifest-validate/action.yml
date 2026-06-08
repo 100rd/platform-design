@@ -1,0 +1,195 @@
+# -----------------------------------------------------------------------------
+# manifest-validate
+#
+# Mirrors platform-workflows@3bb35df .github/actions/manifest-validate
+# (2026-06 platform-workflows consolidation sync).
+# -----------------------------------------------------------------------------
+name: "Manifest Validate"
+description: "Validate a Helm chart by running helm lint, helm template piped through kubeconform (strict mode), and conftest against OPA policies. Catches typos in API versions, missing required values, and policy violations before ArgoCD tries to sync."
+
+inputs:
+  chart-path:
+    description: "Filesystem path to the Helm chart directory (containing Chart.yaml)."
+    required: true
+  values-files:
+    description: "Newline-separated list of values files passed to `helm template`. Order matters — later files override earlier ones."
+    required: false
+    default: ""
+  release-name:
+    description: "Helm release name used during template rendering."
+    required: false
+    default: "validate"
+  namespace:
+    description: "Namespace passed to `helm template`."
+    required: false
+    default: "default"
+  kubernetes-version:
+    description: "Kubernetes API version targeted by kubeconform (e.g. 1.32.0). Drives schema selection."
+    required: false
+    default: "1.32.0"
+  policies-path:
+    description: "Path to a directory of conftest/Rego policies. Empty string skips conftest entirely."
+    required: false
+    default: "tests/opa"
+  fail-on-policy-violations:
+    description: "If `true`, conftest violations fail the job. If `false`, violations are reported but advisory."
+    required: false
+    default: "false"
+  skip-conftest:
+    description: "Skip the conftest step entirely (e.g. when policies-path is empty)."
+    required: false
+    default: "false"
+  helm-version:
+    description: "Helm release."
+    required: false
+    default: "v3.16.2"
+  kubeconform-version:
+    description: "kubeconform release."
+    required: false
+    default: "v0.6.7"
+  conftest-version:
+    description: "conftest release."
+    required: false
+    default: "v0.57.0"
+
+outputs:
+  rendered-manifest:
+    description: "Path to the rendered manifest written during validation."
+    value: ${{ steps.render.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Helm
+      # azure/setup-helm v4.2.0
+      uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2
+      with:
+        version: ${{ inputs.helm-version }}
+
+    - name: Install kubeconform
+      shell: bash
+      env:
+        KC_VERSION: ${{ inputs.kubeconform-version }}
+      run: |
+        set -euo pipefail
+        BIN_DIR="${RUNNER_TEMP}/kubeconform-bin"
+        mkdir -p "${BIN_DIR}"
+        URL="https://github.com/yannh/kubeconform/releases/download/${KC_VERSION}/kubeconform-linux-amd64.tar.gz"
+        curl -fsSL -o "${RUNNER_TEMP}/kubeconform.tgz" "${URL}"
+        tar -xzf "${RUNNER_TEMP}/kubeconform.tgz" -C "${BIN_DIR}" kubeconform
+        chmod +x "${BIN_DIR}/kubeconform"
+        echo "${BIN_DIR}" >> "$GITHUB_PATH"
+        "${BIN_DIR}/kubeconform" -v
+
+    - name: Install conftest
+      if: inputs.skip-conftest != 'true' && inputs.policies-path != ''
+      shell: bash
+      env:
+        CONFTEST_VERSION: ${{ inputs.conftest-version }}
+      run: |
+        set -euo pipefail
+        BIN_DIR="${RUNNER_TEMP}/conftest-bin"
+        mkdir -p "${BIN_DIR}"
+        VER="${CONFTEST_VERSION#v}"
+        URL="https://github.com/open-policy-agent/conftest/releases/download/${CONFTEST_VERSION}/conftest_${VER}_Linux_x86_64.tar.gz"
+        curl -fsSL -o "${RUNNER_TEMP}/conftest.tgz" "${URL}"
+        tar -xzf "${RUNNER_TEMP}/conftest.tgz" -C "${BIN_DIR}" conftest
+        chmod +x "${BIN_DIR}/conftest"
+        echo "${BIN_DIR}" >> "$GITHUB_PATH"
+        "${BIN_DIR}/conftest" --version
+
+    - name: Helm dependency build
+      shell: bash
+      env:
+        CHART_PATH: ${{ inputs.chart-path }}
+      run: |
+        set -euo pipefail
+        if [ -f "${CHART_PATH}/Chart.lock" ] || grep -q '^dependencies:' "${CHART_PATH}/Chart.yaml" 2>/dev/null; then
+          helm dependency build "${CHART_PATH}"
+        else
+          echo "No chart dependencies declared; skipping."
+        fi
+
+    - name: Helm lint
+      shell: bash
+      env:
+        VALUES_FILES: ${{ inputs.values-files }}
+        CHART_PATH: ${{ inputs.chart-path }}
+      run: |
+        set -euo pipefail
+        ARGS=(lint "${CHART_PATH}" --strict)
+        while IFS= read -r vf; do
+          [ -z "${vf}" ] && continue
+          ARGS+=(--values "${vf}")
+        done <<< "${VALUES_FILES}"
+        helm "${ARGS[@]}"
+
+    - name: Helm template
+      id: render
+      shell: bash
+      env:
+        VALUES_FILES: ${{ inputs.values-files }}
+        RELEASE: ${{ inputs.release-name }}
+        NAMESPACE: ${{ inputs.namespace }}
+        CHART_PATH: ${{ inputs.chart-path }}
+      run: |
+        set -euo pipefail
+        OUT="${RUNNER_TEMP}/rendered.yaml"
+        ARGS=(template "${RELEASE}" "${CHART_PATH}" --namespace "${NAMESPACE}")
+        while IFS= read -r vf; do
+          [ -z "${vf}" ] && continue
+          ARGS+=(--values "${vf}")
+        done <<< "${VALUES_FILES}"
+        helm "${ARGS[@]}" > "${OUT}"
+        wc -l "${OUT}"
+        echo "path=${OUT}" >> "$GITHUB_OUTPUT"
+
+    - name: Kubeconform validate
+      shell: bash
+      env:
+        K8S_VERSION: ${{ inputs.kubernetes-version }}
+        RENDERED: ${{ steps.render.outputs.path }}
+      run: |
+        set -euo pipefail
+        kubeconform \
+          -strict \
+          -summary \
+          -kubernetes-version "${K8S_VERSION}" \
+          -schema-location default \
+          -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{ .Group }}/{{ .ResourceKind }}_{{ .ResourceAPIVersion }}.json' \
+          "${RENDERED}"
+
+    - name: Conftest policy check
+      if: inputs.skip-conftest != 'true' && inputs.policies-path != ''
+      shell: bash
+      env:
+        POLICIES_PATH: ${{ inputs.policies-path }}
+        RENDERED: ${{ steps.render.outputs.path }}
+        FAIL_ON_VIOLATION: ${{ inputs.fail-on-policy-violations }}
+      run: |
+        set -uo pipefail
+        if [ ! -d "${POLICIES_PATH}" ]; then
+          echo "::warning::policies-path '${POLICIES_PATH}' not found; skipping conftest."
+          exit 0
+        fi
+        set +e
+        conftest test --policy "${POLICIES_PATH}" "${RENDERED}"
+        RC=$?
+        set -e
+        if [ "${RC}" -ne 0 ]; then
+          if [ "${FAIL_ON_VIOLATION}" = "true" ]; then
+            echo "::error::conftest reported policy violations."
+            exit "${RC}"
+          fi
+          echo "::warning::conftest reported policy violations (advisory mode)."
+        fi
+
+    - name: Upload rendered manifest as artifact
+      if: always()
+      # actions/upload-artifact v4.4.3
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: rendered-manifest-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ steps.render.outputs.path }}
+        if-no-files-found: warn
+        retention-days: 14
