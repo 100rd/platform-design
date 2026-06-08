@@ -1,5 +1,8 @@
 # Synchronization Roadmap: infra → platform-design
 
+> [!NOTE]
+> **Audit Update (June 2026):** Phase 1 (Critical Security) and Phase 2 (Version Upgrades) of this roadmap have been fully completed and synced into the codebase. All major components (EKS 1.35, Cilium 1.19.2, ESO 2.2.0, keyless GitHub OIDC, EKS Pod Identity, Access Analyzer, S3 Block, and KMS prevent_destroy lifecycle) are now fully implemented and active.
+
 > Generated: 2026-04-05
 > Source: `project/infra` (infra — production source of truth)
 > Target: `project/platform-design`

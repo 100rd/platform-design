@@ -15,7 +15,7 @@ This document outlines the technologies used for the casino platform. The soluti
 - **Helm** – package manager for Kubernetes applications.
 - **Kustomize** – configuration overlays for various environments.
 
-Additional tools include Prometheus and Grafana for observability, Loki or Elasticsearch for log aggregation, HashiCorp Vault for secrets management, and optional service mesh technologies like Istio or Linkerd.
+Additional tools include Prometheus and Grafana for observability, Loki for log aggregation, External Secrets Operator (ESO) for secrets management, and ingress/gateway management via Cilium Gateway API / Envoy Gateway.
 
 ## Data Stores
 

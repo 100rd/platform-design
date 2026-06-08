@@ -19,8 +19,8 @@ This document provides a high-level design for the casino platform, covering bui
 
 4. **Observability and Security**
    - Metrics gathered via Prometheus with dashboards in Grafana.
-   - Logs centralized through Loki or Elasticsearch.
-   - Vault handles secrets management and Cloudflare protects external endpoints.
+   - Logs centralized through Grafana Loki.
+   - External Secrets Operator (ESO) handles secrets management and Cloudflare protects external endpoints.
 
 5. **Blockchain Integration**
    - Internal crypto nodes run on dedicated hardware for performance.
