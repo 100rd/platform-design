@@ -16,6 +16,48 @@
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{/*
+ADR-0028: Unified Platform Tagging and Labeling Taxonomy — K8s Plane.
+
+Validate that the three required taxonomy values are set. The chart fails at
+render time when system, component, or owner are empty so misconfigured
+releases never make it past `helm template` / `helm lint`.
+
+Required values:
+  platform.system    — logical service boundary (e.g. auth, payment)
+  platform.component — architectural tier (e.g. compute, database, ingress)
+  platform.owner     — responsible team (e.g. team-sec, team-checkout)
+
+Optional (has a default):
+  platform.env        — deployment environment; falls back to .Release.Namespace
+  platform.managedBy  — orchestration tool; defaults to "argocd"
+*/}}
+{{- define "app.validatePlatformLabels" -}}
+{{- if not .Values.platform.system -}}
+{{- fail "platform.system is required (ADR-0028). Set it to the logical service name, e.g. auth, payment, analytics." -}}
+{{- end -}}
+{{- if not .Values.platform.component -}}
+{{- fail "platform.component is required (ADR-0028). Set it to the architectural tier, e.g. compute, database, cache, ingress." -}}
+{{- end -}}
+{{- if not .Values.platform.owner -}}
+{{- fail "platform.owner is required (ADR-0028). Set it to the responsible team, e.g. team-sec, team-checkout, team-data." -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+ADR-0028: Emit all five platform.* taxonomy labels.
+Validation runs inline so any missing required key fails the render immediately.
+Indent with nindent when composing into a labels block.
+*/}}
+{{- define "app.platformLabels" -}}
+{{- include "app.validatePlatformLabels" . -}}
+platform.system: {{ .Values.platform.system | quote }}
+platform.component: {{ .Values.platform.component | quote }}
+platform.env: {{ .Values.platform.env | default .Release.Namespace | quote }}
+platform.owner: {{ .Values.platform.owner | quote }}
+platform.managed-by: {{ .Values.platform.managedBy | default "argocd" | quote }}
+{{- end -}}
+
 {{- define "app.labels" -}}
 helm.sh/chart: {{ include "app.chart" . }}
 {{ include "app.selectorLabels" . }}
@@ -23,6 +65,7 @@ helm.sh/chart: {{ include "app.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{ include "app.platformLabels" . }}
 {{- end }}
 
 {{- define "app.selectorLabels" -}}
@@ -146,11 +189,14 @@ tolerations:
 {{/*
 Pod template metadata (labels + annotations) shared by Deployment and Rollout.
 Include with `nindent 6` under `template:`.
+Platform taxonomy labels (ADR-0028) are included here so every Pod carries them
+for the kube_pod_labels PromQL join and Cilium network policy selectors.
 */}}
 {{- define "app.podTemplateMeta" -}}
 metadata:
   labels:
     {{- include "app.selectorLabels" . | nindent 4 }}
+    {{- include "app.platformLabels" . | nindent 4 }}
     {{- with .Values.labels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
