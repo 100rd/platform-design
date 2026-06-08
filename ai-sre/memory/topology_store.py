@@ -19,14 +19,41 @@ logger = logging.getLogger(__name__)
 class TopologyStore:
     """Manages cluster topology knowledge.
 
-    Loads static topology from YAML files (Git-managed).
-    Can be extended with dynamic topology from K8s API discovery.
+    Loads static topology from YAML files (Git-managed) or queries Omniscience Graph database.
     """
 
-    def __init__(self, topology_path: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        topology_path: Optional[str] = None,
+        omniscience_url: Optional[str] = None,
+        omniscience_token: Optional[str] = None,
+    ) -> None:
         self.topology = PlatformTopology()
+        self.omniscience_url = omniscience_url
+        self.omniscience_token = omniscience_token
         if topology_path:
             self.load_from_file(topology_path)
+
+    async def fetch_dynamic_dependencies(self, cluster_name: str) -> list[str]:
+        """Fetch upstream dependencies dynamically from Omniscience Graph."""
+        if not self.omniscience_url or not self.omniscience_token:
+            return self.get_dependencies(cluster_name)
+
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                headers = {"Authorization": f"Bearer {self.omniscience_token}"}
+                response = await client.get(
+                    f"{self.omniscience_url}/api/v1/graph/dependencies?cluster={cluster_name}",
+                    headers=headers,
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    return data.get("dependencies", [])
+        except Exception as e:
+            logger.error("Failed to fetch dynamic dependencies from Omniscience: %s", e)
+
+        return self.get_dependencies(cluster_name)
 
     def load_from_file(self, path: str) -> None:
         """Load topology from a YAML file."""
