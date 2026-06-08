@@ -129,18 +129,99 @@ yet-another-cloudwatch-exporter:
               statistics: [Sum]
 
         # S3 (24h resolution - daily aggregation)
+        # ADR-0028 Stream 4: searchTags scopes discovery to buckets carrying
+        # platform:system; exportedTagsOnMetrics surfaces all five platform:*
+        # tag keys as tag_platform_* Prometheus labels so dashboards can filter
+        # by tag_platform_system="auth" (etc.).
         - type: AWS/S3
           regions: [eu-central-1]
           roles: []
           period: 86400
           length: 86400
           delay: 7200
+          searchTags:
+            # Only discover buckets that carry at least platform:system.
+            # Remove to discover ALL buckets (raises CW API cost).
+            - key: "platform:system"
+              value: ".*"
+          exportedTagsOnMetrics:
+            # Translate AWS resource tags → Prometheus label tag_platform_<key>.
+            # e.g. AWS tag platform:system="auth" → label tag_platform_system="auth"
+            AWS/S3:
+              - "platform:system"
+              - "platform:component"
+              - "platform:env"
+              - "platform:owner"
           metrics:
             - name: BucketSizeBytes
               statistics: [Average]
             - name: NumberOfObjects
               statistics: [Average]
           dimensionNameRequirements: [BucketName, StorageType]
+
+        # RDS — ADR-0028 Stream 4: tag propagation for platform:* tags.
+        # searchTags scopes discovery to RDS instances carrying platform:system.
+        # exportedTagsOnMetrics translates tag platform:system=auth →
+        # label tag_platform_system="auth" in every aws_rds_* metric so the
+        # unified $system dashboard can filter aws_rds_cpu_utilization_average
+        # {tag_platform_system="$system"}.
+        - type: AWS/RDS
+          regions: [eu-central-1]
+          roles: []
+          period: 300
+          length: 300
+          delay: 120
+          searchTags:
+            - key: "platform:system"
+              value: ".*"
+          exportedTagsOnMetrics:
+            AWS/RDS:
+              - "platform:system"
+              - "platform:component"
+              - "platform:env"
+              - "platform:owner"
+          metrics:
+            - name: CPUUtilization
+              statistics: [Average, Maximum]
+            - name: FreeableMemory
+              statistics: [Average, Minimum]
+            - name: ReadIOPS
+              statistics: [Average]
+            - name: WriteIOPS
+              statistics: [Average]
+            - name: DatabaseConnections
+              statistics: [Average, Maximum]
+            - name: FreeStorageSpace
+              statistics: [Average, Minimum]
+
+        # DynamoDB — ADR-0028 Stream 4: tag propagation for platform:* tags.
+        # Exposes consumed capacity + throttles per table, tagged with platform:*.
+        - type: AWS/DynamoDB
+          regions: [eu-central-1]
+          roles: []
+          period: 300
+          length: 300
+          delay: 120
+          searchTags:
+            - key: "platform:system"
+              value: ".*"
+          exportedTagsOnMetrics:
+            AWS/DynamoDB:
+              - "platform:system"
+              - "platform:component"
+              - "platform:env"
+              - "platform:owner"
+          metrics:
+            - name: ConsumedReadCapacityUnits
+              statistics: [Sum, Average]
+            - name: ConsumedWriteCapacityUnits
+              statistics: [Sum, Average]
+            - name: ReadThrottleEvents
+              statistics: [Sum]
+            - name: WriteThrottleEvents
+              statistics: [Sum]
+            - name: SuccessfulRequestLatency
+              statistics: [Average, p99]
 
         # EBS
         - type: AWS/EBS

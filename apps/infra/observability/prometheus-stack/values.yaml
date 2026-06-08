@@ -826,6 +826,31 @@ kube-prometheus-stack:
         type: RuntimeDefault
 
   # --------------------------------------------------------------------------
+  # ADR-0028 Stream 4: kube-state-metrics subchart config — expose pod labels
+  # so kube_pod_labels carries label_platform_system / label_platform_component
+  # / label_platform_env / label_platform_owner for PromQL join with workload
+  # metrics (container_cpu_usage_seconds_total * on(pod,namespace) group_left(…)
+  # kube_pod_labels).
+  #
+  # metricLabelsAllowlist passes --metric-labels-allowlist to the KSM container.
+  # Only the listed label keys are exposed; non-matching labels are dropped to
+  # keep series cardinality bounded.
+  #
+  # This block configures the kube-state-metrics subchart (key must match
+  # the subchart name "kube-state-metrics", NOT the operator integration key
+  # "kubeStateMetrics" above).
+  # --------------------------------------------------------------------------
+  kube-state-metrics:
+    metricLabelsAllowlist:
+      # Expose the four core ADR-0028 taxonomy labels from pods so that
+      # kube_pod_labels carries: label_platform_system, label_platform_component,
+      # label_platform_env, label_platform_owner.
+      # The dot in label keys (platform.system) becomes an underscore in
+      # Prometheus label names (label_platform_system) — this is standard KSM
+      # label-name sanitisation and matches the join in ADR-0028 section 4.
+      - "pods=[platform.system,platform.component,platform.env,platform.owner]"
+
+  # --------------------------------------------------------------------------
   # Prometheus Operator Configuration
   # --------------------------------------------------------------------------
   prometheusOperator:
