@@ -43,6 +43,39 @@ locals {
   owner       = try(local.account_vars.locals.owner, local.common.locals.default_owner)
   cost_center = try(local.account_vars.locals.cost_center, local.common.locals.default_cost_center)
 
+  # ---------------------------------------------------------------------------
+  # Unified Platform Taxonomy (ADR-0028) — AWS plane
+  # ---------------------------------------------------------------------------
+  # The five core platform:* tag keys, derived from account/region context with
+  # overridable repo-wide defaults. These mirror the Kubernetes platform.* labels
+  # so the AWS infrastructure plane and the EKS workload plane share one taxonomy
+  # (single-pane dashboards, FinOps allocation, incident-response correlation).
+  #
+  #   platform:system     -> overridable default (per-unit `tags` input wins)
+  #   platform:component  -> overridable default (per-unit `tags` input wins)
+  #   platform:env        -> derived from account.hcl `environment`
+  #   platform:owner      -> derived from account.hcl `owner` (-> common default)
+  #   platform:managed-by -> constant "terragrunt" (AWS plane orchestrator)
+  #
+  # A unit hosting a specific logical service (e.g. the `auth` RDS/S3 stack)
+  # overrides system/component via its own `tags` input, which the merge order
+  # below applies on top of these defaults (unit wins, never clobbered).
+  platform_system     = try(local.account_vars.locals.platform_system, local.common.locals.default_platform_system)
+  platform_component  = try(local.account_vars.locals.platform_component, local.common.locals.default_platform_component)
+  platform_env        = local.environment
+  platform_owner      = local.owner
+  platform_managed_by = local.common.locals.platform_managed_by
+
+  # Canonical platform:* tag set. Merged into provider default_tags and into the
+  # `tags` input so every AWS resource carries the ADR-0028 taxonomy by default.
+  platform_tags = {
+    "platform:system"     = local.platform_system
+    "platform:component"  = local.platform_component
+    "platform:env"        = local.platform_env
+    "platform:owner"      = local.platform_owner
+    "platform:managed-by" = local.platform_managed_by
+  }
+
   # Pinned provider version (single source of truth: versions.hcl).
   aws_provider_version = local.versions.locals.provider_versions.aws
 
@@ -145,6 +178,10 @@ remote_state {
 # Note: HCL does not support ternary expressions with heredoc branches.
 # The assume_role block is rendered conditionally by including an empty string
 # when is_sandbox = true, or the full block when is_sandbox = false.
+#
+# default_tags carry both the legacy cost/audit tags and the ADR-0028
+# platform:* taxonomy. Units may still override any of these per-resource via
+# their own `tags` (AWS merges resource tags over provider default_tags).
 # -----------------------------------------------------------------------------
 generate "provider" {
   path      = "provider.tf"
@@ -171,6 +208,13 @@ generate "provider" {
           TerragruntPath = "${path_relative_to_include()}"
           Repository     = "${local.common.locals.repository}"
           Project        = "${local.common.locals.project_name}"
+
+          # ADR-0028 Unified Platform Taxonomy (AWS plane)
+          "platform:system"     = "${local.platform_system}"
+          "platform:component"  = "${local.platform_component}"
+          "platform:env"        = "${local.platform_env}"
+          "platform:owner"      = "${local.platform_owner}"
+          "platform:managed-by" = "${local.platform_managed_by}"
         }
       }
     }
@@ -201,21 +245,34 @@ generate "versions" {
 
 # -----------------------------------------------------------------------------
 # Common Inputs: Passed to every module
+#
+# Tag merge order (later wins):
+#   1. legacy cost/audit tags  (Environment, ManagedBy, Owner, ...)
+#   2. platform_tags           (ADR-0028 platform:* taxonomy defaults)
+#   3. unit-supplied tags      (inputs.tags set on the individual unit)
+#
+# Step 3 is applied by Terragrunt's deep-merge of `inputs` across the include
+# chain (unit inputs override root inputs), so a unit that sets
+# tags["platform:system"] = "auth" wins over the "shared" default here without
+# clobbering the other four keys. Nothing here clobbers pre-existing tags.
 # -----------------------------------------------------------------------------
 inputs = merge(
   local.account_vars.locals,
   local.region_vars.locals,
   {
-    tags = {
-      Environment    = local.environment
-      ManagedBy      = local.common.locals.managed_by_tag_value
-      Account        = local.account_name
-      Region         = local.aws_region
-      Owner          = local.owner
-      CostCenter     = local.cost_center
-      TerragruntPath = path_relative_to_include()
-      Repository     = local.common.locals.repository
-      Project        = local.common.locals.project_name
-    }
+    tags = merge(
+      {
+        Environment    = local.environment
+        ManagedBy      = local.common.locals.managed_by_tag_value
+        Account        = local.account_name
+        Region         = local.aws_region
+        Owner          = local.owner
+        CostCenter     = local.cost_center
+        TerragruntPath = path_relative_to_include()
+        Repository     = local.common.locals.repository
+        Project        = local.common.locals.project_name
+      },
+      local.platform_tags,
+    )
   }
 )

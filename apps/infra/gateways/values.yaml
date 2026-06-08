@@ -1,0 +1,64 @@
+# Cluster Gateways (ADR-0009) — gw-external (internet-facing) + gw-internal.
+#
+# Overrides per cluster live in envs/<env>/values/gateways.yaml (optional;
+# the infra AppSet uses ignoreMissingValueFiles-style discovery). Keep the
+# placeholder wildcard domain below until a real Route53 zone + ACM/ACME
+# ClusterIssuer are provisioned, then swap `tls.dnsNames` and `tls.issuer`.
+
+# Namespace the Gateway + Certificate + generated NLB Service live in.
+# Matches the ArgoCD Application destination namespace (the infra AppSet sets
+# destination.namespace to the directory basename, "gateways", and creates it).
+namespace: gateways
+
+gatewayClassName: cilium
+
+external:
+  # Human-readable, immutable NLB name. Default would be k8s-<ns>-<svc>-<hash>,
+  # which hides scheme/purpose. Changing it later forces NLB recreation.
+  nlbName: platform-shared-gw-external
+  # HTTPS:443 listener terminates TLS at the Gateway using the cert-manager
+  # issued secret below.
+  tls:
+    # Secret (type kubernetes.io/tls) produced by the Certificate resource.
+    secretName: gw-external-tls
+    # cert-manager ClusterIssuer that signs the cert. `selfsigned` is shipped
+    # by apps/infra/cert-manager (clusterIssuers.selfSigned.enabled=true).
+    # Swap for `letsencrypt-prod` once a public Route53 zone is wired.
+    issuer: selfsigned
+    # Placeholder wildcard domain. Replace with the real platform domain once
+    # DNS is ready (e.g. *.platform.example.com).
+    dnsNames:
+      - "*.platform.internal"
+      - "platform.internal"
+
+internal:
+  nlbName: platform-shared-gw-internal
+
+# HTTPRoutes for the platform's own UIs, attached to gw-external. This is the
+# documented, primary way platform services are exposed (ADR-0009) — author new
+# ingress as Gateway API HTTPRoutes, not Ingress objects or per-service ALBs.
+#
+# Each entry attaches to gw-external and routes a hostname to a backend Service.
+# Hostnames use the placeholder *.platform.internal domain (matches the
+# gw-external TLS cert); swap for the real domain once DNS is wired.
+httpRoutes:
+  # Grafana — kube-prometheus-stack grafana subchart (apps/infra/observability/
+  # prometheus-stack). Service `kube-prometheus-stack-grafana` lives in the
+  # `observability` namespace (migrated from `monitoring` per ADR-0026 / PR #255).
+  # Port 80 routes plaintext HTTP to the Gateway listener; BackendTLSPolicy
+  # (templates/backendtlspolicy-grafana.yaml) encrypts the gateway->backend hop
+  # independently of the HTTPRoute port. Follow-up: once Grafana is switched to
+  # HTTPS in apps/infra/observability, change port here to 443 (see README.md).
+  - name: grafana
+    hostname: grafana.platform.internal
+    backend:
+      name: kube-prometheus-stack-grafana
+      namespace: observability
+      port: 80
+  # ArgoCD UI — the GitOps control plane Service (argocd-server) in `argocd`.
+  - name: argocd
+    hostname: argocd.platform.internal
+    backend:
+      name: argocd-server
+      namespace: argocd
+      port: 80

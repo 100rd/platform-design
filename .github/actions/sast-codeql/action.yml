@@ -1,0 +1,91 @@
+# -----------------------------------------------------------------------------
+# sast-codeql
+#
+# Mirrors platform-workflows@3bb35df .github/actions/sast-codeql
+# (2026-06 platform-workflows consolidation sync).
+# Completes the Tier-1 set started in PR #241 (ADR-0016): static application
+# security analysis (SAST). SARIF flows to GitHub Code Scanning; merge-blocking
+# is left to branch protection (advisory-by-default at the action level).
+# -----------------------------------------------------------------------------
+name: "SAST CodeQL"
+description: "Run GitHub CodeQL static analysis for a single language. Uploads results to GitHub Code Scanning. Wraps github/codeql-action."
+
+inputs:
+  language:
+    description: "CodeQL language: python, javascript, typescript, go, java, csharp, cpp, ruby, swift, kotlin."
+    required: true
+  queries:
+    description: "CodeQL query suite. Common choices: `security-and-quality` (default), `security-extended`, `security-experimental`. Or a comma list of `.qls` paths."
+    required: false
+    default: "security-and-quality"
+  working-directory:
+    description: "Subdirectory of the checkout to focus the build on. Empty string means whole repo."
+    required: false
+    default: ""
+  config-file:
+    description: "Optional CodeQL config file path (relative to repo root)."
+    required: false
+    default: ""
+  sarif-category:
+    description: "SARIF category. Differentiates multi-language runs on the same commit."
+    required: false
+    default: ""
+  ram:
+    description: "Megabytes of RAM the CodeQL extractor may use. Default 0 lets CodeQL pick."
+    required: false
+    default: "0"
+  threads:
+    description: "Number of threads. Default 0 lets CodeQL pick."
+    required: false
+    default: "0"
+
+outputs:
+  sarif-output:
+    description: "Directory where CodeQL wrote the SARIF results."
+    value: ${{ steps.analyze.outputs.sarif-output }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve SARIF category
+      id: cat
+      shell: bash
+      env:
+        LANG: ${{ inputs.language }}
+        CAT_OVERRIDE: ${{ inputs.sarif-category }}
+      run: |
+        set -euo pipefail
+        if [ -n "${CAT_OVERRIDE}" ]; then
+          echo "value=${CAT_OVERRIDE}" >> "$GITHUB_OUTPUT"
+        else
+          echo "value=codeql-${LANG}" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Initialize CodeQL
+      # github/codeql-action/init v3.27.0
+      uses: github/codeql-action/init@7211b7c8077ea37d8641b6271f6a365a22a5fbfa
+      with:
+        languages: ${{ inputs.language }}
+        queries: ${{ inputs.queries }}
+        config-file: ${{ inputs.config-file }}
+        source-root: ${{ inputs.working-directory }}
+        # ram / threads only passed when non-zero — CodeQL rejects literal "0".
+        ram: ${{ inputs.ram != '0' && inputs.ram || '' }}
+        threads: ${{ inputs.threads != '0' && inputs.threads || '' }}
+
+    - name: Autobuild
+      # github/codeql-action/autobuild v3.27.0
+      uses: github/codeql-action/autobuild@7211b7c8077ea37d8641b6271f6a365a22a5fbfa
+      with:
+        working-directory: ${{ inputs.working-directory }}
+
+    - name: Perform CodeQL analysis
+      id: analyze
+      if: always()  # ensure SARIF uploads even if autobuild failed (the `upload` input is boolean, not "always")
+      # github/codeql-action/analyze v3.27.0
+      uses: github/codeql-action/analyze@7211b7c8077ea37d8641b6271f6a365a22a5fbfa
+      with:
+        category: ${{ steps.cat.outputs.value }}
+        upload: true
+        ram: ${{ inputs.ram != '0' && inputs.ram || '' }}
+        threads: ${{ inputs.threads != '0' && inputs.threads || '' }}

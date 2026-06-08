@@ -86,11 +86,23 @@ inputs = {
   subnet_ids               = dependency.vpc.outputs.private_subnets
   control_plane_subnet_ids = dependency.vpc.outputs.private_subnets
 
-  # Endpoint access
-  # Dev environments allow public access for developer convenience; staging/prod are private only.
+  # ---------------------------------------------------------------------------
+  # Endpoint access (ADR-0010 — parameterised public-endpoint CIDR allow-list)
+  #
+  # Dev environments allow public access for developer convenience; staging/prod
+  # are private-endpoint-only. The public-endpoint allow-list is a first-class,
+  # per-account input (`eks_public_access_cidrs` in each account.hcl), never the
+  # implicit AWS-wide-open default.
+  #
+  # Documented default: `[]` (fail-closed — no public reachability) when an
+  # account.hcl omits the key. Public access must be opted into explicitly with
+  # an account-scoped allow-list; prod/data-plane accounts MUST NOT use
+  # 0.0.0.0/0 (see terragrunt/prod/account.hcl and terragrunt/_org/account.hcl
+  # `admin_cidr_allowlist`).
+  # ---------------------------------------------------------------------------
   cluster_endpoint_public_access       = local.account_vars.locals.eks_public_access
   cluster_endpoint_private_access      = true
-  cluster_endpoint_public_access_cidrs = try(local.account_vars.locals.eks_public_access_cidrs, ["0.0.0.0/0"])
+  cluster_endpoint_public_access_cidrs = try(local.account_vars.locals.eks_public_access_cidrs, [])
 
   # IRSA (IAM Roles for Service Accounts)
   enable_irsa = true

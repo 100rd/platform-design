@@ -1,4 +1,4 @@
-{"generated_at": "2026-05-23T13:41:39Z", "applications": [
+{"generated_at": "2026-06-08T11:58:33Z", "applications": [
 {
   "name": "aws-lb-controller",
   "chartVersion": "3.1.0",
@@ -17,8 +17,8 @@
 ,
 {
   "name": "cilium",
-  "chartVersion": "1.0.0",
-  "appVersion": "1.17.1",
+  "chartVersion": "1.1.0",
+  "appVersion": "1.19.4",
   "description": "Cilium CNI with Hubble observability for Kubernetes networking",
   "path": "apps/infra/cilium"
 }
@@ -40,6 +40,14 @@
 }
 ,
 {
+  "name": "envoy-gateway",
+  "chartVersion": "1.0.0",
+  "appVersion": "v1.8.0",
+  "description": "Envoy Gateway - secondary L7 GatewayClass alongside Cilium (ADR-0025)",
+  "path": "apps/infra/envoy-gateway"
+}
+,
+{
   "name": "external-dns",
   "chartVersion": "1.0.0",
   "appVersion": "0.15.1",
@@ -49,8 +57,8 @@
 ,
 {
   "name": "external-secrets",
-  "chartVersion": "1.3.1",
-  "appVersion": "v0.14.1",
+  "chartVersion": "1.4.0",
+  "appVersion": "v2.6.0",
   "description": "Install the External Secrets Operator using the official chart",
   "path": "apps/infra/external-secrets"
 }
@@ -64,6 +72,22 @@
 }
 ,
 {
+  "name": "gateway-api-crds",
+  "chartVersion": "0.2.0",
+  "appVersion": "",
+  "description": "Gateway API standard channel CRDs v1.4.0 + Cilium GatewayClass (ADR-0009)",
+  "path": "apps/infra/gateway-api-crds"
+}
+,
+{
+  "name": "gateways",
+  "chartVersion": "0.2.0",
+  "appVersion": "",
+  "description": "External and internal Cilium Gateways + BackendTLSPolicy (ADR-0009, refs #252)",
+  "path": "apps/infra/gateways"
+}
+,
+{
   "name": "gpu-operator",
   "chartVersion": "1.0.0",
   "appVersion": "v26.3.0",
@@ -73,17 +97,17 @@
 ,
 {
   "name": "kargo",
-  "chartVersion": "0.1.0",
-  "appVersion": "1.2.0",
+  "chartVersion": "0.2.0",
+  "appVersion": "1.9.0",
   "description": "Kargo progressive delivery controller",
   "path": "apps/infra/kargo"
 }
 ,
 {
   "name": "kyverno",
-  "chartVersion": "1.0.0",
-  "appVersion": "1.13.4",
-  "description": "Kyverno - Kubernetes Native Policy Management",
+  "chartVersion": "1.1.0",
+  "appVersion": "1.18.1",
+  "description": "Kyverno - Kubernetes Native Policy Management (ADR-0020)",
   "path": "apps/infra/kyverno"
 }
 ,
@@ -104,6 +128,14 @@
 }
 ,
 {
+  "name": "obi",
+  "chartVersion": "1.0.0",
+  "appVersion": "1.9.3",
+  "description": ">",
+  "path": "apps/infra/observability/obi"
+}
+,
+{
   "name": "otel-collector",
   "chartVersion": "1.0.0",
   "appVersion": "0.143.0",
@@ -113,8 +145,8 @@
 ,
 {
   "name": "prometheus-stack",
-  "chartVersion": "1.1.0",
-  "appVersion": "v0.70.0",
+  "chartVersion": "1.2.0",
+  "appVersion": "v3.12.0",
   "description": "Production-ready Prometheus + Thanos + Grafana stack for large-scale EKS clusters (1K-5K nodes, 100K+ pods)",
   "path": "apps/infra/observability/prometheus-stack"
 }
@@ -136,6 +168,22 @@
 }
 ,
 {
+  "name": "yace",
+  "chartVersion": "0.1.0",
+  "appVersion": "v0.61.2",
+  "description": ">",
+  "path": "apps/infra/observability/yace"
+}
+,
+{
+  "name": "opencost",
+  "chartVersion": "1.0.0",
+  "appVersion": "1.113.0",
+  "description": ">-",
+  "path": "apps/infra/opencost"
+}
+,
+{
   "name": "otel-operator",
   "chartVersion": "0.1.0",
   "appVersion": "",
@@ -144,11 +192,27 @@
 }
 ,
 {
+  "name": "pyrra",
+  "chartVersion": "1.0.0",
+  "appVersion": "0.10.0",
+  "description": "SLO operator and UI (Pyrra) — emits PrometheusRules from ServiceLevelObjective CRs (ADR-0026)",
+  "path": "apps/infra/pyrra"
+}
+,
+{
   "name": "rabbitmq-operator",
   "chartVersion": "1.0.0",
   "appVersion": "2.12.0",
   "description": "RabbitMQ Cluster Operator - Kubernetes-native RabbitMQ lifecycle management",
   "path": "apps/infra/rabbitmq-operator"
+}
+,
+{
+  "name": "tetragon",
+  "chartVersion": "1.0.0",
+  "appVersion": "1.3.0",
+  "description": "|",
+  "path": "apps/infra/tetragon"
 }
 ,
 {
