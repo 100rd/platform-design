@@ -6,6 +6,8 @@ This directory contains Terraform-templated versions of Karpenter NodePool and E
 
 The templates use variables that are dynamically populated from Terraform outputs, ensuring consistency between infrastructure and Kubernetes resources.
 
+The `arm64-nodepool.yaml.tpl` `EC2NodeClass` selects the **Bottlerocket** node OS (`alias: bottlerocket@latest`) per **ADR-0030**: two-volume layout (`/dev/xvda` OS + `/dev/xvdb` data) and `[settings.kubernetes]` TOML userData. AL2023 is retained as a commented fallback.
+
 ## Template Variables
 
 The following variables are injected from Terraform outputs:
