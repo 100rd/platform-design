@@ -8,6 +8,8 @@ the `generate-diagrams.yml` workflow regenerates on push to main).
 graph LR
   subgraph network["network"]
     network__global_iam["network/_global/iam<br/>(iam)"]
+    network_eu_west_1_lattice_resource["network/eu-west-1/lattice-resource<br/>(vpc-lattice-resource)"]
     network_eu_west_1_transit_gateway["network/eu-west-1/transit-gateway<br/>(transit-gateway)"]
   end
+  network_eu_west_1_lattice_resource -->|depends on| network_eu_west_1_lattice_resource__dep__vpc(vpc)
 ```

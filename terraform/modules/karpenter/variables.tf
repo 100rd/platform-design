@@ -143,3 +143,15 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_node_repair" {
+  # Tier-1 compute (doc-verified 2026-06-07): enables Karpenter's NodeRepair
+  # alpha feature gate (settings.featureGates.nodeRepair) in v1.10. When true,
+  # Karpenter automatically replaces nodes that the EKS Node Monitoring Agent
+  # addon (eks-node-monitoring-agent) reports as unhealthy. Repair disruption is
+  # capped at 20% of each NodePool's nodes (hard-coded Karpenter upper bound).
+  # Requires the eks-node-monitoring-agent managed addon to be present.
+  description = "Enable Karpenter NodeRepair (Node Auto-Repair) feature gate. Requires the EKS Node Monitoring Agent addon."
+  type        = bool
+  default     = true
+}

@@ -9,6 +9,18 @@
 # Cluster selection: all clusters with a "region" label.
 # Apps without region-specific values get the same config everywhere.
 #
+# Progressive/RollingSync (ADR-0024):
+#   Applications are promoted in three ordered steps keyed on the `env` label:
+#     Step 1 — dev        (lowest risk; fastest feedback)
+#     Step 2 — stage + integration  (pre-production soak)
+#     Step 3 — prod       (gates on prior steps succeeding)
+#   All Applications in a step must be Healthy+Synced before the next step
+#   begins. On any degraded Application the rollout pauses automatically.
+#   Rollback: delete or pause the ApplicationSet; ArgoCD halts promotion.
+#
+# ADR-0028: platform.* taxonomy labels are stamped on every generated Application
+# so the ArgoCD Application resources themselves are taxonomy-tagged.
+#
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -36,14 +48,57 @@ spec:
                 env: '{{ index .metadata.labels "env" }}'
                 region: '{{ index .metadata.labels "region" }}'
                 regionShort: '{{ index .metadata.labels "region-short" }}'
+  # Progressive/RollingSync — staged promotion dev -> stage/integration -> prod.
+  # ADR-0024 section 4: ApplicationSet fleet rollout by env label.
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        # Step 1: dev — validates infra apps are renderable and sync cleanly
+        # across all dev-env regional clusters before advancing.
+        - matchExpressions:
+            - key: env
+              operator: In
+              values:
+                - dev
+          maxUpdate: 100%
+        # Step 2: stage + integration — pre-production soak across regions.
+        # Gated on Step 1 (all dev Applications Healthy+Synced).
+        - matchExpressions:
+            - key: env
+              operator: In
+              values:
+                - stage
+                - integration
+          maxUpdate: 50%
+        # Step 3: prod — gates on Steps 1+2.
+        # maxUpdate: 25% gives a canary wave on large multi-region prod fleets.
+        - matchExpressions:
+            - key: env
+              operator: In
+              values:
+                - prod
+          maxUpdate: 25%
   template:
     metadata:
       name: '{{ .path.basename }}-{{ .values.regionShort }}'
       namespace: argocd
       labels:
+        # Existing fleet-routing labels
         app.kubernetes.io/part-of: multicluster-infra
         env: '{{ .values.env }}'
         region: '{{ .values.region }}'
+        # ADR-0028: unified platform.* taxonomy on each generated Application.
+        # system     = app directory basename (the infra component name)
+        # component  = "infra" (all apps managed by this AppSet are infra-tier)
+        # env        = deployment environment from cluster values
+        # owner      = "platform" (multi-cluster infra owned by platform team)
+        # managed-by = argocd
+        platform.system: '{{ .path.basename }}'
+        platform.component: infra
+        platform.env: '{{ .values.env }}'
+        platform.owner: platform
+        platform.managed-by: argocd
     spec:
       project: default
       source:

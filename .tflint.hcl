@@ -44,6 +44,45 @@ rule "terraform_standard_module_structure" {
   enabled = true
 }
 
+# ---------------------------------------------------------------------------
+# ADR-0028: Unified Platform Tagging Taxonomy — required-tag enforcement
+# ---------------------------------------------------------------------------
+# Fail CI when a taggable AWS resource is missing any of the five canonical
+# platform:* tag keys. This is the "strict linter rule" mitigation called out
+# in ADR-0028 Risks -> Tag Key Mismatch.
+#
+# How it interacts with the Terragrunt root config:
+#   - The root provider `default_tags` (terragrunt/root.hcl) applies these keys
+#     to every resource at apply time. TFLint, however, lints the *module
+#     source* in isolation (call_module_type = "none") and does NOT see
+#     provider default_tags or Terragrunt-injected inputs.
+#   - Therefore a resource is "compliant" here only if its own `tags`/`var.tags`
+#     plumbs these keys through. Modules wire `tags = var.tags` (and the root
+#     feeds var.tags the platform:* set), so resources tagged from `var.tags`
+#     pass; a resource hard-coding a partial tag map fails.
+#
+# The exact key casing/format below is load-bearing: it must match the K8s
+# platform.* labels' AWS counterparts byte-for-byte or the Grafana/FinOps joins
+# in ADR-0028 break.
+rule "aws_resource_missing_tags" {
+  enabled = true
+
+  tags = [
+    "platform:system",
+    "platform:component",
+    "platform:env",
+    "platform:owner",
+    "platform:managed-by",
+  ]
+
+  # Resources that cannot carry these tags or are tagged exclusively via the
+  # provider default_tags (and never via module `var.tags`) would otherwise
+  # raise unactionable findings during the migration. Exclusions are tracked
+  # against ADR-0028 Consequences -> Migration Effort and trimmed as modules
+  # are refactored to thread var.tags through every taggable resource.
+  exclude = []
+}
+
 # Terragrunt generates versions.tf, provider.tf, and backend.tf at runtime
 # via generate blocks, so these rules produce false positives in module source code
 rule "terraform_required_version" {

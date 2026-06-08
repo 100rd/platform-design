@@ -140,16 +140,17 @@ class SREAnalytics:
 
     async def on_agent_complete(
         self,
-        invocation_id: str,
-        outcome: str,
-        model: str,
-        agent_role: str,
-        cluster: str,
-        tokens: dict[str, int],
-        duration_ms: int,
+        invocation_id: str = "",
+        outcome: str = "",
+        model: str = "",
+        agent_role: str = "",
+        cluster: str = "",
+        tokens: Optional[dict[str, int]] = None,
+        duration_ms: int = 0,
         finding: Optional[dict[str, Any]] = None,
         error_message: Optional[str] = None,
         namespace: str = "",
+        **kwargs: Any,
     ) -> None:
         """Called when an investigation finishes.
 
@@ -158,6 +159,10 @@ class SREAnalytics:
         table schema (minus finding_id and timestamp which are injected
         here if missing).
         """
+        if not invocation_id and "inv_id" in kwargs:
+            invocation_id = kwargs["inv_id"]
+        if tokens is None:
+            tokens = {}
         state = self._active.pop(invocation_id, None)
         finding_id: Optional[str] = None
 
