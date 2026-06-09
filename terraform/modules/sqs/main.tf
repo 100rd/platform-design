@@ -52,17 +52,25 @@ resource "aws_sqs_queue_redrive_allow_policy" "dlq" {
 # IAM policy for IRSA access
 data "aws_iam_policy_document" "producer" {
   statement {
+    sid = "ABACSystemTagProducer"
     actions = [
       "sqs:SendMessage",
       "sqs:GetQueueUrl",
       "sqs:GetQueueAttributes",
     ]
     resources = [aws_sqs_queue.this.arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:PrincipalTag/platform:system"
+      values   = ["$${aws:ResourceTag/platform:system}"]
+    }
   }
 }
 
 data "aws_iam_policy_document" "consumer" {
   statement {
+    sid = "ABACSystemTagConsumer"
     actions = [
       "sqs:ReceiveMessage",
       "sqs:DeleteMessage",
@@ -71,6 +79,12 @@ data "aws_iam_policy_document" "consumer" {
       "sqs:ChangeMessageVisibility",
     ]
     resources = [aws_sqs_queue.this.arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:PrincipalTag/platform:system"
+      values   = ["$${aws:ResourceTag/platform:system}"]
+    }
   }
 }
 

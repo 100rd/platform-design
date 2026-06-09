@@ -63,6 +63,10 @@ spec:
         app.kubernetes.io/managed-by: applicationset
         env: '{{ .env }}'
         team: '{{ .team }}'
+        platform.system: '{{ .team }}'
+        platform.component: workload
+        platform.owner: '{{ .team }}'
+        platform.env: '{{ .env }}'
       finalizers:
         - resources-finalizer.argocd.argoproj.io
     spec:

@@ -56,6 +56,9 @@ spec:
         app.kubernetes.io/part-of: gpu-inference-infra
         app.kubernetes.io/managed-by: applicationset
         cluster-type: gpu-inference
+        platform.system: gpu-inference
+        platform.component: '{{ .path.basename }}'
+        platform.env: '{{ .values.env }}'
     spec:
       project: default
       source:
