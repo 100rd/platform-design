@@ -177,3 +177,17 @@ resource "aws_ssoadmin_account_assignment" "this" {
   target_id   = each.value.account_id
   target_type = "AWS_ACCOUNT"
 }
+
+# ---------------------------------------------------------------------------
+# SSO Instance Access Control Attributes (ABAC / Attribute Mappings)
+# ---------------------------------------------------------------------------
+resource "aws_ssoadmin_instance_access_control_attributes" "this" {
+  instance_arn = local.sso_instance_arn
+
+  attribute {
+    key = "platform:system"
+    value {
+      source = var.sso_lac_attribute_source
+    }
+  }
+}

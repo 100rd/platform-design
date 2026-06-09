@@ -114,6 +114,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
 # IAM policy for IRSA access
 data "aws_iam_policy_document" "readwrite" {
   statement {
+    sid = "ABACSystemTagReadWrite"
     actions = [
       "s3:GetObject",
       "s3:PutObject",
@@ -124,11 +125,18 @@ data "aws_iam_policy_document" "readwrite" {
       aws_s3_bucket.this.arn,
       "${aws_s3_bucket.this.arn}/*",
     ]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:PrincipalTag/platform:system"
+      values   = ["$${aws:ResourceTag/platform:system}"]
+    }
   }
 }
 
 data "aws_iam_policy_document" "readonly" {
   statement {
+    sid = "ABACSystemTagReadOnly"
     actions = [
       "s3:GetObject",
       "s3:ListBucket",
@@ -137,6 +145,12 @@ data "aws_iam_policy_document" "readonly" {
       aws_s3_bucket.this.arn,
       "${aws_s3_bucket.this.arn}/*",
     ]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:PrincipalTag/platform:system"
+      values   = ["$${aws:ResourceTag/platform:system}"]
+    }
   }
 }
 

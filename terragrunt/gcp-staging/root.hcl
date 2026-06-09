@@ -24,11 +24,30 @@ terragrunt_version_constraint = ">= 0.68.0"
 locals {
   project_vars = read_terragrunt_config(find_in_parent_folders("project.hcl"))
   region_vars  = read_terragrunt_config(find_in_parent_folders("region.hcl"))
+  common       = read_terragrunt_config(find_in_parent_folders("common.hcl"))
 
   project_id   = local.project_vars.locals.project_id
   project_name = local.project_vars.locals.project_name
   gcp_region   = local.region_vars.locals.gcp_region
   environment  = local.project_vars.locals.environment
+
+  owner = try(local.project_vars.locals.owner, local.common.locals.default_owner)
+
+  # Unified Platform Taxonomy (ADR-0028) — GCP plane
+  # GCP labels must use underscores instead of colons.
+  platform_system     = try(local.project_vars.locals.platform_system, local.common.locals.default_platform_system)
+  platform_component  = try(local.project_vars.locals.platform_component, local.common.locals.default_platform_component)
+  platform_env        = local.environment
+  platform_owner      = local.owner
+  platform_managed_by = local.common.locals.platform_managed_by
+
+  platform_labels = {
+    platform_system     = local.platform_system
+    platform_component  = local.platform_component
+    platform_env        = local.platform_env
+    platform_owner      = local.platform_owner
+    platform_managed_by = local.platform_managed_by
+  }
 }
 
 # -----------------------------------------------------------------------------
@@ -75,6 +94,12 @@ generate "provider" {
         managed-by  = "terragrunt"
         project     = "${local.project_id}"
         region      = "${local.gcp_region}"
+
+        platform_system     = "${local.platform_system}"
+        platform_component  = "${local.platform_component}"
+        platform_env        = "${local.platform_env}"
+        platform_owner      = "${local.platform_owner}"
+        platform_managed_by = "${local.platform_managed_by}"
       }
     }
 
@@ -87,6 +112,12 @@ generate "provider" {
         managed-by  = "terragrunt"
         project     = "${local.project_id}"
         region      = "${local.gcp_region}"
+
+        platform_system     = "${local.platform_system}"
+        platform_component  = "${local.platform_component}"
+        platform_env        = "${local.platform_env}"
+        platform_owner      = "${local.platform_owner}"
+        platform_managed_by = "${local.platform_managed_by}"
       }
     }
   EOF
@@ -120,16 +151,17 @@ generate "versions" {
 # -----------------------------------------------------------------------------
 # Retry configuration for transient GCP errors
 # -----------------------------------------------------------------------------
-retry_max_attempts       = 3
-retry_sleep_interval_sec = 5
-
-retryable_errors = [
-  "(?s).*Error creating.*",
-  "(?s).*RequestError: send request failed.*",
-  "(?s).*connection reset by peer.*",
-  "(?s).*googleapi: Error 429.*",
-  "(?s).*googleapi: Error 503.*",
-]
+retry {
+  attempts = 3
+  delay    = "5s"
+  errors = [
+    "(?s).*Error creating.*",
+    "(?s).*RequestError: send request failed.*",
+    "(?s).*connection reset by peer.*",
+    "(?s).*googleapi: Error 429.*",
+    "(?s).*googleapi: Error 503.*",
+  ]
+}
 
 # -----------------------------------------------------------------------------
 # Common Inputs: Passed to every module
@@ -138,11 +170,14 @@ inputs = merge(
   local.project_vars.locals,
   local.region_vars.locals,
   {
-    labels = {
-      environment = local.environment
-      managed-by  = "terragrunt"
-      project     = local.project_id
-      region      = local.gcp_region
-    }
+    labels = merge(
+      {
+        environment = local.environment
+        managed-by  = "terragrunt"
+        project     = local.project_id
+        region      = local.gcp_region
+      },
+      local.platform_labels,
+    )
   }
 )
