@@ -56,7 +56,7 @@ Governing ADRs: [ADR-0001](docs/adrs/0001-ou-split.md) (OU split),
 | #165 | IAM baseline + root access-key alarm | DONE (PR #195) |
 | #166 | SCPs + data perimeter | DONE (PR #192) |
 | #167 | SSO Identity Center | DONE (PR #191) |
-| #168 | Account Factory for Terraform (AFT) for account vending | PLANNED |
+| #168 | Account Factory for Terraform (AFT) for account vending — CT landing zone is a hard prereq | IN PROGRESS — design epic [#293](https://github.com/100rd/platform-design/issues/293) (ADR-0035 + 6-phase migration plan); apply gated |
 | #169 | Break-glass procedure for root account access | DONE |
 | #173 | Scope-down Terraform CI/CD IAM role (no `AdministratorAccess`) | PLANNED |
 
