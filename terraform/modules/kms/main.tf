@@ -151,6 +151,7 @@ data "aws_iam_policy_document" "key_policy" {
   }
 
   # Key users — encrypt, decrypt, generate data keys
+  # ABAC: Callers must carry platform:system tag matching the key's resource tag
   statement {
     sid    = "KeyUsers"
     effect = "Allow"
@@ -169,6 +170,12 @@ data "aws_iam_policy_document" "key_policy" {
     ]
 
     resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:PrincipalTag/platform:system"
+      values   = ["$${aws:ResourceTag/platform:system}"]
+    }
   }
 
   # Grant creation for AWS services (EBS, RDS, S3, etc.)

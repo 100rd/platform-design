@@ -1,0 +1,73 @@
+{{- if .Values.ciliumNetworkPolicy.enabled }}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "app.fullname" . }}-cilium-policy
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+spec:
+  # Selects the workloads managed by this release
+  endpointSelector:
+    matchLabels:
+      {{- include "app.selectorLabels" . | nindent 6 }}
+  
+  {{- $hasIngressRules := or .Values.ciliumNetworkPolicy.allowSameSystemIngress .Values.ciliumNetworkPolicy.allowIngressGateway .Values.ciliumNetworkPolicy.ingress }}
+  {{- if $hasIngressRules }}
+  ingress:
+    # 1. Allow traffic only from pods within the same logical system (if enabled)
+    {{- if .Values.ciliumNetworkPolicy.allowSameSystemIngress }}
+    - fromEndpoints:
+        - matchLabels:
+            platform.system: {{ .Values.platform.system | quote }}
+    {{- end }}
+    
+    # 2. Allow ingress from system ingress gateways (if enabled)
+    {{- if .Values.ciliumNetworkPolicy.allowIngressGateway }}
+    - fromEndpoints:
+        - matchLabels:
+            platform.component: "ingress"
+    {{- end }}
+    
+    # 3. Custom ingress rules specified in values.yaml
+    {{- with .Values.ciliumNetworkPolicy.ingress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- else }}
+  ingress: []
+  {{- end }}
+
+  {{- $hasEgressRules := or .Values.ciliumNetworkPolicy.allowSameSystemEgress .Values.ciliumNetworkPolicy.allowDnsEgress .Values.ciliumNetworkPolicy.egress }}
+  {{- if $hasEgressRules }}
+  egress:
+    # 1. Allow egress only to pods within the same logical system (if enabled)
+    {{- if .Values.ciliumNetworkPolicy.allowSameSystemEgress }}
+    - toEndpoints:
+        - matchLabels:
+            platform.system: {{ .Values.platform.system | quote }}
+    {{- end }}
+    
+    # 2. Allow egress to DNS resolution (if enabled)
+    {{- if .Values.ciliumNetworkPolicy.allowDnsEgress }}
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": "kube-system"
+            k8s-app: "kube-dns"
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    {{- end }}
+    
+    # 3. Custom egress rules specified in values.yaml
+    {{- with .Values.ciliumNetworkPolicy.egress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- else }}
+  egress: []
+  {{- end }}
+{{- end }}

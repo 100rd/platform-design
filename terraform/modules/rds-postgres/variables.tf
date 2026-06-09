@@ -190,6 +190,12 @@ variable "db_parameters" {
   ]
 }
 
+variable "create_iam_policies" {
+  description = "Create IAM policies for ABAC-enforced DB credentials access"
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   description = "Additional tags for resources"
   type        = map(string)

@@ -184,7 +184,14 @@ resource "aws_db_instance" "main" {
 resource "aws_iam_role" "rds_monitoring" {
   count              = var.monitoring_interval > 0 ? 1 : 0
   name_prefix        = "${var.name_prefix}-rds-monitoring-"
-  assume_role_policy = data.aws_iam_policy_document.rds_monitoring_assume[0].json
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Action    = "sts:AssumeRole"
+      Principal = { Service = "monitoring.rds.amazonaws.com" }
+    }]
+  })
 
   tags = merge(var.tags, {
     Name        = "${var.name_prefix}-rds-monitoring-role"
@@ -192,21 +199,63 @@ resource "aws_iam_role" "rds_monitoring" {
   })
 }
 
-data "aws_iam_policy_document" "rds_monitoring_assume" {
-  count = var.monitoring_interval > 0 ? 1 : 0
-
-  statement {
-    actions = ["sts:AssumeRole"]
-
-    principals {
-      type        = "Service"
-      identifiers = ["monitoring.rds.amazonaws.com"]
-    }
-  }
-}
-
 resource "aws_iam_role_policy_attachment" "rds_monitoring" {
   count      = var.monitoring_interval > 0 ? 1 : 0
   role       = aws_iam_role.rds_monitoring[0].name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# ABAC-enforced IAM policies for DB credentials access (Secrets Manager + RDS IAM Auth)
+# ---------------------------------------------------------------------------------------------------------------------
+# Callers must carry a session tag `platform:system` that matches the resource tag
+# on the RDS instance / Secrets Manager secret. This prevents cross-service access
+# without explicit tag alignment.
+# ---------------------------------------------------------------------------------------------------------------------
+
+data "aws_iam_policy_document" "db_access" {
+  # Secrets Manager — read DB credentials
+  statement {
+    sid = "ABACSystemTagSecretsAccess"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret",
+    ]
+    resources = [
+      aws_secretsmanager_secret.db_credentials.arn,
+    ]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:PrincipalTag/platform:system"
+      values   = ["$${aws:ResourceTag/platform:system}"]
+    }
+  }
+
+  # RDS IAM Database Authentication (if enabled)
+  statement {
+    sid = "ABACSystemTagRDSConnect"
+    actions = [
+      "rds-db:connect",
+    ]
+    resources = [
+      "arn:aws:rds-db:*:*:dbuser:${aws_db_instance.main.resource_id}/*",
+    ]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:PrincipalTag/platform:system"
+      values   = ["$${aws:ResourceTag/platform:system}"]
+    }
+  }
+}
+
+resource "aws_iam_policy" "db_access" {
+  count = var.create_iam_policies ? 1 : 0
+
+  name        = "${var.name_prefix}-rds-db-access"
+  description = "ABAC-enforced DB access policy — aws:PrincipalTag/platform:system must match aws:ResourceTag/platform:system"
+  policy      = data.aws_iam_policy_document.db_access.json
+
+  tags = var.tags
 }

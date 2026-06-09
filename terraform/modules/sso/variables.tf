@@ -79,3 +79,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "sso_lac_attribute_source" {
+  description = "The source attribute(s) mapped to the platform:system session principal tag. Defaults to User.Department."
+  type        = list(string)
+  default     = ["$${path:enterprise:user:department}"]
+}

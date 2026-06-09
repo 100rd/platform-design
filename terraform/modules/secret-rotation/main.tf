@@ -96,6 +96,7 @@ resource "aws_iam_role" "rotation" {
 
 data "aws_iam_policy_document" "rotation" {
   # Secrets Manager — scoped to THIS secret ARN only (least privilege).
+  # ABAC: Lambda must carry platform:system tag matching the secret's resource tag
   statement {
     sid    = "RotateThisSecret"
     effect = "Allow"
@@ -108,6 +109,12 @@ data "aws_iam_policy_document" "rotation" {
     ]
 
     resources = [aws_secretsmanager_secret.this.arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:PrincipalTag/platform:system"
+      values   = ["$${aws:ResourceTag/platform:system}"]
+    }
   }
 
   # GetRandomPassword has no resource scope (it generates, not reads a secret).

@@ -81,3 +81,35 @@ run "rejects_invalid_target_type" {
     var.assignments,
   ]
 }
+
+run "verify_default_sso_lac_attributes" {
+  command = plan
+
+  assert {
+    condition     = aws_ssoadmin_instance_access_control_attributes.this.instance_arn == "arn:aws:sso:::instance/ssoins-1234567890abcdef"
+    error_message = "SSO Instance ARN mismatch on access control attributes resource"
+  }
+
+  assert {
+    condition     = one(aws_ssoadmin_instance_access_control_attributes.this.attribute).key == "platform:system"
+    error_message = "Attribute key platform:system is not mapped"
+  }
+
+  assert {
+    condition     = one(one(one(aws_ssoadmin_instance_access_control_attributes.this.attribute).value).source) == "$${path:enterprise:user:department}"
+    error_message = "Default attribute source mapping is incorrect"
+  }
+}
+
+run "verify_custom_sso_lac_attributes" {
+  command = plan
+
+  variables {
+    sso_lac_attribute_source = ["$${path:enterprise:user:title}"]
+  }
+
+  assert {
+    condition     = one(one(one(aws_ssoadmin_instance_access_control_attributes.this.attribute).value).source) == "$${path:enterprise:user:title}"
+    error_message = "Custom attribute source mapping was not applied"
+  }
+}

@@ -14,7 +14,7 @@ run "module_initializes" {
   command = plan
 
   assert {
-    condition     = true
+    condition     = var.project_id == "test-gcp-project"
     error_message = "Module should initialize without errors"
   }
 }

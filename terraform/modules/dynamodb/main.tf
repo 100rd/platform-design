@@ -51,6 +51,7 @@ resource "aws_dynamodb_table" "this" {
 
 data "aws_iam_policy_document" "readwrite" {
   statement {
+    sid = "ABACSystemTagReadWrite"
     actions = [
       "dynamodb:PutItem",
       "dynamodb:UpdateItem",
@@ -65,11 +66,18 @@ data "aws_iam_policy_document" "readwrite" {
       aws_dynamodb_table.this.arn,
       "${aws_dynamodb_table.this.arn}/index/*",
     ]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:PrincipalTag/platform:system"
+      values   = ["$${aws:ResourceTag/platform:system}"]
+    }
   }
 }
 
 data "aws_iam_policy_document" "readonly" {
   statement {
+    sid = "ABACSystemTagReadOnly"
     actions = [
       "dynamodb:GetItem",
       "dynamodb:Query",
@@ -80,6 +88,12 @@ data "aws_iam_policy_document" "readonly" {
       aws_dynamodb_table.this.arn,
       "${aws_dynamodb_table.this.arn}/index/*",
     ]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:PrincipalTag/platform:system"
+      values   = ["$${aws:ResourceTag/platform:system}"]
+    }
   }
 }
 

@@ -33,6 +33,9 @@ spec:
       namespace: argocd
       labels:
         app.kubernetes.io/part-of: platform-infra
+        platform.system: '{{ .path.basename }}'
+        platform.component: infra
+        platform.env: '{{ .values.env }}'
     spec:
       project: default
       source:

@@ -343,7 +343,7 @@ Karpenter v1 provisions the *right* node at the *right* time. Use **private subn
 
 **Example EC2NodeClass + NodePool**
 ```yaml
-apiVersion: karpenter.k8s.aws/v1beta1
+apiVersion: karpenter.k8s.aws/v1
 kind: EC2NodeClass
 metadata:
   name: general-al2023
@@ -358,7 +358,7 @@ spec:
     Name: karpenter-general
     Environment: prod
 ---
-apiVersion: karpenter.sh/v1beta1
+apiVersion: karpenter.sh/v1
 kind: NodePool
 metadata:
   name: general
@@ -367,13 +367,16 @@ spec:
     metadata:
       labels: { workload: general }
     spec:
-      nodeClassRef: { name: general-al2023 }
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: general-al2023
       taints:
         - key: dedicated
           value: general
           effect: NoSchedule
   disruption:
-    consolidationPolicy: WhenUnderutilized
+    consolidationPolicy: WhenEmptyOrUnderutilized
     consolidateAfter: 120s
   limits:
     cpu: "500"

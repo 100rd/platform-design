@@ -362,53 +362,46 @@ Define Karpenter Provisioners:
 Karpenter uses Provisioners to define how nodes should be provisioned.
 code
 Yaml
-# default-provisioner.yaml
-apiVersion: karpenter.sh/v1beta1
-kind: Provisioner
+# default-nodepool.yaml
+apiVersion: karpenter.sh/v1
+kind: NodePool
 metadata:
   name: default
 spec:
-  providerRef:
-    name: default-azure-provider # This can reference a pre-defined Azure resource
-  requirements:
-    - key: kubernetes.io/arch
-      operator: In
-      values: ["amd64"]
-    - key: kubernetes.io/os
-      operator: In
-      values: ["linux"]
-    - key: karpenter.sh/capacity-type
-      operator: In
-      values: ["on-demand"] # or ["spot"] for cost savings
-    - key: topology.kubernetes.io/zone
-      operator: In
-      values: ["eastus-1", "eastus-2", "eastus-3"] # Adjust to your region's zones
+  template:
+    spec:
+      nodeClassRef:
+        group: karpenter.azure.com
+        kind: AKSNodeClass
+        name: default
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"] # or ["spot"] for cost savings
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values: ["eastus-1", "eastus-2", "eastus-3"]
   limits:
-    resources:
-      cpu: 1000 # Max CPU for the cluster from Karpenter
-  consolidation:
-    enabled: true
-  ttlSecondsAfterEmpty: 30 # Nodes deprovision after 30 seconds of being empty
-  # Example taint to prevent general pods on system nodes
-  # taints:
-  #   - key: karpenter.sh/provisioner-name
-  #     value: default
-  #     effect: NoSchedule
+    cpu: 1000
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 30s
 ---
-# default-azure-provider.yaml (Referenced by the Provisioner)
-apiVersion: karpenter.azure.com/v1alpha2
-kind: AzureProvider
+# default-nodeclass.yaml (Referenced by the NodePool)
+apiVersion: karpenter.azure.com/v1
+kind: AKSNodeClass
 metadata:
-  name: default-azure-provider
+  name: default
 spec:
   resourceGroup: rg-aks-platform-prod-eastus
-  subnetName: aks-subnet
-  clusterName: aks-platform-prod-eastus
-  vmImage:
-    offer: UbuntuServer
-    publisher: Canonical
-    sku: 18.04-LTS
-    version: latest
+  vnetSubnetID: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aks-platform-prod-eastus/providers/Microsoft.Network/virtualNetworks/vnet-aks-platform-prod-eastus/subnets/aks-subnet
+  imageID: /subscriptions/00000000-0000-0000-0000-000000000000/providers/Microsoft.Compute/locations/eastus/publishers/Canonical/offers/0001-com-ubuntu-server-jammy/skus/22_04-lts/versions/latest # Ubuntu 22.04 LTS
   instanceTypes:
     - Standard_DS2_v2
     - Standard_DS3_v2

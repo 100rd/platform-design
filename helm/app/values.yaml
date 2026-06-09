@@ -269,6 +269,39 @@ networkPolicy:
     - to: []  # allow all egress by default
     # DNS egress is always allowed
 
+# --- Cilium Network Policy ---
+ciliumNetworkPolicy:
+  # Set to true to render the CiliumNetworkPolicy resource.
+  # Default is false to maintain backward-compatibility with non-Cilium environments.
+  enabled: false
+
+  # Whitelist ingress traffic from workloads belonging to the same platform.system
+  allowSameSystemIngress: true
+
+  # Whitelist ingress traffic from system ingress gateways (platform.component: ingress)
+  allowIngressGateway: true
+
+  # Whitelist egress traffic to workloads belonging to the same platform.system
+  allowSameSystemEgress: true
+
+  # Whitelist egress traffic to DNS resolution (kube-dns in kube-system namespace)
+  allowDnsEgress: true
+
+  # Custom ingress rules. Appended directly to the ingress rules.
+  # Example:
+  # ingress:
+  #   - fromEndpoints:
+  #       - matchLabels:
+  #           platform.system: monitoring
+  ingress: []
+
+  # Custom egress rules. Appended directly to the egress rules.
+  # Example:
+  # egress:
+  #   - toEntities:
+  #       - world
+  egress: []
+
 # --- Jobs ---
 jobs: []
   # - name: migrate
