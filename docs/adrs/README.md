@@ -78,6 +78,7 @@ decision.
 | [0031](0031-secret-rotation.md) | Automated secret rotation via Secrets Manager rotation Lambda + ESO auto-refresh | Accepted | synced (module) | proposal — doc-verified 2026-06-08 |
 | [0032](0032-db-migrations-gitops.md) | DB migrations via ArgoCD PreSync Jobs | Accepted | synced (helm) | proposal — doc-verified 2026-06-08 |
 | [0034](0034-backstage-idp.md) | Backstage as the Internal Developer Platform | Proposed — Deferred (on hold) | pending | proposal — doc-verified 2026-06-08 |
+| [0035](0035-control-tower-and-aft.md) | AWS Control Tower landing zone + Account Factory for Terraform (AFT) vending | Accepted | pending | epic #293 — supersedes ADR-0017 item-0; design 2026-06-09 |
 
 
 
