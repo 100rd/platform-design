@@ -5,12 +5,32 @@
 # Uses terraform-aws-modules/iam v6.x for the OIDC provider and roles.
 #
 # Three role types (mirroring infra):
-#   terraform   — plan + apply workflows (AdministratorAccess, scoped to main + PR + environment)
+#   terraform   — plan + apply workflows (scoped per-account-type policy from policies.tf,
+#                 NOT AdministratorAccess; see docs/iam-ci-role.md and issue #173)
 #   readonly    — PR plan-only workflows (ReadOnlyAccess, scoped to pull_request)
 #   ecr-push    — container build workflows (ECR push policy, scoped to main + tags)
 #
 # Deploy in every account that CI workflows need to access.
 # ---------------------------------------------------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Resolve the single scoped Terraform policy for this account.
+# ---------------------------------------------------------------------------------------------------------------------
+# policies.tf defines four count-gated aws_iam_policy resources; exactly one is
+# created per account (account-type routing via local.dedicated_scoped_accounts).
+# one(...) returns that single ARN (or null when the count is 0), and coalesce
+# picks whichever dedicated policy matched, falling back to the catch-all
+# workload policy. The workload policy is created for every non-dedicated
+# account, so terraform_scoped_policy_arn is ALWAYS a concrete ARN — never null,
+# never AdministratorAccess.
+locals {
+  terraform_scoped_policy_arn = coalesce(
+    one(aws_iam_policy.log_archive[*].arn),
+    one(aws_iam_policy.network[*].arn),
+    one(aws_iam_policy.shared[*].arn),
+    one(aws_iam_policy.workload[*].arn),
+  )
+}
 
 # OIDC Provider (one per AWS account — idempotent creation)
 module "github_oidc_provider" {
@@ -33,8 +53,9 @@ module "terraform_role" {
     var.extra_subjects,
   )
 
+  # Scoped, per-account-type policy from policies.tf — replaces AdministratorAccess (issue #173).
   policies = {
-    AdministratorAccess = "arn:aws:iam::aws:policy/AdministratorAccess"
+    TerraformScoped = local.terraform_scoped_policy_arn
   }
 
   tags = var.tags
