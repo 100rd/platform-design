@@ -18,12 +18,37 @@ locals {
   organization_id   = "" # Populated after org creation
 
   # Member accounts
+  # Account-to-OU placement is managed here (see docs/ou-structure.md). Account IDs
+  # mirror each account's own terragrunt/<name>/account.hcl — keep them in sync.
   member_accounts = {
+    # Infrastructure OU — shared platform tooling (networking hub, shared services)
     network = {
       account_id = "555555555555"
       email      = "aws+network@example.com"
       ou         = "Infrastructure"
     }
+    shared = {
+      account_id = "999999999999"
+      email      = "aws+shared@example.com"
+      ou         = "Infrastructure"
+    }
+    # Security OU — audit and security-tooling accounts
+    security = {
+      account_id = "777777777777"
+      email      = "aws+security@example.com"
+      ou         = "Security"
+    }
+    "log-archive" = {
+      account_id = "888888888888"
+      email      = "aws+log-archive@example.com"
+      ou         = "Security"
+    }
+    "third-party" = {
+      account_id = "121212121212"
+      email      = "aws+third-party@example.com"
+      ou         = "Security"
+    }
+    # Workloads/NonProd OU — non-production workload accounts
     dev = {
       account_id = "111111111111"
       email      = "aws+dev@example.com"
@@ -34,13 +59,14 @@ locals {
       email      = "aws+staging@example.com"
       ou         = "NonProd"
     }
+    # Workloads/Prod OU — production workload accounts
     prod = {
       account_id = "333333333333"
       email      = "aws+prod@example.com"
       ou         = "Prod"
     }
     dr = {
-      account_id = "666666666666"
+      account_id = "444444444444"
       email      = "aws+dr@example.com"
       ou         = "Prod"
     }
