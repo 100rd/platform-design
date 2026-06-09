@@ -224,6 +224,8 @@ Re-open this decision if any of the following hold:
   successor) becomes deployable against a raw Organizations estate, or AWS ships
   a Terraform-native landing zone that does not require Control Tower. The whole
   cost/benefit of Alternatives A/B changes if the prerequisite disappears.
+  (Re-verified 2026-06-09: still a prerequisite — see "Re-verified current as of
+  2026-06-09" below.)
 - **The Config/CloudTrail/SecurityHub conflict proves unresolvable in non-prod**
   (Phase 2 exit criteria cannot be met without destructive changes to live audit
   infrastructure) — fall back to re-evaluating Alternative B (scripted vending)
@@ -249,6 +251,11 @@ Re-open this decision if any of the following hold:
   - an AFT framework module invocation in a new **AFT management account**,
   - four new repos: `aft-account-request`, `aft-global-customizations`,
     `aft-account-customizations`, `aft-account-provisioning-customizations`.
+- **AFT module version + provider pins** (re-verified 2026-06-09): pin the AFT
+  framework module to **`?ref=1.20.1`** (latest, no `main`). AFT 1.20.1 requires
+  `aws >= 6.0.0, < 7.0.0` and Terraform `>= 1.6.1, < 2.0.0`; this repo's
+  `aws ~> 6.0` and Terraform `1.14.8` satisfy both. Detail in "Re-verified current
+  as of 2026-06-09" below.
 - Phasing, dependencies, and exit criteria: see
   [`../control-tower-aft/migration-plan.md`](../control-tower-aft/migration-plan.md).
   Target vending design: see [`../account-vending.md`](../account-vending.md).
@@ -281,7 +288,78 @@ Re-open this decision if any of the following hold:
   [ADR-0017](0017-resource-side-perimeter-and-declarative-org-controls.md)
   (declarative org controls; AFT item superseded here).
 
+## Re-verified current as of 2026-06-09
+
+A fresh check of the AFT module and AWS Control Tower docs (current 2026-06-09)
+against this ADR. **The load-bearing thesis is unchanged: a deployed AWS Control
+Tower landing zone is still a HARD PREREQUISITE of AFT** — AWS: *"Before you can
+set up AFT, you must have an existing AWS Control Tower landing zone,"* and the
+AFT management account is created while signed into the **CT** management account.
+Nothing below changes the decision; the new facts are folded in as currency.
+
+**AFT module + toolchain (ground-truth from the registry/GitHub release APIs, not
+cached search snippets):**
+
+| Item | Value (2026-06-09) | Source |
+|---|---|---|
+| AFT module latest | **1.20.1** (released 2026-05-20; 72 versions total) | GitHub releases / Terraform Registry |
+| AFT `aws` provider requirement | **`>= 6.0.0, < 7.0.0`** | module `versions.tf` (`main`) |
+| AFT Terraform requirement | **`>= 1.6.1, < 2.0.0`** (floor raised to 1.6.1 for the HashiCorp provider-signing GPG-key rotation) | module `versions.tf` (`main`) |
+| This repo's `aws` provider pin | **`~> 6.0`** (every org module + `terragrunt/versions.hcl`) | repo |
+| This repo's Terraform pin | **1.14.8** | `.tool-versions`, `terragrunt/versions.hcl` |
+
+→ **Compatibility holds.** `aws ~> 6.0` is a subset of AFT's `>= 6.0.0, < 7.0.0`,
+and Terraform 1.14.8 is well above AFT's 1.6.1 floor. Pin the AFT module to
+**`?ref=1.20.1`** (no `main`) when Phase 3 lands. Other 1.20.x additions (optional
+KMS encryption for AFT's CloudWatch log groups / SNS topics; OIDC for TFE/HCP
+workspaces; removal of the ScanProvisionedProducts pre-check) do not affect this
+design.
+
+**Confirmed unchanged:**
+
+- **CT-is-a-prerequisite** — still true for AFT 1.x (see above). The "Revisit
+  trigger" for this constraint disappearing remains hypothetical.
+- **The four-repo model** — `aft-account-request`, `aft-global-customizations`,
+  `aft-account-customizations`, `aft-account-provisioning-customizations` — is
+  current and exactly as documented here (including the corrected 4th-repo name).
+- **Enroll-existing-org / Register-OU** path still exists and still applies.
+- Control Tower landing zone is on the **3.x** line (current 3.3 / baseline 4.0);
+  the single-home-region + explicitly-governed-additional-regions model stands.
+
+**New since the design was written (folded in, non-material to the decision):**
+
+- **Automatic enrollment is GA** (Landing Zone **3.1+**, announced 2025-11). It
+  lets an account be enrolled by **moving it into a governed OU via the
+  Organizations API/console** — CT then applies that OU's baseline + controls with
+  no separate per-account "Enroll" step. It is opt-in (`RemediationType =
+  Inheritance Drift` on Create/UpdateLandingZone), requires the
+  `AWSControlTowerExecution` role on the target account (a prereq we already
+  carry), and does **not** retroactively fix accounts moved before it was enabled.
+  This streamlines the **mechanism** of Phase 2 enrollment in the migration plan
+  but does **not** remove any of the six pre-enrollment conflicts in
+  [`../control-tower-aft/conflict-analysis.md`](../control-tower-aft/conflict-analysis.md):
+  moving an account in still triggers CT's managed-SCP attach (the 5/5-slot
+  hard-stop), Config-recorder creation (the recorder collision), and the
+  delegated-admin / Identity-Center hand-offs. The pre-clean still gates Phase 2.
+
+**Sources for this re-verification:**
+
+- AFT prerequisite + management-account creation:
+  <https://docs.aws.amazon.com/controltower/latest/userguide/aft-getting-started.html>,
+  <https://docs.aws.amazon.com/controltower/latest/userguide/aft-resources.html>
+- AFT module releases (1.20.1) + provider/TF requirements:
+  <https://github.com/aws-ia/terraform-aws-control_tower_account_factory/releases>,
+  <https://registry.terraform.io/modules/aws-ia/control_tower_account_factory/aws/latest>
+- Automatic enrollment (GA, LZ 3.1+) — move-into-OU mechanism + prerequisites:
+  <https://docs.aws.amazon.com/controltower/latest/userguide/account-auto-enrollment.html>,
+  <https://docs.aws.amazon.com/controltower/latest/userguide/configure-auto-enroll.html>,
+  <https://aws.amazon.com/about-aws/whats-new/2025/11/aws-control-tower-automatic-enrollment/>
+- Landing zone versions (3.x / baseline 4.0):
+  <https://docs.aws.amazon.com/controltower/latest/userguide/lz-version-selection.html>
+
 ---
 *Doc-verified 2026-06-09 against official AWS Control Tower / AFT documentation.
-Planning-only ADR — decided, not yet implemented in platform-design. Tracked by
-epic #168; implementation gated behind the future blast-radius/apply gate.*
+Re-verified 2026-06-09 (the section above) — AFT 1.20.1, `aws >= 6.0, < 7.0` vs
+repo `aws ~> 6.0` COMPATIBLE, CT-prerequisite confirmed. Planning-only ADR —
+decided, not yet implemented in platform-design. Tracked by epic #168;
+implementation gated behind the future blast-radius/apply gate.*

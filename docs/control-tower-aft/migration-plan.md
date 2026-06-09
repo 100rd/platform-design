@@ -135,10 +135,17 @@ workloads. This phase is driven end-to-end by
   slots so CT's managed SCPs + custom SCPs stay ≤5/OU (§2), and split Identity
   Center ownership (§3) and delegated-admin (§4).
 - **Freeze applies** on the account for its enrollment window.
-- Ensure the `AWSControlTowerExecution` role is present (Register-OU path adds it;
-  or use Landing Zone 3.1+ **automatic enrollment**).
+- Ensure the `AWSControlTowerExecution` role is present (the Register-OU /
+  enroll-existing path adds it; it is also the prerequisite for auto-enrollment).
 - **Enrol** the account into its governed OU
   ([`ct-enrollment-runbook.md` §3.2](ct-enrollment-runbook.md)); CT baselines it.
+  With **automatic enrollment** (Landing Zone 3.1+, GA 2025-11, opt-in via
+  `RemediationType = Inheritance Drift`) this is simply *moving the account into
+  the governed OU* via the Organizations API/console and CT applies that OU's
+  baseline + controls — no separate per-account "Enroll" action. **This only
+  simplifies the enrol step; it does not remove the pre-clean above** — moving an
+  account in still triggers CT's managed-SCP attach (the 5/5 hard-stop) and Config
+  recorder creation, so the conflict pre-clean still gates this phase.
 - **Verify** ([`ct-enrollment-runbook.md` §3.3](ct-enrollment-runbook.md)) and
   unfreeze.
 
@@ -360,5 +367,7 @@ Phase 6 (cutover; decommission raw-org vending)
 - [`risk-register.md`](risk-register.md) — ranked risks + mitigations.
 - AWS: enroll existing accounts / extend governance —
   <https://docs.aws.amazon.com/controltower/latest/userguide/about-extending-governance.html>;
+  automatic enrollment (LZ 3.1+, GA) —
+  <https://docs.aws.amazon.com/controltower/latest/userguide/account-auto-enrollment.html>;
   AFT getting started (CT prerequisite) —
   <https://docs.aws.amazon.com/controltower/latest/userguide/aft-getting-started.html>.
