@@ -124,3 +124,118 @@ WS-A is the gate for B/C (they deploy onto the parity'd GKE). B and C are mutual
 ## 8. Out of scope / preserve
 
 Edge/UK bare-metal (TRT-LLM/Triton edge path), the transaction-analytics product domain, ai-sre agents, and the AWS/EKS GPU-inference estate stay as-is unless a workstream explicitly ports a slice to GKE. This plan adds the GCP ML-platform layer; it does not migrate the AWS control plane.
+
+---
+
+## 9. Review suggestions (code-grounded, 2026-06-10)
+
+> Grounding: each suggestion verified against the current codebase state.
+> Author: platform review session.
+
+### 9.1 WS-A: clarify what's already done vs net-new
+
+The plan says "build preemptible/Spot GPU pools + scale-to-zero" — but **both already exist** in `gcp-gke-gpu-nodepools`:
+
+```hcl
+# terraform/modules/gcp-gke-gpu-nodepools/variables.tf
+spot               = optional(bool, false)    # line 29
+min_node_count     = optional(number, 0)      # line 30 — scale-to-zero
+```
+
+**Suggestion:** add an "Already available" subsection to WS-A:
+
+| Capability | Status | Location |
+|------------|--------|----------|
+| Spot/preemptible GPU pools | ✅ done | `gcp-gke-gpu-nodepools` `spot = true` |
+| Scale-to-zero (`min=0`) | ✅ done | `gcp-gke-gpu-nodepools` `min_node_count = 0` |
+| Multi-zone GPU locality | ✅ done | `gcp-gke-gpu-nodepools` `locations` per pool |
+| Workload Identity | ✅ done | node config in `gcp-gke-gpu-nodepools` |
+
+This narrows WS-A net-new scope to: `gke-gpu-operator`, `gke-gpu-dcgm`, `gke-gpu-scheduling` (Volcano/Kueue port), and **multi-region** expansion.
+
+### 9.2 All workstreams: integrate ADR-0028 platform taxonomy
+
+PR #290 (`feature/docs-evaluation`) implemented the unified `platform:system` label/tag taxonomy (ADR-0028) across GCP, AWS, K8s, ABAC IAM, Cilium, SSO, OPA. **All new ML resources must carry these labels.**
+
+**Suggestion:** add to §3 (Constraints):
+
+> - **ADR-0028 platform taxonomy.** Every new resource (Terraform, Helm, ArgoCD app) must carry `platform:system`, `platform:component`, `platform:owner` labels/tags. IAM policies for S3/KMS/SQS/Secrets must include the ABAC condition (`aws:PrincipalTag/platform:system == aws:ResourceTag/platform:system`). OPA policy `platform_tags.rego` enforces this at plan time.
+
+**Per-workstream integration:**
+
+| WS | platform:system value | Components |
+|----|----------------------|------------|
+| WS-B | `ml-pipeline` | `airflow`, `mlflow`, `model-registry` |
+| WS-C | `ml-monitoring` | `evidently`, `drift-exporter` |
+| WS-D | `observability` | `grafana-self-serve`, `alert-rules` |
+
+**WS-B acceptance criteria addition:**
+- ArgoCD Application for orchestrator/registry carries `platform.system` label
+- IAM policies for ML S3 buckets / Secrets use ABAC condition
+- Helm values include `ciliumNetworkPolicy.enabled: true` with matching `platform.system`
+
+### 9.3 WS-C: specify drift → retrain trigger mechanism
+
+The plan says "drift → Alertmanager → PagerDuty + retrain trigger" but does not specify how the retrain trigger works technically.
+
+**Suggestion:** add to WS-C Build:
+
+> Retrain trigger mechanism: Alertmanager webhook receiver → Airflow REST API `POST /api/v1/dags/{dag_id}/dagRuns` (triggers `train_domain_adapter` DAG from `docs/transaction-analytics/04-training-pipeline.md`). Alternative: Alertmanager → K8s Job CRD (if Airflow is not yet deployed). Specific integration to be detailed in WS-C ADR.
+
+### 9.4 Missing: cost controls for GCP GPU
+
+Multi-region GCP with Spot GPU pools creates significant cost risk. The AWS side has a `budgets` module (`terraform/modules/budgets`) but **nothing equivalent exists for GCP**.
+
+**Suggestion:** add to WS-A deliverables:
+
+> - `terraform/modules/gcp-billing-budget` — `google_billing_budget` resource with per-project GPU spend alerts (threshold: 80%/100%/120% of monthly budget), notification to PagerDuty via Alertmanager.
+
+**Add to WS-A acceptance:**
+
+> - GCP billing budget alerts fire when GPU spend exceeds configured threshold.
+
+### 9.5 Decision #5 (Backstage): add un-defer trigger criteria
+
+The plan recommends "keep deferred" but provides no criteria for when to revisit.
+
+**Suggestion:** replace the Pending section with:
+
+> 5. **Backstage (WS-D self-serve):** ADR-0034 is **Proposed — Deferred**. **Recommendation: keep deferred** and ship lightweight self-serve in WS-D first. **Revisit Backstage when all three conditions are met:** (a) GCP ML platform reaches Phase 3 stable, (b) a dedicated IDP owner is assigned, (c) ≥3 teams actively onboard via golden-path templates from WS-F.
+
+### 9.6 ADR numbering: 0035 exists as a gap
+
+The plan references "ADRs (0036+)" but the last existing ADR is 0034 (`docs/adrs/0034-backstage-idp.md`). ADR-0035 does not exist. Unless 0035 is reserved elsewhere, the sequence should start at 0035.
+
+**Suggestion:** change §5 to "ADRs (0035+)" or explicitly note "0035 reserved for [topic]".
+
+### 9.7 Missing: risk register
+
+No risks are documented. For a multi-region GPU ML platform this is a significant gap.
+
+**Suggestion:** add §8.5 or a new §9:
+
+| # | Risk | Impact | Likelihood | Mitigation |
+|---|------|--------|------------|------------|
+| R1 | GPU quota unavailable in target GCP region | WS-A blocks all downstream | Medium | Pre-request quota increase for target GPU types (A100/H100) in ≥2 regions |
+| R2 | Self-hosted Airflow on GKE instability | WS-B reliability, missed SLAs | Medium | Dedicated node pool + PDB + liveness/readiness probes + Alertmanager route |
+| R3 | Evidently lacks multi-tenant drift isolation | WS-C false positives across tenants | Low | Namespace-per-model isolation + `platform:system` label filtering |
+| R4 | Multi-region GKE GPU cost spiral | Financial, unbudgeted | High | GCP billing budget alerts (§9.4) + Spot-first policy + scale-to-zero validation |
+| R5 | Model registry (MLflow) single point of failure | WS-B deploy pipeline blocked | Medium | MLflow HA with PostgreSQL backend + S3 artifact store (both ABAC-enforced) |
+
+### 9.8 WS-E: clarify Workload Identity scope
+
+WS-E mentions "Workload Identity hardening" but `gcp-gke-gpu-nodepools` **already uses** Workload Identity in node config. Clarify that WS-E targets **cross-cloud federation** (GCP WIF ↔ AWS IAM) and **GCP org-level policy constraints**, not the basic per-pod WI which is already done.
+
+### 9.9 Dependency graph (visual)
+
+The textual sequencing in §5 would benefit from an explicit dependency graph:
+
+```
+WS-A ───→ WS-B (deploys onto parity'd GKE)
+WS-A ───→ WS-C (deploys onto parity'd GKE)
+WS-B ←──→ WS-C (bidirectional: drift → retrain trigger)
+WS-B ───→ WS-D (dashboards consume pipeline metrics)
+WS-B ───→ WS-F (golden paths need pipeline template)
+WS-C ───→ WS-D (drift dashboards feed self-serve)
+WS-D ───→ WS-F (self-serve surfaces feed golden paths)
+```
