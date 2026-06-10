@@ -8,6 +8,9 @@
 > graph + repo scan. This plan targets the GCP ML-platform engineering scope
 > (elastic GCP infra + K8s for ML, ML CI/CD, model + ML observability, system
 > observability, self-serve enablement, SOC posture + on-call).
+>
+> **Rev 2 (2026-06-10):** code-grounded review folded in (§10). 8 of 9 suggestions
+> applied; one (ADR numbering) rejected as factually wrong — ADR-0035 already exists.
 
 ---
 
@@ -19,9 +22,10 @@ GPU on GKE in GCP is **already done** and is the foundation this plan builds on.
 |-------|--------------|-------|
 | GCP network | GCP VPC for GPU | `terraform/modules/gcp-gpu-vpc`, `catalog/units/gcp-gpu-vpc` |
 | GKE cluster | GKE cluster unit | `catalog/units/gcp-gpu-gke` |
-| GKE GPU nodes | GPU node pools **with autoscaling** (`min/max_node_count`, per-zone GPU locality, scale-to-zero `min=0`) | `terraform/modules/gcp-gke-gpu-nodepools` |
+| GKE GPU nodes | GPU node pools **with autoscaling** (`min/max_node_count`, per-zone GPU locality, scale-to-zero `min=0`, `spot`) | `terraform/modules/gcp-gke-gpu-nodepools` |
 | GCP env + stack | `gcp-staging` env; deployable stack = vpc + gke + nodepools | `terragrunt/gcp-staging`, `catalog/stacks/gcp-gpu-analysis/terragrunt.stack.hcl` |
-| GCP identity | GKE Workload Identity + IAM Conditions | `docs/architecture/logical-service-labels-spec.md` §3.2 |
+| GCP identity | GKE Workload Identity (`workload_metadata_config = GKE_METADATA`) + IAM Conditions | `terraform/modules/gcp-gke-gpu-nodepools`, `docs/architecture/logical-service-labels-spec.md` §3.2 |
+| Platform taxonomy | Unified `platform:system` label/tag taxonomy + ABAC + OPA enforcement | ADR-0028, `tests/opa/platform_tags.rego` |
 | GPU runtime (mostly EKS) | gpu-operator, DCGM, vLLM, DRA, Volcano, HPA, Kata-CC, GPU VictoriaMetrics | `terraform/modules/gpu-inference-*`, `apps/infra/gpu-operator` |
 | System observability | OTel Collector, Prometheus 3.x/Thanos, Grafana, Loki, Tempo, Pyroscope, VictoriaMetrics (GPU/DCGM) | `apps/infra/observability/*`, `docs/observability-architecture.md` |
 | On-call / alerting | Alertmanager (19 files), PagerDuty (11 files), runbooks with escalation | `apps/infra/observability/*`, `docs/multi-region/runbooks/*`, `docs/sre-runbook.md` |
@@ -32,9 +36,9 @@ GPU on GKE in GCP is **already done** and is the foundation this plan builds on.
 
 | # | Responsibility | Status | Gap to close |
 |---|----------------|--------|--------------|
-| 1 | **Infra mgmt — elastic GCP + K8s for ML** | 🟡 mostly done | GKE node autoscaling exists; missing: GKE **parity** of the EKS GPU stack (gpu-operator/DCGM/DRA/Volcano/HPA on GKE), preemptible/spot GPU + node auto-provisioning tuning, multi-zone elasticity |
-| 2 | **CI/CD for ML** (train/test/deploy) | 🔴 design-only | No deployed orchestrator (Airflow/Vertex AI Pipelines/Kubeflow), **no model registry**, no train→eval→gate→deploy GH Actions wiring. Reuse existing cosign/syft container signing |
-| 3 | **Model monitoring** (drift/accuracy/latency/degradation) | 🔴 gap | No Evidently/whylogs/Arize/Vertex Model Monitoring deployed; "drift" in repo = *infra* drift, not *model* drift. Latency/uptime covered by system obs |
+| 1 | **Infra mgmt — elastic GCP + K8s for ML** | 🟡 mostly done | GKE node autoscaling/spot/scale-to-zero exist; missing: GKE **parity** of the EKS GPU stack (gpu-operator/DCGM/DRA/Volcano on GKE), **multi-region** expansion, GCP cost controls |
+| 2 | **CI/CD for ML** (train/test/deploy) | 🔴 design-only | No deployed orchestrator (Airflow/Kubeflow), **no model registry**, no train→eval→gate→deploy GH Actions wiring. Reuse existing cosign/syft container signing |
+| 3 | **Model monitoring** (drift/accuracy/latency/degradation) | 🔴 gap | No Evidently/whylogs deployed; "drift" in repo = *infra* drift, not *model* drift. Latency/uptime covered by system obs |
 | 4 | **Collaboration** (data/ML/backend/frontend) | 🟡 partial | Grafana dashboards exist; golden paths + shared contracts + IDP missing |
 | 5 | **ML observability** (system + ML metrics, self-serve) | 🟡 split | System health 🟢 strong; **ML metrics (feature/data drift, prediction accuracy, distribution shift) 🔴 absent**; per-team self-serve monitoring 🟡 partial (dashboards yes, Backstage **deferred** ADR-0034) |
 | 6 | **SOC compliance + on-call** | 🟡 partial | On-call (PagerDuty + Alertmanager + runbooks) 🟢; controls exist 🟢 but **no SOC2 control-mapping / evidence-collection / posture report**; GCP-side policy parity thin |
@@ -44,7 +48,8 @@ GPU on GKE in GCP is **already done** and is the foundation this plan builds on.
 ## 3. Constraints & conventions (apply to every workstream)
 
 - **Plan/validate-only, apply-gated.** No `terraform apply` / Helm install without explicit human go + blast-radius review. `/infra-team` runs in plan mode; apply runs from CI on `main` after merge.
-- **ADR-first.** Each workstream opens with an ADR (decision + alternatives) before code — matches the existing `docs/adrs/NNNN-*.md` catalogue (next free number ≥ 0036; 0033 reserved).
+- **ADR-first.** Each workstream opens with an ADR (decision + alternatives) before code — matches the existing `docs/adrs/NNNN-*.md` catalogue. **Next free number is 0036** (0035 = ADR Control Tower + AFT, already merged; 0033 reserved).
+- **ADR-0028 platform taxonomy (MANDATORY).** Every new resource (Terraform, Helm, ArgoCD app) must carry `platform:system` / `platform:component` / `platform:owner` labels/tags. IAM policies for S3/KMS/SQS/Secrets include the ABAC condition (`aws:PrincipalTag/platform:system == aws:ResourceTag/platform:system`); the GCP equivalent uses label-scoped IAM Conditions. OPA `tests/opa/platform_tags.rego` enforces this at plan time.
 - **Repo idioms:** Terragrunt **catalog units** (`catalog/units/*`) composed into **stacks** (`catalog/stacks/*`); in-cluster delivery via **ArgoCD apps** (`apps/infra/*`); reusable Terraform modules (`terraform/modules/*`) with a `*.tftest.hcl`.
 - **GCP provider** standard, Workload Identity for pod→GCP auth (mirror the AWS Pod-Identity pattern). No secrets in code (Secret Manager + ESO).
 - **Reuse, don't reinvent:** container build/sign (cosign/syft composites), observability stack (Prometheus/Grafana/Alertmanager/OTel), CI (terragrunt-plan/apply, two-step rollout).
@@ -55,35 +60,42 @@ GPU on GKE in GCP is **already done** and is the foundation this plan builds on.
 Each is independently shippable, ADR-gated, and maps to one `/infra-team` run.
 
 ### WS-A — GKE ML infrastructure parity & elasticity  *(builds on the done GPU-GKE base)*
-- **Objective:** bring the GKE GPU platform to parity with the EKS GPU stack and make it elastically scale ML workloads.
-- **Build:** GKE-targeted equivalents of `gpu-operator` (NVIDIA GPU Operator / GKE GPU drivers), `DCGM` exporter, **DRA / Dynamic Resource Allocation**, batch scheduling (**Volcano** or GKE **Kueue**), HPA/KEDA for serving; node auto-provisioning + **preemptible/Spot GPU** pools + scale-to-zero validation; multi-zone GPU locality.
-- **Reuse:** `gcp-gke-gpu-nodepools` (autoscaling already in), `gcp-gpu-vpc`, `gcp-gpu-analysis` stack.
-- **Deliverables:** `terraform/modules/gke-gpu-operator`, `gke-gpu-dcgm`, `gke-gpu-scheduling`; catalog units + extend the `gcp-gpu-analysis` stack; `*.tftest.hcl` each.
-- **Acceptance:** a GPU pod schedules on an autoscaled GKE pool from `min=0`; DCGM metrics flow to VictoriaMetrics/Prometheus; preemptible pool drains gracefully.
+- **Objective:** bring the GKE GPU platform to parity with the EKS GPU stack, make it multi-region, and govern cost.
+- **Already available (do NOT rebuild — `gcp-gke-gpu-nodepools`):**
+  | Capability | Status | Location |
+  |------------|--------|----------|
+  | Spot/preemptible GPU pools | ✅ done | `spot = optional(bool, false)` |
+  | Scale-to-zero | ✅ done | `min_node_count = optional(number, 0)` |
+  | Per-zone GPU locality (multi-zone via multiple pools) | ✅ done | `location = var.zone` per pool |
+  | Workload Identity on nodes | ✅ done | `workload_metadata_config { mode = "GKE_METADATA" }` |
+- **Net-new build:** GKE-targeted equivalents of `gpu-operator` (NVIDIA GPU Operator / GKE GPU drivers), `DCGM` exporter, **DRA / Dynamic Resource Allocation**, batch scheduling (**Volcano** or GKE **Kueue**), HPA/KEDA for serving; **multi-region** expansion (regional GKE in ≥2 regions + cross-region serving failover); **GCP cost controls**.
+- **Reuse:** `gcp-gke-gpu-nodepools`, `gcp-gpu-vpc`, `gcp-gpu-analysis` stack.
+- **Deliverables:** `terraform/modules/gke-gpu-operator`, `gke-gpu-dcgm`, `gke-gpu-scheduling`; **`terraform/modules/gcp-billing-budget`** (`google_billing_budget`, per-project GPU spend alerts at 80/100/120% → PagerDuty via Alertmanager); catalog units + extend the `gcp-gpu-analysis` stack to multi-region; `*.tftest.hcl` each; all carry ADR-0028 labels.
+- **Acceptance:** a GPU pod schedules on an autoscaled GKE pool from `min=0`; DCGM metrics flow to VictoriaMetrics/Prometheus; preemptible pool drains gracefully; **GCP billing budget alert fires when GPU spend exceeds threshold**; resources carry `platform:system` labels.
 
 ### WS-B — ML CI/CD pipelines (train → test → deploy) + model registry  *(biggest net-new)*
 - **Objective:** turn the documented training pipeline into a running, automated system.
-- **Decision (see §7):** orchestrator = **Vertex AI Pipelines** (GCP-native, managed) **vs** self-hosted **Airflow/Kubeflow** on GKE (matches the design docs' Airflow DAGs). Model registry = **Vertex AI Model Registry** vs **MLflow**.
-- **Build:** deploy the chosen orchestrator (ArgoCD app or Vertex), implement the design's DAGs (`train_domain_adapter` → `eval_adapter_debate` → `mine_templates` → `promote_to_edge`); model registry + versioning + stage gates; a **GitHub Actions** ML pipeline that runs train→eval→**quality gate**→register→deploy, signing artifacts with the existing cosign/syft composites; promote via the existing two-step rollout (`docs/ci-rollout.md`) + Kargo for env promotion.
-- **Deliverables:** orchestrator module/app, `model-registry` module, `.github/workflows/ml-pipeline.yml`, ADR.
-- **Acceptance:** a commit to a model/adapter triggers train→eval→gate→register→staged deploy with a signed artifact and a rollback path.
+- **Decision (locked, §7):** orchestrator = **self-hosted Airflow/Kubeflow on GKE**; model registry = **MLflow** (PostgreSQL backend + S3 artifact store, both ABAC-enforced).
+- **Build:** deploy Airflow/Kubeflow as an ArgoCD app on GKE; implement the design's DAGs (`train_domain_adapter` → `eval_adapter_debate` → `mine_templates` → `promote_to_edge`); MLflow registry + versioning + stage gates; a **GitHub Actions** ML pipeline that runs train→eval→**quality gate**→register→deploy, signing artifacts with the existing cosign/syft composites; promote via the existing two-step rollout (`docs/ci-rollout.md`) + Kargo for env promotion.
+- **Deliverables:** `apps/infra/airflow` (or kubeflow) ArgoCD app, `apps/infra/mlflow` + `terraform/modules/ml-artifact-store`, `.github/workflows/ml-pipeline.yml`, ADR. `platform:system = ml-pipeline`, components `airflow`/`mlflow`/`model-registry`.
+- **Acceptance:** a commit to a model/adapter triggers train→eval→gate→register→staged deploy with a signed artifact and a rollback path; the ArgoCD app + IAM for ML S3/Secrets carry the ADR-0028 `platform:system` label + ABAC condition; Helm values set `ciliumNetworkPolicy.enabled: true` with matching `platform.system`.
 
 ### WS-C — Model & ML observability (drift / accuracy / distribution)  *(central to the role)*
 - **Objective:** continuous monitoring of model accuracy + data/concept drift in production — the explicit ML-Observability requirement.
-- **Decision (see §7):** **Evidently** (OSS, Prometheus-native) and/or **whylogs** vs **Vertex AI Model Monitoring** (managed, GKE/endpoint-native) vs **Arize** (already conceptually referenced in `ai-sre`/`docs/sre-runbook.md`).
-- **Build:** a model-monitoring service that computes feature drift, data distribution shift, prediction accuracy/quality, and degradation; export as Prometheus metrics so they land in the **existing** Grafana/Thanos/Alertmanager stack; wire **drift → Alertmanager → PagerDuty** and **drift → retrain trigger** (closes the design's "Drift trigger" Airflow DAG loop from WS-B). Track serving latency via existing OTel/Tempo.
-- **Deliverables:** `apps/infra/ml-monitoring` (ArgoCD app), drift/accuracy Grafana dashboards, Alertmanager routes, ADR.
-- **Acceptance:** an injected distribution shift raises a drift metric, fires an alert, and (optionally) opens a retrain trigger; an accuracy dashboard is live per model/tenant.
+- **Decision (locked, §7):** **Evidently / whylogs** (OSS, Prometheus-native — reuses the existing Grafana/Thanos/Alertmanager stack).
+- **Build:** a model-monitoring service (`platform:system = ml-monitoring`, components `evidently`/`drift-exporter`) that computes feature drift, data distribution shift, prediction accuracy/quality, and degradation; export as Prometheus metrics into the **existing** Grafana/Thanos/Alertmanager stack; wire **drift → Alertmanager → PagerDuty**; **retrain-trigger mechanism:** Alertmanager webhook receiver → Airflow REST API `POST /api/v1/dags/{dag_id}/dagRuns` (fires the `train_domain_adapter` DAG); fallback if Airflow not yet up = Alertmanager → K8s Job CRD (exact integration detailed in the WS-C ADR). Track serving latency via existing OTel/Tempo. Multi-tenant isolation: namespace-per-model + `platform:system` label filtering (avoids cross-tenant false positives).
+- **Deliverables:** `apps/infra/ml-monitoring` (ArgoCD app), drift/accuracy Grafana dashboards, Alertmanager routes + webhook receiver, ADR.
+- **Acceptance:** an injected distribution shift raises a drift metric, fires an alert, and opens a retrain trigger; an accuracy dashboard is live per model/tenant.
 
 ### WS-D — System & self-serve observability + team enablement
 - **Objective:** let individual teams monitor their own workloads (ML and non-ML) without platform-team tickets.
-- **Build:** templated per-team Grafana folders/dashboards + alert rules as code; a self-serve onboarding path; revisit **Backstage** (ADR-0034, currently deferred) as the catalog/golden-path portal — or a lightweight alternative if Backstage stays deferred.
+- **Build:** templated per-team Grafana folders/dashboards + alert rules as code (`platform:system = observability`); a self-serve onboarding path. **Backstage stays deferred** (ADR-0034) — ship the lightweight templated self-serve first; revisit Backstage per §7 criteria.
 - **Reuse:** existing Prometheus/Grafana/Loki/Tempo/Pyroscope + Alertmanager.
 - **Acceptance:** a new team gets a scoped dashboard + alert namespace from a template PR; non-ML production metrics covered alongside ML.
 
 ### WS-E — Security posture & SOC compliance + on-call
 - **Objective:** make compliance (SOC2-style) demonstrable and complete the on-call posture on GCP.
-- **Build:** GCP-side policy parity (GKE Policy Controller / Gatekeeper, Workload Identity hardening, org policy); **SOC2 control mapping + evidence collection** (which existing controls — Kyverno/Tetragon/GuardDuty/iam-baseline/secret-rotation/audit logging — satisfy which control families) + a posture report; formalize the on-call rotation + escalation (PagerDuty already present) and add ML-incident runbooks.
+- **Build:** GCP-side policy parity (GKE Policy Controller / Gatekeeper, **GCP org-policy constraints**); **cross-cloud workload-identity federation** (GCP WIF ↔ AWS IAM) — note basic per-pod GKE Workload Identity is **already done** in `gcp-gke-gpu-nodepools`, so this targets federation + org policy, not basic WI; **SOC2 control mapping + evidence collection** (which existing controls — Kyverno/Tetragon/GuardDuty/iam-baseline/secret-rotation/audit logging — satisfy which control families) + a posture report; formalize the on-call rotation + escalation (PagerDuty already present) and add ML-incident runbooks.
 - **Acceptance:** a control-to-evidence matrix exists; GCP workloads are policy-gated; on-call rotation + ML runbooks documented and tested in a tabletop.
 
 ### WS-F — Collaboration / golden paths  *(cross-cutting, light)*
@@ -94,14 +106,25 @@ Each is independently shippable, ADR-gated, and maps to one `/infra-team` run.
 
 ```
 Phase 0  ADRs (0036+) for WS-A..E + decisions in §7 resolved
-Phase 1  WS-A  GKE ML infra parity & elasticity        ─┐ (infra foundation)
-Phase 2  WS-B  ML CI/CD + model registry                ├─ B and C can run in parallel
-         WS-C  ML observability / drift                 ─┘   once A lands
+Phase 1  WS-A  GKE ML infra parity + multi-region + cost  ─┐ (infra foundation)
+Phase 2  WS-B  ML CI/CD + MLflow registry                  ├─ B and C in parallel
+         WS-C  ML observability / drift                    ─┘   once A lands
 Phase 3  WS-D  self-serve observability + enablement
          WS-E  SOC posture + on-call
 Phase 4  WS-F  golden paths (consumes B/C/D outputs)
 ```
-WS-A is the gate for B/C (they deploy onto the parity'd GKE). B and C are mutually reinforcing (C's drift signal feeds B's retrain trigger) and parallelizable. D/E/F are independent and can start any time after their dependencies.
+
+**Dependency graph:**
+```
+WS-A ──→ WS-B   (deploys onto parity'd GKE)
+WS-A ──→ WS-C   (deploys onto parity'd GKE)
+WS-B ←─→ WS-C   (bidirectional: drift → retrain trigger)
+WS-B ──→ WS-D   (dashboards consume pipeline metrics)
+WS-B ──→ WS-F   (golden paths need pipeline template)
+WS-C ──→ WS-D   (drift dashboards feed self-serve)
+WS-D ──→ WS-F   (self-serve surfaces feed golden paths)
+```
+WS-A is the gate for B/C. B and C are mutually reinforcing and parallelizable. D/E/F are independent and can start after their dependencies.
 
 ## 6. Execution model
 
@@ -114,128 +137,39 @@ WS-A is the gate for B/C (they deploy onto the parity'd GKE). B and C are mutual
 1. **ML orchestrator → self-hosted Airflow/Kubeflow on GKE.** ✅ LOCKED. Matches the design-doc DAGs (`docs/transaction-analytics/04-*`); portable, no managed lock-in. Delivered as an ArgoCD app on GKE (WS-B).
 2. **Model registry → MLflow.** ✅ LOCKED. OSS, portable; backs the train→register→deploy flow (WS-B).
 3. **ML monitoring → Evidently / whylogs.** ✅ LOCKED. OSS, Prometheus-native → reuses the existing Grafana/Thanos/Alertmanager stack; drift → Alertmanager → PagerDuty + retrain trigger (WS-C).
-4. **GKE mode → Standard.** ✅ LOCKED (recommended). Autopilot locks down node-level access (no privileged pods, restricted DaemonSets/drivers/custom schedulers) and would block `gpu-operator`, DCGM, DRA, Volcano, Tetragon, Kata-CC, node-tuning, and fine-grained GPU/preemptible control. The existing `gcp-gke-gpu-nodepools` is already Standard.
+4. **GKE mode → Standard.** ✅ LOCKED. Autopilot locks down node-level access (no privileged pods, restricted DaemonSets/drivers/custom schedulers) and would block `gpu-operator`, DCGM, DRA, Volcano, Tetragon, Kata-CC, node-tuning, and fine-grained GPU/preemptible control. The existing `gcp-gke-gpu-nodepools` is already Standard.
 6. **Elasticity scope → multi-region GCP.** ✅ LOCKED. WS-A expands to multi-region (multiple GCP regions, regional GKE + multi-zone GPU pools, regional MLflow/artifact + cross-region failover for serving). Larger blast radius → extra ADR + apply-gate care.
 
 ### Pending (one call left)
 
-5. **Backstage (WS-D self-serve):** ADR-0034 is **Proposed — Deferred** (needs a dedicated owner; its golden-path template is currently AWS-Pod-Identity-wired). **Recommendation: keep deferred** and ship lightweight self-serve in WS-D first (templated Grafana folders + alert-rules-as-code), revisit Backstage once the GCP ML platform stabilises and an owner exists. *Awaiting confirm.*
+5. **Backstage (WS-D self-serve):** ADR-0034 is **Proposed — Deferred** (needs a dedicated owner; its golden-path template is currently AWS-Pod-Identity-wired). **Recommendation: keep deferred** and ship lightweight self-serve in WS-D first. **Revisit Backstage when all three conditions are met:** (a) the GCP ML platform reaches Phase 3 stable, (b) a dedicated IDP owner is assigned, (c) ≥3 teams actively onboard via golden-path templates from WS-F. *Awaiting confirm.*
 
 ## 8. Out of scope / preserve
 
 Edge/UK bare-metal (TRT-LLM/Triton edge path), the transaction-analytics product domain, ai-sre agents, and the AWS/EKS GPU-inference estate stay as-is unless a workstream explicitly ports a slice to GKE. This plan adds the GCP ML-platform layer; it does not migrate the AWS control plane.
 
----
-
-## 9. Review suggestions (code-grounded, 2026-06-10)
-
-> Grounding: each suggestion verified against the current codebase state.
-> Author: platform review session.
-
-### 9.1 WS-A: clarify what's already done vs net-new
-
-The plan says "build preemptible/Spot GPU pools + scale-to-zero" — but **both already exist** in `gcp-gke-gpu-nodepools`:
-
-```hcl
-# terraform/modules/gcp-gke-gpu-nodepools/variables.tf
-spot               = optional(bool, false)    # line 29
-min_node_count     = optional(number, 0)      # line 30 — scale-to-zero
-```
-
-**Suggestion:** add an "Already available" subsection to WS-A:
-
-| Capability | Status | Location |
-|------------|--------|----------|
-| Spot/preemptible GPU pools | ✅ done | `gcp-gke-gpu-nodepools` `spot = true` |
-| Scale-to-zero (`min=0`) | ✅ done | `gcp-gke-gpu-nodepools` `min_node_count = 0` |
-| Multi-zone GPU locality | ✅ done | `gcp-gke-gpu-nodepools` `locations` per pool |
-| Workload Identity | ✅ done | node config in `gcp-gke-gpu-nodepools` |
-
-This narrows WS-A net-new scope to: `gke-gpu-operator`, `gke-gpu-dcgm`, `gke-gpu-scheduling` (Volcano/Kueue port), and **multi-region** expansion.
-
-### 9.2 All workstreams: integrate ADR-0028 platform taxonomy
-
-PR #290 (`feature/docs-evaluation`) implemented the unified `platform:system` label/tag taxonomy (ADR-0028) across GCP, AWS, K8s, ABAC IAM, Cilium, SSO, OPA. **All new ML resources must carry these labels.**
-
-**Suggestion:** add to §3 (Constraints):
-
-> - **ADR-0028 platform taxonomy.** Every new resource (Terraform, Helm, ArgoCD app) must carry `platform:system`, `platform:component`, `platform:owner` labels/tags. IAM policies for S3/KMS/SQS/Secrets must include the ABAC condition (`aws:PrincipalTag/platform:system == aws:ResourceTag/platform:system`). OPA policy `platform_tags.rego` enforces this at plan time.
-
-**Per-workstream integration:**
-
-| WS | platform:system value | Components |
-|----|----------------------|------------|
-| WS-B | `ml-pipeline` | `airflow`, `mlflow`, `model-registry` |
-| WS-C | `ml-monitoring` | `evidently`, `drift-exporter` |
-| WS-D | `observability` | `grafana-self-serve`, `alert-rules` |
-
-**WS-B acceptance criteria addition:**
-- ArgoCD Application for orchestrator/registry carries `platform.system` label
-- IAM policies for ML S3 buckets / Secrets use ABAC condition
-- Helm values include `ciliumNetworkPolicy.enabled: true` with matching `platform.system`
-
-### 9.3 WS-C: specify drift → retrain trigger mechanism
-
-The plan says "drift → Alertmanager → PagerDuty + retrain trigger" but does not specify how the retrain trigger works technically.
-
-**Suggestion:** add to WS-C Build:
-
-> Retrain trigger mechanism: Alertmanager webhook receiver → Airflow REST API `POST /api/v1/dags/{dag_id}/dagRuns` (triggers `train_domain_adapter` DAG from `docs/transaction-analytics/04-training-pipeline.md`). Alternative: Alertmanager → K8s Job CRD (if Airflow is not yet deployed). Specific integration to be detailed in WS-C ADR.
-
-### 9.4 Missing: cost controls for GCP GPU
-
-Multi-region GCP with Spot GPU pools creates significant cost risk. The AWS side has a `budgets` module (`terraform/modules/budgets`) but **nothing equivalent exists for GCP**.
-
-**Suggestion:** add to WS-A deliverables:
-
-> - `terraform/modules/gcp-billing-budget` — `google_billing_budget` resource with per-project GPU spend alerts (threshold: 80%/100%/120% of monthly budget), notification to PagerDuty via Alertmanager.
-
-**Add to WS-A acceptance:**
-
-> - GCP billing budget alerts fire when GPU spend exceeds configured threshold.
-
-### 9.5 Decision #5 (Backstage): add un-defer trigger criteria
-
-The plan recommends "keep deferred" but provides no criteria for when to revisit.
-
-**Suggestion:** replace the Pending section with:
-
-> 5. **Backstage (WS-D self-serve):** ADR-0034 is **Proposed — Deferred**. **Recommendation: keep deferred** and ship lightweight self-serve in WS-D first. **Revisit Backstage when all three conditions are met:** (a) GCP ML platform reaches Phase 3 stable, (b) a dedicated IDP owner is assigned, (c) ≥3 teams actively onboard via golden-path templates from WS-F.
-
-### 9.6 ADR numbering: 0035 exists as a gap
-
-The plan references "ADRs (0036+)" but the last existing ADR is 0034 (`docs/adrs/0034-backstage-idp.md`). ADR-0035 does not exist. Unless 0035 is reserved elsewhere, the sequence should start at 0035.
-
-**Suggestion:** change §5 to "ADRs (0035+)" or explicitly note "0035 reserved for [topic]".
-
-### 9.7 Missing: risk register
-
-No risks are documented. For a multi-region GPU ML platform this is a significant gap.
-
-**Suggestion:** add §8.5 or a new §9:
+## 9. Risk register
 
 | # | Risk | Impact | Likelihood | Mitigation |
 |---|------|--------|------------|------------|
-| R1 | GPU quota unavailable in target GCP region | WS-A blocks all downstream | Medium | Pre-request quota increase for target GPU types (A100/H100) in ≥2 regions |
-| R2 | Self-hosted Airflow on GKE instability | WS-B reliability, missed SLAs | Medium | Dedicated node pool + PDB + liveness/readiness probes + Alertmanager route |
+| R1 | GPU quota unavailable in target GCP region | WS-A blocks all downstream | Medium | Pre-request quota increase for target GPU types (A100/H100) in ≥2 regions before Phase 1 |
+| R2 | Self-hosted Airflow/Kubeflow on GKE instability | WS-B reliability, missed SLAs | Medium | Dedicated node pool + PDB + liveness/readiness probes + Alertmanager route |
 | R3 | Evidently lacks multi-tenant drift isolation | WS-C false positives across tenants | Low | Namespace-per-model isolation + `platform:system` label filtering |
-| R4 | Multi-region GKE GPU cost spiral | Financial, unbudgeted | High | GCP billing budget alerts (§9.4) + Spot-first policy + scale-to-zero validation |
-| R5 | Model registry (MLflow) single point of failure | WS-B deploy pipeline blocked | Medium | MLflow HA with PostgreSQL backend + S3 artifact store (both ABAC-enforced) |
+| R4 | Multi-region GKE GPU cost spiral | Financial, unbudgeted | High | `gcp-billing-budget` alerts (WS-A) + Spot-first policy + scale-to-zero validation |
+| R5 | MLflow single point of failure | WS-B deploy pipeline blocked | Medium | MLflow HA with PostgreSQL backend + S3 artifact store (both ABAC-enforced) |
 
-### 9.8 WS-E: clarify Workload Identity scope
+## 10. Review resolution (2026-06-10)
 
-WS-E mentions "Workload Identity hardening" but `gcp-gke-gpu-nodepools` **already uses** Workload Identity in node config. Clarify that WS-E targets **cross-cloud federation** (GCP WIF ↔ AWS IAM) and **GCP org-level policy constraints**, not the basic per-pod WI which is already done.
+Disposition of the code-grounded review:
 
-### 9.9 Dependency graph (visual)
-
-The textual sequencing in §5 would benefit from an explicit dependency graph:
-
-```
-WS-A ───→ WS-B (deploys onto parity'd GKE)
-WS-A ───→ WS-C (deploys onto parity'd GKE)
-WS-B ←──→ WS-C (bidirectional: drift → retrain trigger)
-WS-B ───→ WS-D (dashboards consume pipeline metrics)
-WS-B ───→ WS-F (golden paths need pipeline template)
-WS-C ───→ WS-D (drift dashboards feed self-serve)
-WS-D ───→ WS-F (self-serve surfaces feed golden paths)
-```
+| # | Suggestion | Disposition |
+|---|------------|-------------|
+| 9.1 | WS-A: spot/scale-to-zero/WI already done | ✅ **Applied** — added "Already available" table to WS-A (verified: `spot`, `min_node_count=0`, `GKE_METADATA` in `gcp-gke-gpu-nodepools`). Note: locality is `location = var.zone` per pool (single-zone/pool; multi-zone via multiple pools), not a `locations` list |
+| 9.2 | Integrate ADR-0028 platform taxonomy | ✅ **Applied** — added mandatory ADR-0028 constraint to §3 + per-WS `platform:system` values + ABAC acceptance (verified ADR-0028 + `tests/opa/platform_tags.rego` exist) |
+| 9.3 | WS-C drift→retrain mechanism | ✅ **Applied** — Alertmanager webhook → Airflow REST `dagRuns` (K8s Job fallback) in WS-C Build |
+| 9.4 | GCP cost controls (no GCP budget module) | ✅ **Applied** — added `gcp-billing-budget` to WS-A deliverables + acceptance (verified: AWS `budgets` exists, no GCP equivalent) |
+| 9.5 | Backstage un-defer criteria | ✅ **Applied** — three explicit revisit conditions in §7 #5 |
+| 9.6 | ADR numbering should start at 0035 | ❌ **Rejected — factually incorrect.** `docs/adrs/0035-control-tower-and-aft.md` already exists on `main` (merged PR #294). The next free number is **0036**, as the plan already states |
+| 9.7 | Add risk register | ✅ **Applied** — new §9 |
+| 9.8 | WS-E clarify Workload Identity scope | ✅ **Applied** — WS-E now targets cross-cloud WIF federation + GCP org policy (basic per-pod WI already done) |
+| 9.9 | Dependency graph | ✅ **Applied** — added to §5 |
