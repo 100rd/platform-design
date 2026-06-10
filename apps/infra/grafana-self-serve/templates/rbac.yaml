@@ -1,0 +1,45 @@
+---
+# Grafana self-serve: namespace-scoped RBAC for team PrometheusRule management
+#
+# Grants the team's CI/CD service account (team.ciServiceAccount) rights to
+# manage PrometheusRule objects in their workload namespace only.
+# No cross-namespace access is granted.
+#
+# Platform PrometheusRules in the monitoring namespace are NOT touched.
+#
+# ADR-0039: Self-Serve Observability
+# ADR-0028: platform.system = observability (mandatory on every resource)
+{{- include "grafana-self-serve.validate" . }}
+{{- if .Values.team.ciServiceAccount }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Values.team.slug }}-prometheusrule-manager
+  namespace: {{ .Values.team.namespace }}
+  labels:
+    {{- include "grafana-self-serve.labels" (dict "root" . "component" "rbac") | nindent 4 }}
+rules:
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["prometheusrules"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["prometheusrules/status"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.team.slug }}-prometheusrule-manager
+  namespace: {{ .Values.team.namespace }}
+  labels:
+    {{- include "grafana-self-serve.labels" (dict "root" . "component" "rbac") | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.team.ciServiceAccount | quote }}
+    namespace: {{ .Values.team.namespace | quote }}
+roleRef:
+  kind: Role
+  name: {{ .Values.team.slug }}-prometheusrule-manager
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

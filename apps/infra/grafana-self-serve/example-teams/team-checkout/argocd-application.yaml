@@ -1,0 +1,52 @@
+---
+# ArgoCD Application: team-checkout self-serve observability
+# Onboarded via ADR-0039 template PR.
+# Deploys into the checkout namespace (must pre-exist).
+# Wave 30 — after all observability components (wave 10-20).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana-self-serve-team-checkout
+  namespace: argocd
+  labels:
+    platform.system: "observability"
+    platform.component: "self-serve"
+    platform.env: "production"
+    platform.owner: "team-checkout"
+    platform.managed-by: "argocd"
+    app.kubernetes.io/name: "grafana-self-serve-team-checkout"
+    app.kubernetes.io/component: "self-serve"
+    app.kubernetes.io/managed-by: "argocd"
+  annotations:
+    argocd.argoproj.io/sync-wave: "30"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/your-org/platform-design.git
+    targetRevision: main
+    path: apps/infra/grafana-self-serve
+    helm:
+      valueFiles:
+        - values.yaml
+        - example-teams/team-checkout/values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: checkout
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=false
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m

@@ -1,4 +1,4 @@
-{"generated_at": "2026-06-10T19:13:40Z", "applications": [
+{"generated_at": "2026-06-10T20:32:47Z", "applications": [
 {
   "name": "airflow",
   "chartVersion": "1.0.0",
@@ -101,6 +101,14 @@
   "appVersion": "v26.3.0",
   "description": "NVIDIA GPU Operator - Automated GPU driver, toolkit, and device plugin management",
   "path": "apps/infra/gpu-operator"
+}
+,
+{
+  "name": "grafana-self-serve",
+  "chartVersion": "0.1.0",
+  "appVersion": "1.0",
+  "description": ">",
+  "path": "apps/infra/grafana-self-serve"
 }
 ,
 {

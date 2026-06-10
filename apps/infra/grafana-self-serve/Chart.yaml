@@ -1,0 +1,24 @@
+apiVersion: v2
+name: grafana-self-serve
+description: >
+  Per-team Grafana folder, starter dashboard, and alert-rules-as-code template.
+  Teams instantiate this chart via a template PR to get a scoped Grafana folder
+  and a PrometheusRule in their workload namespace without platform tickets.
+  See docs/self-serve-observability.md for the onboarding runbook.
+  ADR-0039.
+type: application
+version: 0.1.0
+appVersion: "1.0"
+keywords:
+  - grafana
+  - dashboards
+  - observability
+  - self-serve
+  - alerts
+home: https://github.com/your-org/platform-design
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+annotations:
+  platform.system: observability
+  adr: "0039"

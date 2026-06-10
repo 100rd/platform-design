@@ -29,6 +29,7 @@ Applications deployed via ArgoCD from `apps/infra/`
 | gateway-api-crds | 0.2.0 |  | Gateway API standard channel CRDs v1.4.0 + Cilium GatewayCla |
 | gateways | 0.2.0 |  | External and internal Cilium Gateways + BackendTLSPolicy (AD |
 | gpu-operator | 1.0.0 | v26.3.0 | NVIDIA GPU Operator - Automated GPU driver, toolkit, and dev |
+| grafana-self-serve | 0.1.0 | 1.0 | > |
 | kargo | 0.2.0 | 1.9.0 | Kargo progressive delivery controller |
 | kyverno | 1.1.0 | 1.18.1 | Kyverno - Kubernetes Native Policy Management (ADR-0020) |
 | ml-monitoring | 0.1.0 | 0.1.0 | >- |

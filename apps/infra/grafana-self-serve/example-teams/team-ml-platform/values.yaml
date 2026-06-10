@@ -1,0 +1,33 @@
+# Example: team-ml-platform (ML team with ml.enabled: true)
+# Template PR example for the ML Platform team.
+# Includes ML drift + accuracy panels (ADR-0038 metrics) and ML alert groups.
+# See docs/self-serve-observability.md for the full onboarding guide.
+# ADR-0039.
+
+team:
+  name: "ML Platform"
+  slug: "team-ml-platform"
+  namespace: "ml-monitoring"
+  system: "ml-monitoring"
+  owner: "team-ml-platform"
+  env: "production"
+  grafanaServiceAccount: "grafana-sa-team-ml-platform"
+  ciServiceAccount: "ml-platform-ci"
+
+ml:
+  enabled: true
+  # Scope ML panels to a specific model. Remove or leave empty to show all models.
+  modelName: "domain-adapter-hft"
+  # Scope ML panels to a specific tenant. Remove or leave empty to show all tenants.
+  tenant: "tenant-acme"
+
+# ML-team specific alert thresholds.
+alerts:
+  errorRateThreshold: "0.05"
+  cpuSaturationThreshold: "0.80"
+  memorySaturationThreshold: "0.80"
+  availabilityFor: "5m"
+  saturationFor: "15m"
+  mlDriftThreshold: "0.2"
+  mlAccuracyThreshold: "0.85"
+  mlAlertFor: "10m"
