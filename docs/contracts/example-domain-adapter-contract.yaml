@@ -1,0 +1,118 @@
+# example-domain-adapter-contract.yaml
+#
+# Concrete contract instance for the domain-adapter model family.
+# Written against model-api-contract.md v1.0.0.
+#
+# Use this file as a template when writing a contract instance for a new model.
+# Replace the values below with your model's specifics.
+#
+# Contract sign-off is required before staging promotion.
+# See templates/golden-paths/new-model-service/README.md Step 5.
+#
+# ADR references:
+#   ADR-0037 (WS-B): model_name + model_version registration in MLflow
+#   ADR-0038 (WS-C): monitoring labels (model_name, tenant, domain)
+#   ADR-0039 (WS-D): observability SLOs
+#   ADR-0041 (WS-F): this contract template
+
+contract_spec_version: "1.0.0"
+contract_instance_version: "1.0.0"
+date: "2026-06-10"
+
+model:
+  # MLflow registered model name. Must match the registry entry from ml-pipeline.yml.
+  name: "domain-adapter-hft"
+  tenant: "tenant-acme"
+  domain: "hft"
+  description: >
+    LoRA domain adapter for high-frequency trading (HFT) transaction analysis.
+    Trained on the hft Iceberg snapshot; outputs a buy/sell/hold signal with an
+    expected edge in USD. Served via vLLM multi-LoRA on GKE GPU node pool.
+  registry_stage: "Staging"
+
+signoff:
+  data_engineering_lead: ""   # Fill in: "Alice Smith <alice@example.com>"
+  ml_engineering_lead: ""     # Fill in: "Bob Jones <bob@example.com>"
+  backend_lead: ""             # Fill in: "Carol Lee <carol@example.com>"
+  frontend_lead: "N/A"         # No frontend consumer for this model
+  sign_off_date: ""            # Fill in: YYYY-MM-DD
+
+request_schema:
+  required_features:
+    # Common fields (§3.1 of model-api-contract.md)
+    - name: "transaction_id"
+      type: "string"
+      description: "Unique transaction identifier"
+
+    - name: "timestamp_utc"
+      type: "string"
+      format: "YYYY-MM-DDTHH:MM:SSZ"
+      description: "Transaction timestamp in UTC"
+
+    - name: "amount_usd"
+      type: "number"
+      description: "Transaction amount in USD"
+
+    - name: "currency_code"
+      type: "string"
+      description: "ISO 4217 three-letter currency code"
+
+    - name: "merchant_category"
+      type: "string"
+      description: "Merchant category code (MCC)"
+
+    # hft domain-specific features (§3.2)
+    - name: "bid_ask_spread"
+      type: "number"
+      description: "Bid-ask spread at time of transaction"
+
+    - name: "order_book_depth"
+      type: "integer"
+      description: "Number of price levels in order book"
+
+    - name: "venue_id"
+      type: "string"
+      description: "Trading venue identifier"
+
+    - name: "latency_microseconds"
+      type: "integer"
+      description: "Round-trip latency in microseconds"
+
+response_schema:
+  # Domain-specific prediction fields for the hft domain (§4.1)
+  prediction_fields:
+    - name: "signal"
+      type: "string"
+      enum: ["buy", "sell", "hold"]
+      description: "Trading signal"
+
+    - name: "edge_usd"
+      type: "number"
+      description: "Expected edge in USD for this signal"
+
+slo_overrides:
+  # Override the default SLO targets from §5 of model-api-contract.md.
+  p50_latency_ms: 30         # Stricter than default 50ms (HFT latency requirement)
+  p99_latency_ms: 100        # Stricter than default 200ms
+  error_rate_threshold: 0.005
+  model_accuracy_floor: 0.87  # Slightly stricter than default 0.85
+  drift_score_ceiling: 0.15   # Stricter than default 0.2
+
+observability:
+  # These values must match the ADR-0038 metric labels on drift-exporter exactly.
+  metric_labels:
+    model_name: "domain-adapter-hft"
+    tenant: "tenant-acme"
+    domain: "hft"
+  # Fill in after WS-D onboarding:
+  grafana_dashboard_url: ""
+  # Fill in after first training run:
+  mlflow_experiment_url: ""
+
+breaking_changes:
+  - none
+
+notes: >
+  First contract instance for the domain-adapter-hft model.
+  HFT domain requires stricter latency SLOs than the platform defaults.
+  Frontend team is not a consumer for this model; frontend_lead is N/A.

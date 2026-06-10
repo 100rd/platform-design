@@ -1,0 +1,53 @@
+# Golden Path: new-model-service — ml-pipeline.yml dispatch payload
+# WS-B (ADR-0037): .github/workflows/ml-pipeline.yml
+#
+# This is a REFERENCE file, not a deployed Kubernetes manifest.
+# It documents the GitHub workflow_dispatch payload for your model.
+#
+# USAGE (after substituting {{PLACEHOLDER}} values):
+#
+#   gh workflow run ml-pipeline.yml \
+#     --ref main \
+#     --field model={{MODEL_NAME}} \
+#     --field environment={{PLATFORM_ENV}}
+#
+# Or via GitHub REST API:
+#   curl -X POST \
+#     -H "Authorization: Bearer $GH_TOKEN" \
+#     -H "Accept: application/vnd.github+json" \
+#     https://api.github.com/repos/YOUR_ORG/platform-design/actions/workflows/ml-pipeline.yml/dispatches \
+#     -d '{"ref":"main","inputs":{"model":"{{MODEL_NAME}}","environment":"{{PLATFORM_ENV}}"}}'
+#
+# The ml-pipeline.yml workflow then:
+#   1. POST $AIRFLOW_BASE_URL/api/v1/dags/train_domain_adapter/dagRuns
+#      conf: {model_id: {{MODEL_NAME}}, tenant: {{TENANT}}, domain: {{DOMAIN}}}
+#   2. Poll eval_adapter_debate dag run until terminal state
+#   3. Quality gate: win_rate >= 0.55
+#   4. Register model version in MLflow (-> Staging)
+#   5. SBOM (syft) + cosign sign + attest
+#   6. Kargo promotion: dev (auto) -> staging (reviewer) -> prod (manual)
+#
+# Reference: .github/workflows/ml-pipeline.yml
+
+dispatch:
+  workflow: ml-pipeline.yml
+  ref: main
+  inputs:
+    # Substitute: {{MODEL_NAME}}
+    model: "{{MODEL_NAME}}"
+    # Substitute: {{PLATFORM_ENV}}
+    environment: "{{PLATFORM_ENV}}"
+
+# Airflow DAG configuration injected via dagRuns conf (for reference):
+airflow_dag_conf:
+  model_id: "{{MODEL_NAME}}"
+  tenant: "{{TENANT}}"
+  domain: "{{DOMAIN}}"
+  # First run is always manual; drift trigger uses "drift".
+  trigger_reason: "manual"
+
+# MLflow model registration path (for reference):
+mlflow:
+  model_name: "{{MODEL_NAME}}"
+  # Artifacts stored at: gs://{{GCS_MLFLOW_ARTIFACTS_BUCKET}}/{{MODEL_NAME}}/<git-sha>
+  artifact_bucket: "{{GCS_MLFLOW_ARTIFACTS_BUCKET}}"
