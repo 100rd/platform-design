@@ -1,0 +1,15 @@
+---
+# Namespace for the ml-monitoring shared components (retrain-trigger, etc.)
+# Per-model namespaces (ml-<tenant>-<domain>) are created by ArgoCD
+# CreateNamespace=true when per-model Applications are instantiated.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: ml-monitoring
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    platform.system: "ml-monitoring"
+    platform.env: {{ index .Values.platformLabels "platform.env" | quote }}
+    platform.owner: {{ index .Values.platformLabels "platform.owner" | quote }}
+    platform.managed-by: "argocd"

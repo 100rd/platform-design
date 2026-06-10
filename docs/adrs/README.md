@@ -81,6 +81,7 @@ decision.
 | [0035](0035-control-tower-and-aft.md) | AWS Control Tower landing zone + Account Factory for Terraform (AFT) vending | Accepted | pending | epic #293 — supersedes ADR-0017 item-0; design 2026-06-09 |
 | [0036](0036-gke-ml-infra-parity-multiregion.md) | GKE ML-infra parity + multi-region GKE + GCP cost guardrail (GPU Operator, DCGM, Volcano, billing-budget) | Accepted | pending | WS-A of GCP ML platform plan; design 2026-06-10 |
 | [0037](0037-ml-cicd-pipeline-mlflow.md) | ML CI/CD pipeline — Airflow orchestrator + MLflow registry + GCS artifact store | Proposed | pending | WS-B of GCP ML platform plan; design 2026-06-10 |
+| [0038](0038-ml-observability-drift.md) | ML observability — drift detection, accuracy monitoring, and retrain trigger (Evidently + whylogs, Prometheus-native) | Proposed | pending | WS-C of GCP ML platform plan; design 2026-06-10 |
 
 
 
@@ -96,6 +97,8 @@ decision.
   ADRs land last as 0015–0016.
 - ADR-0033 is intentionally unassigned (reserved gap between the Batch-B ADRs
   and the Backstage proposal).
+- ADR-0037 is intentionally unassigned (reserved gap; WS-B ML CI/CD + MLflow ADR
+  will use that slot).
 
 ## Conventions
 

@@ -1,0 +1,125 @@
+{{- if .Values.retrainTrigger.enabled }}
+---
+# Retrain-trigger webhook proxy Deployment
+# Receives Alertmanager webhooks, translates to Airflow REST API calls.
+# Fallback: creates K8s Job in ml-monitoring namespace (ADR-0038 D4).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-retrain-trigger
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: ml-retrain-trigger
+    app.kubernetes.io/component: retrain-trigger
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    platform.system: "ml-monitoring"
+    platform.component: "retrain-trigger"
+    platform.env: {{ index .Values.platformLabels "platform.env" | quote }}
+    platform.owner: {{ index .Values.platformLabels "platform.owner" | quote }}
+    platform.managed-by: "argocd"
+spec:
+  replicas: {{ .Values.retrainTrigger.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ml-retrain-trigger
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ml-retrain-trigger
+        app.kubernetes.io/component: retrain-trigger
+        platform.system: "ml-monitoring"
+        platform.component: "retrain-trigger"
+        platform.env: {{ index .Values.platformLabels "platform.env" | quote }}
+        platform.owner: {{ index .Values.platformLabels "platform.owner" | quote }}
+        platform.managed-by: "argocd"
+    spec:
+      serviceAccountName: {{ .Values.rbac.serviceAccountName }}
+      securityContext:
+        runAsNonRoot: {{ .Values.retrainTrigger.securityContext.runAsNonRoot }}
+        runAsUser: {{ .Values.retrainTrigger.securityContext.runAsUser }}
+        seccompProfile:
+          type: {{ .Values.retrainTrigger.securityContext.seccompProfile.type }}
+      containers:
+        - name: retrain-trigger
+          image: "{{ .Values.retrainTrigger.image.repository }}:{{ .Values.retrainTrigger.image.tag }}"
+          imagePullPolicy: {{ .Values.retrainTrigger.image.pullPolicy }}
+          ports:
+            - name: webhook
+              containerPort: {{ .Values.retrainTrigger.port }}
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          env:
+            - name: AIRFLOW_BASE_URL
+              value: {{ .Values.retrainTrigger.airflow.baseUrl | quote }}
+            - name: AIRFLOW_DAG_ID
+              value: {{ .Values.retrainTrigger.airflow.dagId | quote }}
+            - name: DEDUPLICATION_WINDOW_SECONDS
+              value: {{ .Values.retrainTrigger.deduplicationWindowSeconds | quote }}
+            - name: PLATFORM_SYSTEM
+              value: "ml-monitoring"
+            - name: AIRFLOW_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.retrainTrigger.airflow.credentialsSecretName }}
+                  key: username
+            - name: AIRFLOW_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.retrainTrigger.airflow.credentialsSecretName }}
+                  key: password
+          resources:
+            requests:
+              cpu: {{ .Values.retrainTrigger.resources.requests.cpu | quote }}
+              memory: {{ .Values.retrainTrigger.resources.requests.memory | quote }}
+            limits:
+              cpu: {{ .Values.retrainTrigger.resources.limits.cpu | quote }}
+              memory: {{ .Values.retrainTrigger.resources.limits.memory | quote }}
+          securityContext:
+            allowPrivilegeEscalation: {{ .Values.retrainTrigger.securityContext.allowPrivilegeEscalation }}
+            readOnlyRootFilesystem: {{ .Values.retrainTrigger.securityContext.readOnlyRootFilesystem }}
+            capabilities:
+              drop: {{ .Values.retrainTrigger.securityContext.capabilities.drop | toJson }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: webhook
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: webhook
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      restartPolicy: Always
+---
+# Service for retrain-trigger webhook (receives Alertmanager POST)
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-retrain-trigger
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: ml-retrain-trigger
+    app.kubernetes.io/component: retrain-trigger
+    platform.system: "ml-monitoring"
+    platform.component: "retrain-trigger"
+    platform.env: {{ index .Values.platformLabels "platform.env" | quote }}
+    platform.owner: {{ index .Values.platformLabels "platform.owner" | quote }}
+    platform.managed-by: "argocd"
+spec:
+  selector:
+    app.kubernetes.io/name: ml-retrain-trigger
+  ports:
+    - name: webhook
+      port: {{ .Values.retrainTrigger.service.port }}
+      targetPort: webhook
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP
+  type: {{ .Values.retrainTrigger.service.type }}
+{{- end }}

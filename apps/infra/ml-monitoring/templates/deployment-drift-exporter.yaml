@@ -1,0 +1,139 @@
+{{- if .Values.driftExporter.enabled }}
+{{- range .Values.modelNamespaces }}
+---
+# Evidently drift-exporter Deployment — one per (tenant, domain)
+# Computes model accuracy, test-suite results, column-level drift.
+# Scrape endpoint: http://<svc>:{{ $.Values.driftExporter.port }}/metrics
+# ADR-0038 D1
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-drift-exporter-{{ .tenant }}-{{ .domain }}
+  namespace: {{ .namespace }}
+  labels:
+    app.kubernetes.io/name: ml-drift-exporter
+    app.kubernetes.io/component: drift-exporter
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    platform.system: "ml-monitoring"
+    platform.component: "drift-exporter"
+    platform.env: {{ index $.Values.platformLabels "platform.env" | quote }}
+    platform.owner: {{ index $.Values.platformLabels "platform.owner" | quote }}
+    platform.managed-by: "argocd"
+    model-name: {{ .modelName | quote }}
+    tenant: {{ .tenant | quote }}
+    domain: {{ .domain | quote }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ml-drift-exporter
+      tenant: {{ .tenant | quote }}
+      domain: {{ .domain | quote }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ml-drift-exporter
+        app.kubernetes.io/component: drift-exporter
+        platform.system: "ml-monitoring"
+        platform.component: "drift-exporter"
+        platform.env: {{ index $.Values.platformLabels "platform.env" | quote }}
+        platform.owner: {{ index $.Values.platformLabels "platform.owner" | quote }}
+        platform.managed-by: "argocd"
+        model-name: {{ .modelName | quote }}
+        tenant: {{ .tenant | quote }}
+        domain: {{ .domain | quote }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ $.Values.driftExporter.port | quote }}
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: {{ $.Values.rbac.serviceAccountName }}
+      securityContext:
+        runAsNonRoot: {{ $.Values.driftExporter.securityContext.runAsNonRoot }}
+        runAsUser: {{ $.Values.driftExporter.securityContext.runAsUser }}
+        seccompProfile:
+          type: {{ $.Values.driftExporter.securityContext.seccompProfile.type }}
+      containers:
+        - name: drift-exporter
+          image: "{{ $.Values.driftExporter.image.repository }}:{{ $.Values.driftExporter.image.tag }}"
+          imagePullPolicy: {{ $.Values.driftExporter.image.pullPolicy }}
+          ports:
+            - name: metrics
+              containerPort: {{ $.Values.driftExporter.port }}
+              protocol: TCP
+          env:
+            - name: MODEL_NAME
+              value: {{ .modelName | quote }}
+            - name: TENANT
+              value: {{ .tenant | quote }}
+            - name: DOMAIN
+              value: {{ .domain | quote }}
+            - name: PLATFORM_SYSTEM
+              value: "ml-monitoring"
+            - name: REFERENCE_BUCKET_URI
+              value: {{ $.Values.driftExporter.referenceBucketUri | quote }}
+            - name: EVALUATION_INTERVAL_SECONDS
+              value: {{ $.Values.driftExporter.evaluationIntervalSeconds | quote }}
+            - name: THRESHOLD_DATASET_DRIFT_WARNING
+              value: {{ $.Values.driftExporter.defaultThresholds.datasetDriftScore.warning | quote }}
+            - name: THRESHOLD_DATASET_DRIFT_CRITICAL
+              value: {{ $.Values.driftExporter.defaultThresholds.datasetDriftScore.critical | quote }}
+            - name: THRESHOLD_ACCURACY_WARNING
+              value: {{ $.Values.driftExporter.defaultThresholds.modelAccuracy.warning | quote }}
+            - name: THRESHOLD_ACCURACY_CRITICAL
+              value: {{ $.Values.driftExporter.defaultThresholds.modelAccuracy.critical | quote }}
+          resources:
+            requests:
+              cpu: {{ $.Values.driftExporter.resources.requests.cpu | quote }}
+              memory: {{ $.Values.driftExporter.resources.requests.memory | quote }}
+            limits:
+              cpu: {{ $.Values.driftExporter.resources.limits.cpu | quote }}
+              memory: {{ $.Values.driftExporter.resources.limits.memory | quote }}
+          securityContext:
+            allowPrivilegeEscalation: {{ $.Values.driftExporter.securityContext.allowPrivilegeEscalation }}
+            readOnlyRootFilesystem: {{ $.Values.driftExporter.securityContext.readOnlyRootFilesystem }}
+            capabilities:
+              drop: {{ $.Values.driftExporter.securityContext.capabilities.drop | toJson }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      restartPolicy: Always
+---
+# Service for Evidently drift-exporter scrape endpoint
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-drift-exporter-{{ .tenant }}-{{ .domain }}
+  namespace: {{ .namespace }}
+  labels:
+    app.kubernetes.io/name: ml-drift-exporter
+    app.kubernetes.io/component: drift-exporter
+    platform.system: "ml-monitoring"
+    platform.component: "drift-exporter"
+    platform.env: {{ index $.Values.platformLabels "platform.env" | quote }}
+    platform.owner: {{ index $.Values.platformLabels "platform.owner" | quote }}
+    platform.managed-by: "argocd"
+    tenant: {{ .tenant | quote }}
+    domain: {{ .domain | quote }}
+spec:
+  selector:
+    app.kubernetes.io/name: ml-drift-exporter
+    tenant: {{ .tenant | quote }}
+    domain: {{ .domain | quote }}
+  ports:
+    - name: metrics
+      port: {{ $.Values.driftExporter.port }}
+      targetPort: metrics
+      protocol: TCP
+  type: ClusterIP
+{{- end }}
+{{- end }}
