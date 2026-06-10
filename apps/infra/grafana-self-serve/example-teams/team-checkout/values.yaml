@@ -1,0 +1,26 @@
+# Example: team-checkout (non-ML team)
+# Template PR example for the Checkout engineering team.
+# See docs/self-serve-observability.md for the full onboarding guide.
+# ADR-0039.
+
+team:
+  name: "Checkout"
+  slug: "team-checkout"
+  namespace: "checkout"
+  system: "checkout"
+  owner: "team-checkout"
+  env: "production"
+  grafanaServiceAccount: "grafana-sa-team-checkout"
+  ciServiceAccount: "checkout-ci"
+
+ml:
+  enabled: false
+
+# Override default alert thresholds for the Checkout service
+# (slightly tighter error rate tolerance than the default 5%).
+alerts:
+  errorRateThreshold: "0.03"
+  cpuSaturationThreshold: "0.80"
+  memorySaturationThreshold: "0.80"
+  availabilityFor: "5m"
+  saturationFor: "15m"
