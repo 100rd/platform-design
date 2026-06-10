@@ -1,0 +1,35 @@
+apiVersion: v2
+name: airflow
+description: >-
+  Apache Airflow 2.9 — self-hosted ML pipeline orchestrator for the
+  train_domain_adapter → eval_adapter_debate → mine_templates → promote_to_edge
+  DAG chain. KubernetesExecutor so each task runs as an ephemeral Volcano-scheduled
+  pod on the GKE GPU pool. ADR-0037.
+type: application
+version: 1.0.0
+appVersion: "2.9.3"
+
+keywords:
+  - airflow
+  - ml-pipeline
+  - orchestrator
+  - gke
+  - gcp
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+annotations:
+  category: ML Platform
+  platform: Kubernetes
+  adr: "0037"
+
+dependencies:
+  # Apache Airflow — official Helm chart
+  # https://airflow.apache.org/docs/helm-chart/
+  # Pinned to 1.15.x (Airflow 2.9); bump after testing against the new release.
+  - name: airflow
+    version: "1.15.0"
+    repository: https://airflow.apache.org
+    condition: airflow.enabled
