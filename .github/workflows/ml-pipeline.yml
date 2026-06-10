@@ -1,0 +1,150 @@
+# ML training/release pipeline — WS-B (ADR-0037 D4).
+#
+# Topology: detect -> train -> eval -> register -> deploy.
+# Reuses the platform's supply-chain composites (.github/actions/syft-sbom,
+# cosign-sign, harden-runner) and promotes via Kargo (two-step rollout,
+# docs/ci-rollout.md). Training/eval are delegated to Airflow on GKE via its
+# REST API; this workflow is the control/gate plane, not the trainer.
+#
+# platform:system = ml-pipeline (ADR-0028).
+name: ML Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model/adapter id to train and release (e.g. fraud-uk)"
+        required: true
+        type: string
+      environment:
+        description: "Target environment for the staged deploy"
+        required: true
+        default: dev
+        type: choice
+        options: [dev, staging, prod]
+  push:
+    branches: [main]
+    paths:
+      - "models/**"
+      - "adapters/**"
+
+permissions:
+  contents: read
+  id-token: write # GCP Workload Identity Federation + cosign keyless
+
+concurrency:
+  group: ml-pipeline-${{ github.ref }}-${{ inputs.model || github.sha }}
+  cancel-in-progress: false
+
+env:
+  AIRFLOW_BASE_URL: ${{ vars.AIRFLOW_BASE_URL }}
+  MLFLOW_TRACKING_URI: ${{ vars.MLFLOW_TRACKING_URI }}
+  MODEL_ID: ${{ inputs.model || 'auto' }}
+
+jobs:
+  train:
+    name: Train (Airflow train_domain_adapter)
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.trigger.outputs.run_id }}
+    steps:
+      - name: Harden runner (audit)
+        uses: ./.github/actions/harden-runner
+      - uses: actions/checkout@v4
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+      - name: Trigger train_domain_adapter DAG
+        id: trigger
+        env:
+          AIRFLOW_TOKEN: ${{ secrets.AIRFLOW_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          run_id="ci-${MODEL_ID}-${GITHUB_SHA::8}"
+          curl -fsS -X POST "${AIRFLOW_BASE_URL}/api/v1/dags/train_domain_adapter/dagRuns" \
+            -H "Authorization: Bearer ${AIRFLOW_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"dag_run_id\":\"${run_id}\",\"conf\":{\"model_id\":\"${MODEL_ID}\"}}"
+          echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
+
+  eval:
+    name: Evaluate (eval_adapter_debate gate)
+    needs: train
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner (audit)
+        uses: ./.github/actions/harden-runner
+      - uses: actions/checkout@v4
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+      - name: Wait for eval gate (eval_adapter_debate must pass)
+        env:
+          AIRFLOW_TOKEN: ${{ secrets.AIRFLOW_API_TOKEN }}
+          RUN_ID: ${{ needs.train.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          # Poll the downstream eval_adapter_debate run; fail the pipeline if the
+          # debate gate did not succeed. Bounded poll (40 * 30s = 20 min).
+          for _ in $(seq 1 40); do
+            state=$(curl -fsS \
+              -H "Authorization: Bearer ${AIRFLOW_TOKEN}" \
+              "${AIRFLOW_BASE_URL}/api/v1/dags/eval_adapter_debate/dagRuns/${RUN_ID}" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("state",""))')
+            case "${state}" in
+              success) echo "eval gate passed"; exit 0 ;;
+              failed)  echo "::error::eval_adapter_debate gate failed"; exit 1 ;;
+              *)       echo "eval state=${state:-pending}; waiting"; sleep 30 ;;
+            esac
+          done
+          echo "::error::eval gate timed out"; exit 1
+
+  register:
+    name: Register model + sign artifacts
+    needs: eval
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner (audit)
+        uses: ./.github/actions/harden-runner
+      - uses: actions/checkout@v4
+      - name: Authenticate to GCP (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+      - name: Register model version in MLflow (-> Staging)
+        run: |
+          set -euo pipefail
+          pip install --quiet "mlflow>=2.16"
+          mlflow models create-version \
+            --name "${MODEL_ID}" \
+            --source "${MLFLOW_TRACKING_URI}/artifacts/${MODEL_ID}/${GITHUB_SHA}" || true
+          # transition handled by the model-registry stage gate
+      - name: Generate SBOM
+        uses: ./.github/actions/syft-sbom
+        with:
+          image: ${{ vars.ML_IMAGE_REPO }}/${{ env.MODEL_ID }}:${{ github.sha }}
+      - name: Sign + attest (cosign keyless)
+        uses: ./.github/actions/cosign-sign
+        with:
+          image: ${{ vars.ML_IMAGE_REPO }}/${{ env.MODEL_ID }}:${{ github.sha }}
+
+  deploy:
+    name: Staged deploy (Kargo promotion)
+    needs: register
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+    steps:
+      - name: Harden runner (audit)
+        uses: ./.github/actions/harden-runner
+      - uses: actions/checkout@v4
+      - name: Open Kargo promotion (dev auto / staging+prod gated)
+        uses: ./.github/actions/argocd-tag-bump
+        with:
+          app: mlflow-serving-${{ env.MODEL_ID }}
+          tag: ${{ github.sha }}
+          environment: ${{ inputs.environment || 'dev' }}

@@ -1,0 +1,59 @@
+---
+# ArgoCD Application — MLflow (ADR-0037)
+# Delivers the MLflow Helm chart to the GKE ML cluster.
+# ADR-0028: namespace carries platform.system=ml-pipeline labels.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mlflow
+  namespace: argocd
+  labels:
+    platform.system: ml-pipeline
+    platform.component: model-registry
+    platform.managed-by: argocd
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: ml-pipeline-alerts
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: ml-pipeline-alerts
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/100rd/platform-design.git
+    targetRevision: HEAD
+    path: apps/infra/mlflow
+
+    helm:
+      values: |
+        mlflow:
+          serviceAccount:
+            annotations:
+              iam.gke.io/gcp-service-account: "mlflow@ml-pipeline-PROJECT_ID.iam.gserviceaccount.com"
+          artifactRoot: "gs://mlflow-artifacts-staging-PROJECT_ID"
+          extraEnvVars:
+            - name: MLFLOW_DEFAULT_ARTIFACT_ROOT
+              value: "gs://mlflow-artifacts-staging-PROJECT_ID"
+
+  destination:
+    name: gke-ml-primary
+    namespace: ml-pipeline
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+    managedNamespaceMetadata:
+      labels:
+        platform.system: ml-pipeline
+        platform.component: model-registry
+        platform.env: staging
+        platform.owner: team-ml
+        platform.managed-by: argocd
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

@@ -1,0 +1,233 @@
+---
+# Apache Airflow — ML pipeline orchestrator (ADR-0037)
+# platform:system = ml-pipeline, component = airflow
+#
+# Executor: KubernetesExecutor — each task runs as an ephemeral pod.
+# DAG delivery: gitSync sidecar pulls from apps/infra/airflow/dags/ in the repo.
+# Workload Identity: Airflow control-plane components (scheduler, webserver) use a
+# GCP SA with read-only access to GCP Secret Manager. Training task pods that need
+# GCS access (log storage) use the ml-pipeline GSA via pod-level WI annotation.
+#
+# Secrets: DB password + Fernet key materialised from GCP Secret Manager via
+# apps/infra/airflow/templates/external-secret.yaml (ESO v1).
+#
+# NetworkPolicy: intent declared here; CiliumNetworkPolicy manifests tracked as a
+# follow-up in network-policies/ml-pipeline/ per ADR-0037 D5.
+
+# ---------------------------------------------------------------------------
+# Wrapper-chart-level values (consumed by templates/ in this chart only)
+# ---------------------------------------------------------------------------
+
+networkPolicy:
+  enabled: true
+
+# ---------------------------------------------------------------------------
+# Airflow sub-chart values
+# ---------------------------------------------------------------------------
+
+airflow:
+  enabled: true
+
+  # -------------------------------------------------------------------------
+  # Executor
+  # -------------------------------------------------------------------------
+  executor: KubernetesExecutor
+
+  # -------------------------------------------------------------------------
+  # Images
+  # -------------------------------------------------------------------------
+  images:
+    airflow:
+      repository: apache/airflow
+      tag: "2.9.3-python3.11"
+      pullPolicy: IfNotPresent
+
+  # -------------------------------------------------------------------------
+  # DAG delivery via gitSync sidecar
+  # -------------------------------------------------------------------------
+  dags:
+    persistence:
+      enabled: false
+    gitSync:
+      enabled: true
+      repo: https://github.com/100rd/platform-design.git
+      branch: main
+      rev: HEAD
+      subPath: apps/infra/airflow/dags
+      # SSH key for private repo injected from ExternalSecret airflow-git-sync-ssh
+      sshKeySecret: airflow-git-sync-ssh
+
+  # -------------------------------------------------------------------------
+  # Kubernetes executor config
+  # -------------------------------------------------------------------------
+  config:
+    kubernetes:
+      # Default namespace for task pods
+      namespace: ml-pipeline
+      delete_worker_pods: "True"
+      delete_worker_pods_on_failure: "False"
+      # GPU training tasks override schedulerName to "volcano" via executor_config
+
+  # -------------------------------------------------------------------------
+  # Scheduler
+  # -------------------------------------------------------------------------
+  scheduler:
+    replicas: 1
+
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+
+    nodeSelector:
+      cloud.google.com/gke-nodepool: ml-cpu-pool
+
+    livenessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 30
+      failureThreshold: 5
+
+    readinessProbe:
+      initialDelaySeconds: 20
+      periodSeconds: 20
+
+    # PodDisruptionBudget — risk R2 mitigation (ADR-0037)
+    podDisruptionBudget:
+      enabled: true
+      config:
+        minAvailable: 1
+
+    labels:
+      platform.system: ml-pipeline
+      platform.component: airflow
+      platform.managed-by: argocd
+
+    podAnnotations:
+      platform.system: ml-pipeline
+
+  # -------------------------------------------------------------------------
+  # Webserver
+  # -------------------------------------------------------------------------
+  webserver:
+    replicas: 1
+
+    resources:
+      requests:
+        cpu: 300m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+    nodeSelector:
+      cloud.google.com/gke-nodepool: ml-cpu-pool
+
+    labels:
+      platform.system: ml-pipeline
+      platform.component: airflow
+      platform.managed-by: argocd
+
+  # -------------------------------------------------------------------------
+  # Workers (KubernetesExecutor task pod template)
+  # -------------------------------------------------------------------------
+  workers:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "4"
+        memory: 8Gi
+
+    labels:
+      platform.system: ml-pipeline
+      platform.component: airflow
+      platform.managed-by: argocd
+
+  # -------------------------------------------------------------------------
+  # Triggerer
+  # -------------------------------------------------------------------------
+  triggerer:
+    enabled: true
+    replicas: 1
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    nodeSelector:
+      cloud.google.com/gke-nodepool: ml-cpu-pool
+
+  # -------------------------------------------------------------------------
+  # Database — Cloud SQL PostgreSQL via ESO-managed secret
+  # metadataConnection injected from ExternalSecret airflow-metadata-connection
+  # Shape: postgresql+psycopg2://airflow:<password>@127.0.0.1:5432/airflow
+  # (Cloud SQL Auth Proxy runs as a sidecar, see templates/external-secret.yaml)
+  # -------------------------------------------------------------------------
+  data:
+    metadataSecretName: airflow-metadata-connection
+
+  # -------------------------------------------------------------------------
+  # Fernet key (encrypts DAG variables and connections in the metadata DB)
+  # -------------------------------------------------------------------------
+  fernetKeySecretName: airflow-fernet-key
+
+  # -------------------------------------------------------------------------
+  # ServiceAccount — annotated with GKE Workload Identity GSA binding.
+  # The GSA grants: secretmanager.secretAccessor (for ESO), logging.logWriter,
+  # and storage.objectCreator on the Airflow log bucket.
+  # -------------------------------------------------------------------------
+  serviceAccount:
+    create: true
+    name: airflow
+    annotations:
+      # Set per-cluster; ArgoCD Application parameter overrides this blank.
+      iam.gke.io/gcp-service-account: ""
+
+  # -------------------------------------------------------------------------
+  # PostgreSQL sub-chart — disabled; use Cloud SQL (ADR-0037 D3)
+  # -------------------------------------------------------------------------
+  postgresql:
+    enabled: false
+
+  # -------------------------------------------------------------------------
+  # Redis — not needed with KubernetesExecutor
+  # -------------------------------------------------------------------------
+  redis:
+    enabled: false
+
+  # -------------------------------------------------------------------------
+  # Prometheus StatsD exporter for Airflow metrics
+  # -------------------------------------------------------------------------
+  statsd:
+    enabled: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+  # -------------------------------------------------------------------------
+  # Extra environment variables shared across all Airflow components
+  # -------------------------------------------------------------------------
+  extraEnv:
+    - name: AIRFLOW__CORE__LOAD_EXAMPLES
+      value: "False"
+    - name: AIRFLOW__WEBSERVER__EXPOSE_CONFIG
+      value: "False"
+    # MLflow tracking URI — injected from ExternalSecret mlflow-tracking-uri
+    # so task pods can call mlflow.log_metric() without hardcoding the service.
+    - name: MLFLOW_TRACKING_URI
+      valueFrom:
+        secretKeyRef:
+          name: mlflow-tracking-uri
+          key: uri

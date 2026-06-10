@@ -1,0 +1,58 @@
+---
+# NetworkPolicy stub — MLflow (ADR-0037 D5)
+#
+# FOLLOW-UP: Full CiliumNetworkPolicy manifests tracked in
+# network-policies/ml-pipeline/ per network-policies/gpu-inference/00-default-deny.yaml.
+#
+# Scoped allows required (to be implemented):
+#   1. Airflow workers  → MLflow tracking server (port 5000)
+#   2. ml-pipeline.yml quality-gate job → MLflow API (port 5000, via ClusterIP)
+#   3. MLflow pods      → GCS (HTTPS 443) for artifact reads/writes
+#   4. MLflow pods      → Cloud SQL Auth Proxy loopback (127.0.0.1:5432)
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mlflow-ingress-from-ml-pipeline
+  namespace: {{ .Release.Namespace }}
+  labels:
+    platform.system: ml-pipeline
+    platform.component: model-registry
+    platform.managed-by: argocd
+  annotations:
+    platform.follow-up: "CiliumNetworkPolicy in network-policies/ml-pipeline/ — ADR-0037 D5"
+spec:
+  podSelector:
+    matchLabels:
+      platform.component: model-registry
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow Airflow workers and ML pipeline CI jobs to reach MLflow tracking API
+    - from:
+        - podSelector:
+            matchLabels:
+              platform.system: ml-pipeline
+      ports:
+        - port: 5000
+          protocol: TCP
+  egress:
+    # Allow kube-dns
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow GCS API and Secret Manager (ESO refresh)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 443
+          protocol: TCP
+{{- end }}

@@ -1,0 +1,155 @@
+---
+# MLflow Tracking Server + Model Registry (ADR-0037)
+# platform:system = ml-pipeline, component = model-registry
+#
+# Backend store: Cloud SQL PostgreSQL 16 (dedicated instance, ADR-0037 D3)
+# Artifact store: GCS bucket gs://mlflow-artifacts-{env}-{project} (ADR-0037 D2)
+# Workload Identity: MLflow SA bound to GCP SA with roles/storage.objectAdmin
+#   on the ml-artifact-store bucket only (not project-wide storage access).
+#
+# HA note (risk R5 mitigation, ADR-0037): replicaCount=2 + PDB minAvailable=1.
+# Next upgrade step: sticky-session load balancing (MLFLOW_HASH_ALGO) for
+# full active-active HA beyond 2 replicas.
+#
+# Secrets: DB password materialised from GCP Secret Manager via
+#   apps/infra/mlflow/templates/external-secret.yaml (ESO v1 / ADR-0008).
+
+# ---------------------------------------------------------------------------
+# Wrapper-chart-level values
+# ---------------------------------------------------------------------------
+
+networkPolicy:
+  enabled: true
+
+# ---------------------------------------------------------------------------
+# MLflow sub-chart values
+# ---------------------------------------------------------------------------
+
+mlflow:
+  enabled: true
+
+  # HA: 2 replicas for availability (risk R5 mitigation)
+  replicaCount: 2
+
+  image:
+    repository: ghcr.io/mlflow/mlflow
+    tag: "v2.21.3"
+    pullPolicy: IfNotPresent
+
+  # -------------------------------------------------------------------------
+  # Backend store — Cloud SQL PostgreSQL (ADR-0037 D3)
+  # Connection string injected from ExternalSecret mlflow-db-connection.
+  # Shape: postgresql+psycopg2://mlflow:<password>@127.0.0.1:5432/mlflow
+  # (Cloud SQL Auth Proxy sidecar on port 5432 — wired out-of-band by DBA team)
+  # -------------------------------------------------------------------------
+  backendStore:
+    existing_secret: mlflow-db-connection
+    existing_secret_key: connection
+
+  # -------------------------------------------------------------------------
+  # Artifact store — GCS bucket (ADR-0037 D2)
+  # Bucket name set per-env by ArgoCD Application parameter override.
+  # Workload Identity provides credentials — no static JSON key needed.
+  # -------------------------------------------------------------------------
+  artifactRoot: "gs://mlflow-artifacts-staging-PROJECT_ID"
+
+  # -------------------------------------------------------------------------
+  # Service account — GKE Workload Identity binding
+  # GCP SA: roles/storage.objectAdmin on ml-artifact-store bucket only.
+  # -------------------------------------------------------------------------
+  serviceAccount:
+    create: true
+    name: mlflow
+    annotations:
+      # Set per-cluster via ArgoCD Application parameter
+      iam.gke.io/gcp-service-account: ""
+
+  # -------------------------------------------------------------------------
+  # Service
+  # -------------------------------------------------------------------------
+  service:
+    type: ClusterIP
+    port: 5000
+
+  # -------------------------------------------------------------------------
+  # Resources
+  # -------------------------------------------------------------------------
+  resources:
+    requests:
+      cpu: 300m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+  # -------------------------------------------------------------------------
+  # Node selector — CPU pool (not GPU)
+  # -------------------------------------------------------------------------
+  nodeSelector:
+    cloud.google.com/gke-nodepool: ml-cpu-pool
+
+  # -------------------------------------------------------------------------
+  # Pod Disruption Budget — risk R5 mitigation (ADR-0037)
+  # -------------------------------------------------------------------------
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  # -------------------------------------------------------------------------
+  # Probes
+  # -------------------------------------------------------------------------
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 5000
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    failureThreshold: 5
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 5000
+    initialDelaySeconds: 20
+    periodSeconds: 20
+
+  # -------------------------------------------------------------------------
+  # ADR-0028 labels
+  # -------------------------------------------------------------------------
+  podLabels:
+    platform.system: ml-pipeline
+    platform.component: model-registry
+    platform.managed-by: argocd
+
+  commonLabels:
+    platform.system: ml-pipeline
+    platform.component: model-registry
+    platform.managed-by: argocd
+
+  # -------------------------------------------------------------------------
+  # Security context
+  # -------------------------------------------------------------------------
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    readOnlyRootFilesystem: false  # MLflow writes tmp files during artifact ops
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+
+  podSecurityContext:
+    fsGroup: 1000
+
+  # -------------------------------------------------------------------------
+  # PostgreSQL sub-chart — disabled; use dedicated Cloud SQL (ADR-0037 D3)
+  # -------------------------------------------------------------------------
+  postgresql:
+    enabled: false
+
+  # -------------------------------------------------------------------------
+  # Extra env — GCS default artifact root (explicit to match artifactRoot above)
+  # -------------------------------------------------------------------------
+  extraEnvVars:
+    - name: MLFLOW_DEFAULT_ARTIFACT_ROOT
+      value: "gs://mlflow-artifacts-staging-PROJECT_ID"
