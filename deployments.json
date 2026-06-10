@@ -1,4 +1,12 @@
-{"generated_at": "2026-06-09T22:40:04Z", "applications": [
+{"generated_at": "2026-06-10T19:12:18Z", "applications": [
+{
+  "name": "airflow",
+  "chartVersion": "1.0.0",
+  "appVersion": "2.9.3",
+  "description": ">-",
+  "path": "apps/infra/airflow"
+}
+,
 {
   "name": "aws-lb-controller",
   "chartVersion": "3.1.0",
@@ -109,6 +117,14 @@
   "appVersion": "1.18.1",
   "description": "Kyverno - Kubernetes Native Policy Management (ADR-0020)",
   "path": "apps/infra/kyverno"
+}
+,
+{
+  "name": "mlflow",
+  "chartVersion": "1.0.0",
+  "appVersion": "2.21.3",
+  "description": ">-",
+  "path": "apps/infra/mlflow"
 }
 ,
 {
