@@ -31,6 +31,7 @@ Applications deployed via ArgoCD from `apps/infra/`
 | gpu-operator | 1.0.0 | v26.3.0 | NVIDIA GPU Operator - Automated GPU driver, toolkit, and dev |
 | kargo | 0.2.0 | 1.9.0 | Kargo progressive delivery controller |
 | kyverno | 1.1.0 | 1.18.1 | Kyverno - Kubernetes Native Policy Management (ADR-0020) |
+| ml-monitoring | 0.1.0 | 0.1.0 | >- |
 | mlflow | 1.0.0 | 2.21.3 | >- |
 | opencost | 1.0.0 | 1.113.0 | >- |
 | otel-operator | 0.1.0 |  | OpenTelemetry Operator with auto-instrumentation for Go appl |
