@@ -1,0 +1,221 @@
+{{- if .Values.prometheusRule.enabled }}
+---
+# PrometheusRule: ML drift and accuracy alerts — ADR-0038 D2/D3
+# Critical alerts route to: ml-drift-pagerduty + ml-retrain-webhook
+# Warning alerts route to: slack only
+# Alertmanager route overlay lives in templates/prometheusrules/ml-alertmanager-routes.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ml-drift-alerts
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: ml-monitoring
+    app.kubernetes.io/component: drift-exporter
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    platform.system: "ml-monitoring"
+    platform.component: "drift-exporter"
+    platform.env: {{ index .Values.platformLabels "platform.env" | quote }}
+    platform.owner: {{ index .Values.platformLabels "platform.owner" | quote }}
+    platform.managed-by: "argocd"
+    {{- range $k, $v := .Values.prometheusRule.additionalLabels }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+spec:
+  groups:
+
+    # =========================================================================
+    # Dataset drift (whylogs PSI/KL + Evidently combined score)
+    # =========================================================================
+    - name: ml-monitoring.dataset-drift
+      interval: 60s
+      rules:
+
+        - alert: MLDatasetDriftWarning
+          expr: |
+            ml_monitoring_dataset_drift_score{platform_system="ml-monitoring"} > {{ .Values.driftExporter.defaultThresholds.datasetDriftScore.warning }}
+          for: 30m
+          labels:
+            severity: warning
+            platform_system: ml-monitoring
+            team: team-ml-platform
+          annotations:
+            summary: "ML dataset drift elevated for {{ "{{" }} $labels.model_name {{ "}}" }} ({{ "{{" }} $labels.tenant {{ "}}" }}/{{ "{{" }} $labels.domain {{ "}}" }})"
+            description: "Dataset drift score {{ "{{" }} $value | humanize {{ "}}" }} > {{ .Values.driftExporter.defaultThresholds.datasetDriftScore.warning }}. Review feature distributions."
+            runbook_url: "https://runbooks.internal.example.com/ml-monitoring/dataset-drift"
+
+        - alert: MLDatasetDriftCritical
+          expr: |
+            ml_monitoring_dataset_drift_score{platform_system="ml-monitoring"} > {{ .Values.driftExporter.defaultThresholds.datasetDriftScore.critical }}
+          for: 15m
+          labels:
+            severity: critical
+            platform_system: ml-monitoring
+            team: team-ml-platform
+          annotations:
+            summary: "CRITICAL ML dataset drift: {{ "{{" }} $labels.model_name {{ "}}" }} ({{ "{{" }} $labels.tenant {{ "}}" }}/{{ "{{" }} $labels.domain {{ "}}" }})"
+            description: "Dataset drift score {{ "{{" }} $value | humanize {{ "}}" }} > {{ .Values.driftExporter.defaultThresholds.datasetDriftScore.critical }}. Retrain trigger will fire."
+            runbook_url: "https://runbooks.internal.example.com/ml-monitoring/dataset-drift-critical"
+
+        - alert: MLFeaturePSIWarning
+          expr: |
+            ml_monitoring_feature_psi_score{platform_system="ml-monitoring"} > {{ .Values.driftExporter.defaultThresholds.featurePsiScore.warning }}
+          for: 30m
+          labels:
+            severity: warning
+            platform_system: ml-monitoring
+            team: team-ml-platform
+          annotations:
+            summary: "ML feature PSI elevated: {{ "{{" }} $labels.feature {{ "}}" }} in {{ "{{" }} $labels.model_name {{ "}}" }}"
+            description: "PSI = {{ "{{" }} $value | humanize {{ "}}" }} (moderate threshold: {{ .Values.driftExporter.defaultThresholds.featurePsiScore.warning }})."
+            runbook_url: "https://runbooks.internal.example.com/ml-monitoring/feature-psi"
+
+        - alert: MLFeaturePSICritical
+          expr: |
+            ml_monitoring_feature_psi_score{platform_system="ml-monitoring"} > {{ .Values.driftExporter.defaultThresholds.featurePsiScore.critical }}
+          for: 15m
+          labels:
+            severity: critical
+            platform_system: ml-monitoring
+            team: team-ml-platform
+          annotations:
+            summary: "CRITICAL ML feature PSI: {{ "{{" }} $labels.feature {{ "}}" }} in {{ "{{" }} $labels.model_name {{ "}}" }}"
+            description: "PSI = {{ "{{" }} $value | humanize {{ "}}" }} (severe threshold: {{ .Values.driftExporter.defaultThresholds.featurePsiScore.critical }})."
+            runbook_url: "https://runbooks.internal.example.com/ml-monitoring/feature-psi-critical"
+
+        - alert: MLDriftDetected
+          expr: |
+            ml_monitoring_drift_detected{platform_system="ml-monitoring"} == 1
+          for: 15m
+          labels:
+            severity: critical
+            platform_system: ml-monitoring
+            team: team-ml-platform
+          annotations:
+            summary: "ML drift detected: {{ "{{" }} $labels.model_name {{ "}}" }} ({{ "{{" }} $labels.tenant {{ "}}" }}/{{ "{{" }} $labels.domain {{ "}}" }})"
+            description: "Evidently drift flag sustained 15+ min. Retrain trigger will fire."
+            runbook_url: "https://runbooks.internal.example.com/ml-monitoring/drift-detected"
+
+    # =========================================================================
+    # Model accuracy/quality (Evidently test suite)
+    # =========================================================================
+    - name: ml-monitoring.model-accuracy
+      interval: 60s
+      rules:
+
+        - alert: MLModelAccuracyWarning
+          expr: |
+            ml_monitoring_model_accuracy{platform_system="ml-monitoring"} < {{ .Values.driftExporter.defaultThresholds.modelAccuracy.warning }}
+          for: 30m
+          labels:
+            severity: warning
+            platform_system: ml-monitoring
+            team: team-ml-platform
+          annotations:
+            summary: "ML model accuracy degraded: {{ "{{" }} $labels.model_name {{ "}}" }}"
+            description: "Accuracy = {{ "{{" }} $value | humanize {{ "}}" }} (warning threshold: {{ .Values.driftExporter.defaultThresholds.modelAccuracy.warning }})."
+            runbook_url: "https://runbooks.internal.example.com/ml-monitoring/model-accuracy"
+
+        - alert: MLModelAccuracyCritical
+          expr: |
+            ml_monitoring_model_accuracy{platform_system="ml-monitoring"} < {{ .Values.driftExporter.defaultThresholds.modelAccuracy.critical }}
+          for: 15m
+          labels:
+            severity: critical
+            platform_system: ml-monitoring
+            team: team-ml-platform
+          annotations:
+            summary: "CRITICAL ML accuracy: {{ "{{" }} $labels.model_name {{ "}}" }} ({{ "{{" }} $labels.tenant {{ "}}" }}/{{ "{{" }} $labels.domain {{ "}}" }})"
+            description: "Accuracy = {{ "{{" }} $value | humanize {{ "}}" }} below {{ .Values.driftExporter.defaultThresholds.modelAccuracy.critical }}. Retrain trigger will fire."
+            runbook_url: "https://runbooks.internal.example.com/ml-monitoring/model-accuracy-critical"
+
+        - alert: MLModelF1Warning
+          expr: |
+            ml_monitoring_model_f1_score{platform_system="ml-monitoring"} < {{ .Values.driftExporter.defaultThresholds.modelF1Score.warning }}
+          for: 30m
+          labels:
+            severity: warning
+            platform_system: ml-monitoring
+            team: team-ml-platform
+          annotations:
+            summary: "ML F1 score degraded: {{ "{{" }} $labels.model_name {{ "}}" }}"
+            description: "F1 = {{ "{{" }} $value | humanize {{ "}}" }} (warning threshold: {{ .Values.driftExporter.defaultThresholds.modelF1Score.warning }})."
+            runbook_url: "https://runbooks.internal.example.com/ml-monitoring/model-f1"
+
+        - alert: MLModelF1Critical
+          expr: |
+            ml_monitoring_model_f1_score{platform_system="ml-monitoring"} < {{ .Values.driftExporter.defaultThresholds.modelF1Score.critical }}
+          for: 15m
+          labels:
+            severity: critical
+            platform_system: ml-monitoring
+            team: team-ml-platform
+          annotations:
+            summary: "CRITICAL ML F1 score: {{ "{{" }} $labels.model_name {{ "}}" }}"
+            description: "F1 = {{ "{{" }} $value | humanize {{ "}}" }} below {{ .Values.driftExporter.defaultThresholds.modelF1Score.critical }}."
+            runbook_url: "https://runbooks.internal.example.com/ml-monitoring/model-f1-critical"
+
+    # =========================================================================
+    # Operational: exporter health + retrain trigger health
+    # =========================================================================
+    - name: ml-monitoring.operational
+      interval: 60s
+      rules:
+
+        - alert: MLDriftExporterDown
+          expr: |
+            up{job=~"ml-drift-exporter-.*", platform_system="ml-monitoring"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            platform_system: ml-monitoring
+            team: team-ml-platform
+          annotations:
+            summary: "ML drift exporter down: {{ "{{" }} $labels.model_name {{ "}}" }}"
+            description: "Evidently drift exporter unreachable 5+ min. Drift monitoring is blind."
+            runbook_url: "https://runbooks.internal.example.com/ml-monitoring/exporter-down"
+
+        - alert: MLRetrainTriggerFailures
+          expr: |
+            rate(ml_monitoring_retrain_triggers_total{outcome!="success",platform_system="ml-monitoring"}[15m]) > 0.1
+          for: 10m
+          labels:
+            severity: warning
+            platform_system: ml-monitoring
+            team: team-ml-platform
+          annotations:
+            summary: "ML retrain trigger failures: {{ "{{" }} $labels.tenant {{ "}}" }}/{{ "{{" }} $labels.domain {{ "}}" }}"
+            description: "Failure rate {{ "{{" }} $value | humanize {{ "}}" }}/s (outcome={{ "{{" }} $labels.outcome {{ "}}" }})."
+            runbook_url: "https://runbooks.internal.example.com/ml-monitoring/retrain-trigger-failures"
+
+    # =========================================================================
+    # Recording rules (pre-aggregated for Grafana dashboard efficiency)
+    # =========================================================================
+    - name: ml-monitoring.recording-rules
+      interval: 60s
+      rules:
+
+        - record: ml_monitoring:dataset_drift_score:max_by_model
+          expr: |
+            max by (model_name, tenant, domain) (
+              ml_monitoring_dataset_drift_score{platform_system="ml-monitoring"}
+            )
+
+        - record: ml_monitoring:model_accuracy:avg_by_domain
+          expr: |
+            avg by (tenant, domain) (
+              ml_monitoring_model_accuracy{platform_system="ml-monitoring"}
+            )
+
+        - record: ml_monitoring:models_in_critical_drift:count
+          expr: |
+            count(
+              ml_monitoring_dataset_drift_score{platform_system="ml-monitoring"}
+                > {{ .Values.driftExporter.defaultThresholds.datasetDriftScore.critical }}
+            ) or vector(0)
+
+        - record: ml_monitoring:retrain_triggers:total_24h
+          expr: |
+            sum(increase(ml_monitoring_retrain_triggers_total{platform_system="ml-monitoring",outcome="success"}[24h]))
+              or vector(0)
+{{- end }}

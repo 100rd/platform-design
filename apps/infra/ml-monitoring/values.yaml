@@ -1,0 +1,217 @@
+# ML Monitoring Helm values — ADR-0038
+# platform:system = ml-monitoring (ADR-0028 taxonomy)
+
+# ---------------------------------------------------------------------------
+# ADR-0028 platform labels applied to every K8s resource in this chart
+# ---------------------------------------------------------------------------
+platformLabels:
+  "platform.system": "ml-monitoring"
+  "platform.env": "production"
+  "platform.owner": "team-ml-platform"
+  "platform.managed-by": "argocd"
+
+# ---------------------------------------------------------------------------
+# Global namespace for shared components (retrain-trigger, pushgateway)
+# ---------------------------------------------------------------------------
+namespace: ml-monitoring
+
+# ---------------------------------------------------------------------------
+# Evidently drift-exporter — per-model Deployment
+# Computes model accuracy, test-suite results, column-level drift.
+# Scrape endpoint: http://<svc>:8001/metrics
+# ---------------------------------------------------------------------------
+driftExporter:
+  enabled: true
+  image:
+    repository: evidently-ai/drift-exporter
+    tag: "0.4.35"        # Pin to a released tag; update after testing
+    pullPolicy: IfNotPresent
+
+  port: 8001
+
+  # How often Evidently re-runs the test suite (seconds).
+  evaluationIntervalSeconds: 300
+
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+
+  # GCS/S3 bucket holding the per-model reference datasets.
+  # Path pattern: <bucket>/<modelName>/<tenant>/<domain>/reference.parquet
+  referenceBucketUri: "gs://your-project-ml-reference-data"
+
+  # Drift thresholds — override per model via modelNamespaces entries.
+  defaultThresholds:
+    datasetDriftScore:
+      warning: 0.20
+      critical: 0.40
+    featurePsiScore:
+      warning: 0.10
+      critical: 0.25
+    featureKlDivergence:
+      warning: 0.10
+      critical: 0.30
+    modelAccuracy:
+      warning: 0.85
+      critical: 0.75
+    modelF1Score:
+      warning: 0.80
+      critical: 0.65
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop: ["ALL"]
+
+# ---------------------------------------------------------------------------
+# whylogs distribution profiler — standalone Deployment per model namespace.
+# Pushes metrics to the Prometheus Pushgateway.
+# ---------------------------------------------------------------------------
+whylogsProfiler:
+  enabled: true
+  image:
+    repository: whylabs/whylogs-profiler
+    tag: "1.3.7"
+    pullPolicy: IfNotPresent
+
+  pushgatewayUrl: "http://prometheus-pushgateway.monitoring.svc:9091"
+
+  # Evaluation window for distribution comparison (seconds).
+  windowSeconds: 3600
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "300m"
+      memory: "512Mi"
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop: ["ALL"]
+
+# ---------------------------------------------------------------------------
+# Retrain-trigger webhook proxy
+# Receives Alertmanager webhook, translates to Airflow REST API call.
+# Fallback: creates K8s Job in ml-monitoring namespace.
+# ---------------------------------------------------------------------------
+retrainTrigger:
+  enabled: true
+  image:
+    repository: gcr.io/your-project/ml-retrain-trigger
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+
+  port: 8080
+  replicas: 2
+
+  # De-duplication window — prevents multiple DAG runs for same (tenant,domain)
+  # within this interval after a trigger fires.
+  deduplicationWindowSeconds: 900   # 15 minutes
+
+  airflow:
+    baseUrl: "http://airflow-webserver.airflow.svc:8080"
+    dagId: "train_domain_adapter"
+    credentialsSecretName: "airflow-api-credentials"
+
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop: ["ALL"]
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+# ---------------------------------------------------------------------------
+# ExternalSecret configuration (ADR-0008 — ESO)
+# ---------------------------------------------------------------------------
+externalSecrets:
+  enabled: true
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: cluster-secret-store
+    kind: ClusterSecretStore
+  airflowCredentials:
+    secretName: airflow-api-credentials
+    remoteRef:
+      key: ml-monitoring/airflow-api-credentials
+  alertmanagerRetrainToken:
+    secretName: alertmanager-retrain-token
+    remoteRef:
+      key: ml-monitoring/alertmanager-retrain-token
+
+# ---------------------------------------------------------------------------
+# ServiceMonitor configuration (Prometheus scrape)
+# ---------------------------------------------------------------------------
+serviceMonitor:
+  enabled: true
+  prometheusSelector:
+    prometheus: kube-prometheus
+  scrapeInterval: "30s"
+  scrapeTimeout: "10s"
+
+# ---------------------------------------------------------------------------
+# PrometheusRule / alert rules
+# ---------------------------------------------------------------------------
+prometheusRule:
+  enabled: true
+  additionalLabels:
+    prometheus: kube-prometheus
+
+# ---------------------------------------------------------------------------
+# Model namespaces — one entry per (model, tenant, domain).
+# Replace the empty list with actual model configurations before applying.
+# ---------------------------------------------------------------------------
+modelNamespaces: []
+# Example:
+# - namespace: ml-tenant-acme-hft
+#   modelName: domain-adapter-hft
+#   tenant: tenant-acme
+#   domain: hft
+#   thresholds: {}
+
+# ---------------------------------------------------------------------------
+# NetworkPolicy — FOLLOW-UP: enable after ADR-0019 Cilium enforce rollout
+# ---------------------------------------------------------------------------
+networkPolicy:
+  enabled: false
+
+# ---------------------------------------------------------------------------
+# RBAC
+# ---------------------------------------------------------------------------
+rbac:
+  create: true
+  serviceAccountName: ml-retrain-trigger
+  # GKE Workload Identity annotation for GCS reference-data access
+  workloadIdentityAnnotation: ""
+  # e.g. "iam.gke.io/gcp-service-account: ml-drift@your-project.iam.gserviceaccount.com"

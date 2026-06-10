@@ -1,0 +1,115 @@
+# Alertmanager Routes Overlay — ADR-0038 D3
+#
+# PURPOSE:
+#   This file documents the Alertmanager route additions required by WS-C
+#   and provides a ready-to-merge patch for the prometheus-stack values.yaml.
+#
+#   DO NOT edit apps/infra/observability/prometheus-stack/values.yaml directly
+#   from this chart — Alertmanager config is owned by the prometheus-stack
+#   ArgoCD Application.  The routes below must be added to
+#   apps/infra/observability/prometheus-stack/values.yaml under
+#   kube-prometheus-stack.alertmanager.alertmanagerSpec.config when WS-C
+#   is promoted to production.
+#
+# MERGE INSTRUCTIONS (platform team action required before WS-C go-live):
+#   1. Add the two routes below into the `routes:` list in prometheus-stack/values.yaml
+#      BEFORE the existing `severity = critical` routes (so they match first
+#      for platform_system=ml-monitoring alerts).
+#   2. Add the two receivers (ml-drift-pagerduty, ml-retrain-webhook) to the
+#      `receivers:` list.
+#   3. Add `alertmanager-retrain-token` to alertmanagerSpec.secrets list
+#      (alongside the existing alertmanager-slack-secret and
+#      alertmanager-pagerduty-secret entries).
+#   4. yamllint and helm lint prometheus-stack before applying.
+#
+# RETRAIN DEDUPLICATION:
+#   repeat_interval: 6h on the retrain webhook route prevents retrain storms.
+#   The ml-retrain-trigger proxy also enforces a 15-minute in-process
+#   deduplication window per (tenant, domain) pair.
+#
+# ============================================================================
+# ADD to kube-prometheus-stack.alertmanager.alertmanagerSpec.config.route.routes
+# (insert BEFORE the existing `severity = critical` catch-all routes)
+# ============================================================================
+
+# routes_patch:
+# -----------------------------------------------------------------------
+#   # ML Monitoring: critical drift/accuracy → PagerDuty
+#   # continue: true so the retrain webhook route also fires
+#   - matchers:
+#     - platform_system = ml-monitoring
+#     - severity = critical
+#     receiver: 'ml-drift-pagerduty'
+#     continue: true
+#     group_wait: 10s
+#     group_by: ['model_name', 'tenant', 'domain', 'alertname']
+#
+#   # ML Monitoring: critical drift/accuracy → retrain-trigger webhook
+#   # repeat_interval: 6h prevents retrain storms between drift recovery cycles
+#   - matchers:
+#     - platform_system = ml-monitoring
+#     - severity = critical
+#     receiver: 'ml-retrain-webhook'
+#     group_wait: 10s
+#     group_by: ['model_name', 'tenant', 'domain', 'alertname']
+#     repeat_interval: 6h
+# -----------------------------------------------------------------------
+
+# ============================================================================
+# ADD to kube-prometheus-stack.alertmanager.alertmanagerSpec.config.receivers
+# ============================================================================
+
+# receivers_patch:
+# -----------------------------------------------------------------------
+#   - name: 'ml-drift-pagerduty'
+#     pagerduty_configs:
+#     - service_key_file: '/etc/alertmanager/secrets/alertmanager-pagerduty-secret/service-key'
+#       description: 'ML drift: {{ .GroupLabels.alertname }} — {{ .GroupLabels.model_name }} ({{ .GroupLabels.tenant }}/{{ .GroupLabels.domain }})'
+#       details:
+#         model_name: '{{ .GroupLabels.model_name }}'
+#         tenant: '{{ .GroupLabels.tenant }}'
+#         domain: '{{ .GroupLabels.domain }}'
+#         severity: '{{ .GroupLabels.severity }}'
+#         platform_system: 'ml-monitoring'
+#       send_resolved: true
+#
+#   - name: 'ml-retrain-webhook'
+#     webhook_configs:
+#     # ml-retrain-trigger proxy URL (in-cluster service DNS)
+#     # The proxy translates to:
+#     #   POST /api/v1/dags/train_domain_adapter/dagRuns
+#     #   body: { conf: { tenant: "...", domain: "...", trigger: "drift" } }
+#     # Falls back to K8s Job if Airflow is unreachable (WS-B not yet deployed).
+#     - url: 'http://ml-retrain-trigger.ml-monitoring.svc.cluster.local:8080/webhook'
+#       send_resolved: false
+#       http_config:
+#         bearer_token_file: '/etc/alertmanager/secrets/alertmanager-retrain-token/token'
+#       max_alerts: 10
+# -----------------------------------------------------------------------
+
+# ============================================================================
+# ADD to kube-prometheus-stack.alertmanager.alertmanagerSpec.secrets
+# ============================================================================
+
+# secrets_patch:
+# -----------------------------------------------------------------------
+#   - alertmanager-retrain-token
+# -----------------------------------------------------------------------
+#
+# CROSS-NAMESPACE NOTE:
+#   The alertmanager-retrain-token ExternalSecret in this chart creates the
+#   Secret in the ml-monitoring namespace. Alertmanager mounts secrets from
+#   its own namespace (observability/monitoring). A second ExternalSecret
+#   targeted to the Alertmanager namespace is required:
+#
+#     apiVersion: external-secrets.io/v1beta1
+#     kind: ExternalSecret
+#     metadata:
+#       name: alertmanager-retrain-token
+#       namespace: observability       # <-- Alertmanager's namespace
+#     spec:
+#       # same remoteRef as ml-monitoring chart ExternalSecret
+#       ...
+#
+#   OR use a ClusterExternalSecret to create in both namespaces.
+#   See ADR-0038 Implementation Notes.

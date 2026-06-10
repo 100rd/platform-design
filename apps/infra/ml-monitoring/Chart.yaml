@@ -1,0 +1,27 @@
+apiVersion: v2
+name: ml-monitoring
+description: >-
+  ML observability stack: Evidently drift-exporter + whylogs distribution
+  profiler + retrain-trigger webhook proxy. Exports feature drift, data
+  distribution shift, and model accuracy as Prometheus metrics into the
+  existing Grafana/Thanos/Alertmanager stack. ADR-0038.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+keywords:
+  - ml-monitoring
+  - drift
+  - evidently
+  - whylogs
+  - prometheus
+  - model-accuracy
+
+maintainers:
+  - name: ML Platform Team
+    email: platform@example.com
+
+annotations:
+  category: ML Observability
+  platform: Kubernetes
+  adr: "0038"

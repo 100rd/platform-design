@@ -1,0 +1,89 @@
+{{- if .Values.networkPolicy.enabled }}
+# NetworkPolicies for ml-monitoring (ADR-0038 D6, closes WS-A security HIGH-3).
+# Portable K8s NetworkPolicy — CNI-enforced regardless of the Cilium policy mode
+# (ADR-0019). Default-deny + scoped allows per the component contract.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ml-monitoring-default-deny
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- range $k, $v := .Values.platformLabels }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  egress:
+    # DNS resolution is always allowed (kube-dns / CoreDNS).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ml-drift-exporter
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- range $k, $v := .Values.platformLabels }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ml-drift-exporter
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Only the kube-prometheus-stack scraper may reach the metrics port.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.monitoringNamespace | default "monitoring" }}
+      ports:
+        - port: {{ .Values.driftExporter.port | default 8001 }}
+          protocol: TCP
+  egress:
+    # GCS HTTPS for reference-dataset reads (+ DNS handled by default-deny).
+    - ports:
+        - port: 443
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ml-retrain-trigger
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- range $k, $v := .Values.platformLabels }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ml-retrain-trigger
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Alertmanager webhook + Prometheus scrape, both from the monitoring namespace.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.monitoringNamespace | default "monitoring" }}
+      ports:
+        - port: {{ .Values.retrainTrigger.port | default 8080 }}
+          protocol: TCP
+  egress:
+    # Reach the Airflow REST API to fire train_domain_adapter (+ DNS via default-deny).
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 8080
+          protocol: TCP
+{{- end }}

@@ -1,0 +1,106 @@
+{{- if .Values.serviceMonitor.enabled }}
+{{- range .Values.modelNamespaces }}
+---
+# ServiceMonitor: Evidently drift-exporter per model namespace
+# Namespace-scoped to prevent cross-tenant metric bleed (ADR-0038 D5).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ml-drift-exporter-{{ .tenant }}-{{ .domain }}
+  namespace: {{ .namespace }}
+  labels:
+    app.kubernetes.io/name: ml-drift-exporter
+    app.kubernetes.io/component: drift-exporter
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+    platform.system: "ml-monitoring"
+    platform.component: "drift-exporter"
+    platform.env: {{ index $.Values.platformLabels "platform.env" | quote }}
+    platform.owner: {{ index $.Values.platformLabels "platform.owner" | quote }}
+    platform.managed-by: "argocd"
+    tenant: {{ .tenant | quote }}
+    domain: {{ .domain | quote }}
+    {{- range $k, $v := $.Values.serviceMonitor.prometheusSelector }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .namespace }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ml-drift-exporter
+      tenant: {{ .tenant | quote }}
+      domain: {{ .domain | quote }}
+  endpoints:
+    - port: metrics
+      interval: {{ $.Values.serviceMonitor.scrapeInterval }}
+      scrapeTimeout: {{ $.Values.serviceMonitor.scrapeTimeout }}
+      path: /metrics
+      scheme: http
+      relabelings:
+        # Inject platform_system on all scraped series (ADR-0028)
+        - targetLabel: platform_system
+          replacement: ml-monitoring
+        - targetLabel: model_name
+          replacement: {{ .modelName | quote }}
+        - targetLabel: tenant
+          replacement: {{ .tenant | quote }}
+        - targetLabel: domain
+          replacement: {{ .domain | quote }}
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+        - sourceLabels: [__meta_kubernetes_service_name]
+          targetLabel: service
+      metricRelabelings:
+        # Keep only ml_monitoring_ prefixed metrics from this endpoint
+        - sourceLabels: [__name__]
+          regex: "ml_monitoring_.*|up"
+          action: keep
+{{- end }}
+{{- if .Values.retrainTrigger.enabled }}
+---
+# ServiceMonitor: retrain-trigger self-metrics (trigger counters)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ml-retrain-trigger
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: ml-retrain-trigger
+    app.kubernetes.io/component: retrain-trigger
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    platform.system: "ml-monitoring"
+    platform.component: "retrain-trigger"
+    platform.env: {{ index .Values.platformLabels "platform.env" | quote }}
+    platform.owner: {{ index .Values.platformLabels "platform.owner" | quote }}
+    platform.managed-by: "argocd"
+    {{- range $k, $v := .Values.serviceMonitor.prometheusSelector }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.namespace }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ml-retrain-trigger
+  endpoints:
+    - port: metrics
+      interval: {{ .Values.serviceMonitor.scrapeInterval }}
+      scrapeTimeout: {{ .Values.serviceMonitor.scrapeTimeout }}
+      path: /metrics
+      relabelings:
+        - targetLabel: platform_system
+          replacement: ml-monitoring
+        - targetLabel: component
+          replacement: retrain-trigger
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: "ml_monitoring_retrain.*|up"
+          action: keep
+{{- end }}
+{{- end }}
