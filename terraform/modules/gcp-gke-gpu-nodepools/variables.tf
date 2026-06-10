@@ -44,3 +44,10 @@ variable "labels" {
   type        = map(string)
   default     = {}
 }
+
+variable "operator_managed_driver" {
+  description = "When true, hand GPU driver + device-plugin ownership to the NVIDIA GPU Operator (ADR-0036): omit the GKE-managed gpu_driver_installation_config block and add node labels disabling the default GKE NVIDIA device plugin. Default false preserves the GKE-managed driver (gpu_driver_version = LATEST) byte-for-byte."
+  type        = bool
+  default     = false
+  nullable    = false
+}

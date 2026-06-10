@@ -79,6 +79,7 @@ decision.
 | [0032](0032-db-migrations-gitops.md) | DB migrations via ArgoCD PreSync Jobs | Accepted | synced (helm) | proposal — doc-verified 2026-06-08 |
 | [0034](0034-backstage-idp.md) | Backstage as the Internal Developer Platform | Proposed — Deferred (on hold) | pending | proposal — doc-verified 2026-06-08 |
 | [0035](0035-control-tower-and-aft.md) | AWS Control Tower landing zone + Account Factory for Terraform (AFT) vending | Accepted | pending | epic #293 — supersedes ADR-0017 item-0; design 2026-06-09 |
+| [0036](0036-gke-ml-infra-parity-multiregion.md) | GKE ML-infra parity + multi-region GKE + GCP cost guardrail (GPU Operator, DCGM, Volcano, billing-budget) | Accepted | pending | WS-A of GCP ML platform plan; design 2026-06-10 |
 
 
 

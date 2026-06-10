@@ -13,6 +13,7 @@ override.tf.json
 
 # Terragrunt
 .terragrunt-cache/
+**/.terragrunt-stack/
 
 # Helm dependency downloads
 **/charts/*.tgz
