@@ -1,0 +1,68 @@
+---
+# Golden Path: new-ml-pipeline — ArgoCD Application stub
+# WS-B (ADR-0037): ml-pipeline namespace
+#
+# This stub is only needed if your DAG requires dedicated per-pipeline
+# Kubernetes resources (e.g., a dedicated ExternalSecret or ConfigMap).
+# For DAG-only additions (just a .py file in apps/infra/airflow/dags/),
+# the existing Airflow ArgoCD Application picks up the new DAG via gitSync
+# automatically — no separate Application needed.
+#
+# USAGE: substitute all {{PLACEHOLDER}} values, then commit this file
+# alongside your DAG if you need pipeline-specific K8s resources.
+#
+# Wave 25 — after Airflow (wave 20) + ml-monitoring (wave 20).
+# ADR-0028 platform labels: system=ml-pipeline, component=airflow.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  # Substitute: ml-pipeline-{{DAG_NAME}}
+  name: "ml-pipeline-{{DAG_NAME}}"
+  namespace: argocd
+  labels:
+    # ADR-0028 platform taxonomy (K8s plane)
+    platform.system: "ml-pipeline"
+    platform.component: "airflow"
+    # Substitute: {{PLATFORM_ENV}}
+    platform.env: "{{PLATFORM_ENV}}"
+    # Substitute: {{TEAM_OWNER}}
+    platform.owner: "{{TEAM_OWNER}}"
+    platform.managed-by: "argocd"
+    # Substitute: ml-pipeline-{{DAG_NAME}}
+    app.kubernetes.io/name: "ml-pipeline-{{DAG_NAME}}"
+    app.kubernetes.io/component: "airflow"
+    app.kubernetes.io/managed-by: "argocd"
+  annotations:
+    argocd.argoproj.io/sync-wave: "25"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/your-org/platform-design.git
+    targetRevision: main
+    # If pipeline-specific K8s resources live under a dedicated path, update below.
+    # For DAG-only additions, remove this Application and rely on the Airflow app.
+    path: apps/infra/airflow
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ml-pipeline
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=false
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m

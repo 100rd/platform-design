@@ -1,0 +1,66 @@
+# Golden Path: new-dashboard — grafana-self-serve values template
+# WS-D (ADR-0039) chart: apps/infra/grafana-self-serve
+#
+# USAGE: substitute all {{PLACEHOLDER}} values before committing.
+# Place the substituted file at:
+#   apps/infra/grafana-self-serve/example-teams/{{TEAM_SLUG}}/values.yaml
+#
+# For ML teams that also need drift + accuracy panels, set ml.enabled: true
+# and fill in ml.modelName + ml.tenant, or use the new-model-service template
+# (templates/golden-paths/new-model-service/).
+#
+# See README.md for full instructions.
+
+team:
+  # Human-readable team name shown in the Grafana folder title.
+  # Substitute: {{TEAM_NAME}}
+  name: "{{TEAM_NAME}}"
+
+  # Machine-safe slug — lowercase, hyphens only.
+  # Substitute: {{TEAM_SLUG}}
+  slug: "{{TEAM_SLUG}}"
+
+  # Kubernetes namespace where this team's workloads run.
+  # Must already exist (CreateNamespace=false on the ArgoCD Application).
+  # Substitute: {{TEAM_NAMESPACE}}
+  namespace: "{{TEAM_NAMESPACE}}"
+
+  # platform.system value (ADR-0028 taxonomy).
+  # Substitute: {{TEAM_SYSTEM}}  e.g., "checkout", "auth", "data-pipeline"
+  system: "{{TEAM_SYSTEM}}"
+
+  # platform.owner value (ADR-0028 taxonomy).
+  # Substitute: {{TEAM_OWNER}}
+  owner: "{{TEAM_OWNER}}"
+
+  # Deployment environment.
+  # Substitute: {{PLATFORM_ENV}}
+  env: "{{PLATFORM_ENV}}"
+
+  # Grafana service account for folder Editor access.
+  # Create this SA in Grafana before ArgoCD sync.
+  # Substitute: grafana-sa-{{TEAM_SLUG}}
+  grafanaServiceAccount: "grafana-sa-{{TEAM_SLUG}}"
+
+  # CI/CD service account in team.namespace for PrometheusRule RBAC.
+  # Substitute: {{TEAM_SLUG}}-ci  (leave empty string to skip RoleBinding)
+  ciServiceAccount: "{{TEAM_SLUG}}-ci"
+
+# ML-specific panels — leave disabled for non-ML teams.
+# Set enabled: true and fill in modelName + tenant for ML teams.
+ml:
+  enabled: false
+  modelName: ""
+  tenant: ""
+
+# Alert thresholds — adjust for your team's SLOs.
+alerts:
+  errorRateThreshold: "0.05"
+  cpuSaturationThreshold: "0.80"
+  memorySaturationThreshold: "0.80"
+  availabilityFor: "5m"
+  saturationFor: "15m"
+  # ML thresholds (only used when ml.enabled: true):
+  mlDriftThreshold: "0.2"
+  mlAccuracyThreshold: "0.85"
+  mlAlertFor: "10m"

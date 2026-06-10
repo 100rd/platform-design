@@ -84,6 +84,7 @@ decision.
 | [0038](0038-ml-observability-drift.md) | ML observability — drift detection, accuracy monitoring, and retrain trigger (Evidently + whylogs, Prometheus-native) | Proposed | pending | WS-C of GCP ML platform plan; design 2026-06-10 |
 | [0039](0039-self-serve-observability.md) | Self-serve observability — templated Grafana folders, starter dashboards, and alert-rules-as-code (Backstage deferred, ADR-0034) | Proposed | pending | WS-D of GCP ML platform plan; design 2026-06-10 |
 | [0040](0040-soc-posture-and-oncall.md) | SOC2 posture — GCP org-policy parity + cross-cloud WIF (GCP↔AWS) + control-to-evidence matrix + ML on-call/runbooks | Proposed | pending | WS-E of GCP ML platform plan; design 2026-06-10 |
+| [0041](0041-golden-paths-collaboration.md) | Golden-path templates, shared contracts, and cross-team collaboration model (Backstage deferred, ADR-0034) | Proposed | pending | WS-F of GCP ML platform plan; design 2026-06-10 |
 
 
 

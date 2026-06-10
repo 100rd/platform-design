@@ -1,0 +1,65 @@
+# Golden Path: new-model-service — ml-monitoring per-model override
+# WS-C (ADR-0038) chart: apps/infra/ml-monitoring
+#
+# USAGE: substitute all {{PLACEHOLDER}} values, then add this as a
+# modelNamespaces entry in apps/infra/ml-monitoring/values.yaml
+# (or mount as a second values file in a per-model ArgoCD Application).
+#
+# See README.md Step 3 for full instructions.
+#
+# ADR-0028 platform labels (K8s plane):
+#   platform.system     = ml-monitoring
+#   platform.component  = drift-exporter
+#   platform.env        = {{PLATFORM_ENV}}
+#   platform.owner      = {{TEAM_OWNER}}
+#   platform.managed-by = argocd
+
+# Namespace for this model's drift-monitoring components.
+# Substitute: {{MODEL_NAMESPACE}}
+namespace: "{{MODEL_NAMESPACE}}"
+
+driftExporter:
+  enabled: true
+
+  # Per-model GCS reference dataset path.
+  # Pattern: <bucket>/<modelName>/<tenant>/<domain>/reference.parquet
+  referenceBucketUri: "gs://{{GCS_MLFLOW_ARTIFACTS_BUCKET}}/{{MODEL_NAME}}/{{TENANT}}/{{DOMAIN}}/reference.parquet"
+
+  # Model-specific drift thresholds.
+  # Adjust to match the contract floors in docs/contracts/model-api-contract.md.
+  defaultThresholds:
+    datasetDriftScore:
+      warning: 0.20
+      critical: 0.40
+    featurePsiScore:
+      warning: 0.10
+      critical: 0.25
+    featureKlDivergence:
+      warning: 0.10
+      critical: 0.30
+    modelAccuracy:
+      warning: 0.85
+      critical: 0.75
+    modelF1Score:
+      warning: 0.80
+      critical: 0.65
+
+whylogsProfiler:
+  enabled: true
+
+  # Pushgateway address — typically shared across all model namespaces.
+  pushgatewayAddress: "http://prometheus-pushgateway.ml-monitoring.svc.cluster.local:9091"
+
+  # Labels injected into every whylogs push for multi-tenant PromQL queries.
+  extraLabels:
+    model_name: "{{MODEL_NAME}}"
+    tenant: "{{TENANT}}"
+    domain: "{{DOMAIN}}"
+
+# ADR-0028 platform labels applied to all K8s resources in this release.
+platformLabels:
+  "platform.system": "ml-monitoring"
+  "platform.component": "drift-exporter"
+  "platform.env": "{{PLATFORM_ENV}}"
+  "platform.owner": "{{TEAM_OWNER}}"
+  "platform.managed-by": "argocd"
