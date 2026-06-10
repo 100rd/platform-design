@@ -7,7 +7,22 @@
 #
 # Each node pool is pinned to a single zone for GPU locality and uses autoscaling
 # to optimize cost while meeting capacity requirements.
+#
+# When var.operator_managed_driver = true the module hands GPU driver/device-plugin
+# ownership to the NVIDIA GPU Operator (ADR-0036): the gpu_driver_installation_config
+# block is omitted (no GKE-managed driver) and the nodes are labeled to disable the
+# default GKE NVIDIA device plugin. Default false preserves the GKE-managed driver
+# (gpu_driver_version = "LATEST") byte-for-byte.
 # ---------------------------------------------------------------------------------------------------------------------
+
+locals {
+  # Extra node labels applied ONLY when the NVIDIA GPU Operator owns the driver stack.
+  # Empty map when operator_managed_driver = false → zero diff vs. the GKE-managed path.
+  operator_driver_labels = var.operator_managed_driver ? {
+    "gke-no-default-nvidia-gpu-device-plugin" = "true"
+    "nvidia.com/gpu.present"                  = "true"
+  } : {}
+}
 
 resource "google_container_node_pool" "this" {
   for_each = var.node_pool_configs
@@ -43,8 +58,13 @@ resource "google_container_node_pool" "this" {
         type  = each.value.accelerator_type
         count = each.value.accelerator_count
 
-        gpu_driver_installation_config {
-          gpu_driver_version = "LATEST"
+        # GKE-managed driver. Omitted when the NVIDIA GPU Operator owns the driver
+        # (operator_managed_driver = true). Default false keeps the LATEST driver.
+        dynamic "gpu_driver_installation_config" {
+          for_each = var.operator_managed_driver ? [] : [1]
+          content {
+            gpu_driver_version = "LATEST"
+          }
         }
       }
     }
@@ -59,7 +79,8 @@ resource "google_container_node_pool" "this" {
       }
     }
 
-    # Labels — merge per-pool labels with common labels
+    # Labels — merge per-pool labels with common labels. operator_driver_labels is
+    # empty unless operator_managed_driver = true, so the default path is unchanged.
     labels = merge(
       var.labels,
       each.value.labels,
@@ -67,7 +88,8 @@ resource "google_container_node_pool" "this" {
         "managed-by"   = "terraform"
         "cluster-role" = "gpu-analysis"
         "node-pool"    = each.key
-      }
+      },
+      local.operator_driver_labels,
     )
 
     oauth_scopes = [
