@@ -1,0 +1,204 @@
+---
+# Grafana self-serve: per-team PrometheusRule (alert-rules-as-code)
+#
+# Deployed into team.namespace (NOT the platform monitoring namespace).
+# Teams extend these starter groups by editing their own values or adding
+# extra PrometheusRule objects — without touching platform objects.
+#
+# Alert naming: all alert names carry the team slug prefix in UPPER_CASE
+# (e.g. TEAM_CHECKOUT_HighErrorRate) to prevent alertname collisions when
+# aggregating across teams in Alertmanager.
+#
+# ADR-0039: Self-Serve Observability
+# ADR-0028: platform.system = observability (mandatory on every resource)
+{{- include "grafana-self-serve.validate" . }}
+{{- $alertPrefix := include "grafana-self-serve.alertPrefix" . }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Values.team.slug }}-alerts
+  namespace: {{ .Values.team.namespace }}
+  labels:
+    {{- include "grafana-self-serve.labels" (dict "root" . "component" "alert-rules") | nindent 4 }}
+    prometheus: kube-prometheus
+spec:
+  groups:
+    # -------------------------------------------------------------------------
+    # Availability: HTTP error rate scoped to team namespace.
+    # -------------------------------------------------------------------------
+    - name: {{ .Values.team.slug }}-availability
+      interval: 30s
+      rules:
+        - alert: {{ $alertPrefix }}_HighErrorRate
+          expr: |
+            (
+              sum(rate(http_server_requests_total{
+                namespace="{{ .Values.team.namespace }}",
+                status=~"5.."
+              }[5m]))
+              /
+              sum(rate(http_server_requests_total{
+                namespace="{{ .Values.team.namespace }}"
+              }[5m]))
+            ) > {{ .Values.alerts.errorRateThreshold }}
+          for: {{ .Values.alerts.availabilityFor }}
+          labels:
+            severity: critical
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: {{ .Values.team.system | quote }}
+            platform_owner: {{ .Values.team.slug | quote }}
+          annotations:
+            summary: >-
+              High HTTP 5xx error rate — {{ .Values.team.name }}
+              ({{ .Values.team.namespace }})
+            description: >-
+              5xx error rate is {{ "{{ $value | humanizePercentage }}" }}
+              (threshold: {{ .Values.alerts.errorRateThreshold }}).
+              Check service logs in namespace {{ .Values.team.namespace }}.
+            runbook_url: "https://runbooks.internal.example.com/teams/{{ .Values.team.slug }}/high-error-rate"
+
+        - alert: {{ $alertPrefix }}_ServiceDown
+          expr: |
+            absent(http_server_requests_total{
+              namespace="{{ .Values.team.namespace }}"
+            }[5m]) == 1
+          for: {{ .Values.alerts.availabilityFor }}
+          labels:
+            severity: critical
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: {{ .Values.team.system | quote }}
+            platform_owner: {{ .Values.team.slug | quote }}
+          annotations:
+            summary: >-
+              No HTTP traffic detected — {{ .Values.team.name }}
+              ({{ .Values.team.namespace }})
+            description: >-
+              No http_server_requests_total series in namespace
+              {{ .Values.team.namespace }} for 5 minutes. Service may be down.
+            runbook_url: "https://runbooks.internal.example.com/teams/{{ .Values.team.slug }}/service-down"
+
+    # -------------------------------------------------------------------------
+    # Saturation: CPU + memory over-saturation scoped to team namespace.
+    # -------------------------------------------------------------------------
+    - name: {{ .Values.team.slug }}-saturation
+      interval: 30s
+      rules:
+        - alert: {{ $alertPrefix }}_HighCPUSaturation
+          expr: |
+            (
+              sum by (pod) (rate(container_cpu_usage_seconds_total{
+                namespace="{{ .Values.team.namespace }}",
+                container!=""
+              }[5m]))
+              /
+              sum by (pod) (kube_pod_container_resource_requests{
+                namespace="{{ .Values.team.namespace }}",
+                resource="cpu"
+              })
+            ) > {{ .Values.alerts.cpuSaturationThreshold }}
+          for: {{ .Values.alerts.saturationFor }}
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: {{ .Values.team.system | quote }}
+            platform_owner: {{ .Values.team.slug | quote }}
+          annotations:
+            summary: >-
+              High CPU saturation — {{ .Values.team.name }} pod
+              {{ "{{ $labels.pod }}" }}
+            description: >-
+              CPU saturation is {{ "{{ $value | humanizePercentage }}" }}
+              (threshold: {{ .Values.alerts.cpuSaturationThreshold }}).
+            runbook_url: "https://runbooks.internal.example.com/teams/{{ .Values.team.slug }}/cpu-saturation"
+
+        - alert: {{ $alertPrefix }}_HighMemorySaturation
+          expr: |
+            (
+              sum by (pod) (container_memory_working_set_bytes{
+                namespace="{{ .Values.team.namespace }}",
+                container!=""
+              })
+              /
+              sum by (pod) (kube_pod_container_resource_requests{
+                namespace="{{ .Values.team.namespace }}",
+                resource="memory"
+              })
+            ) > {{ .Values.alerts.memorySaturationThreshold }}
+          for: {{ .Values.alerts.saturationFor }}
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: {{ .Values.team.system | quote }}
+            platform_owner: {{ .Values.team.slug | quote }}
+          annotations:
+            summary: >-
+              High memory saturation — {{ .Values.team.name }} pod
+              {{ "{{ $labels.pod }}" }}
+            description: >-
+              Memory saturation is {{ "{{ $value | humanizePercentage }}" }}
+              (threshold: {{ .Values.alerts.memorySaturationThreshold }}).
+            runbook_url: "https://runbooks.internal.example.com/teams/{{ .Values.team.slug }}/memory-saturation"
+
+    {{- if .Values.ml.enabled }}
+    # -------------------------------------------------------------------------
+    # ML observability (gated by ml.enabled: true).
+    # Consumes ADR-0038 metrics from the ml-monitoring stack.
+    # -------------------------------------------------------------------------
+    - name: {{ .Values.team.slug }}-ml-observability
+      interval: 60s
+      rules:
+        - alert: {{ $alertPrefix }}_MLDriftDetected
+          expr: |
+            ml_monitoring_dataset_drift_score{
+              namespace="{{ .Values.team.namespace }}"
+              {{- if .Values.ml.modelName }},model_name="{{ .Values.ml.modelName }}"{{- end }}
+              {{- if .Values.ml.tenant }},tenant="{{ .Values.ml.tenant }}"{{- end }}
+            } > {{ .Values.alerts.mlDriftThreshold }}
+          for: {{ .Values.alerts.mlAlertFor }}
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            alert_type: ml-drift
+          annotations:
+            summary: >-
+              ML dataset drift detected — {{ .Values.team.name }}
+              {{- if .Values.ml.modelName }} (model: {{ .Values.ml.modelName }}){{- end }}
+            description: >-
+              Drift score {{ "{{ $value }}" }} exceeds threshold
+              {{ .Values.alerts.mlDriftThreshold }} for model
+              {{ "{{ $labels.model_name }}" }}/tenant {{ "{{ $labels.tenant }}" }}.
+              Consider triggering a retrain via the Airflow DAG (ADR-0038).
+            runbook_url: "https://runbooks.internal.example.com/teams/{{ .Values.team.slug }}/ml-drift"
+
+        - alert: {{ $alertPrefix }}_MLAccuracyDegraded
+          expr: |
+            ml_monitoring_model_accuracy{
+              namespace="{{ .Values.team.namespace }}"
+              {{- if .Values.ml.modelName }},model_name="{{ .Values.ml.modelName }}"{{- end }}
+              {{- if .Values.ml.tenant }},tenant="{{ .Values.ml.tenant }}"{{- end }}
+            } < {{ .Values.alerts.mlAccuracyThreshold }}
+          for: {{ .Values.alerts.mlAlertFor }}
+          labels:
+            severity: critical
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            alert_type: ml-accuracy
+          annotations:
+            summary: >-
+              Model accuracy degraded — {{ .Values.team.name }}
+              {{- if .Values.ml.modelName }} (model: {{ .Values.ml.modelName }}){{- end }}
+            description: >-
+              Model accuracy {{ "{{ $value | humanizePercentage }}" }} is below
+              threshold {{ .Values.alerts.mlAccuracyThreshold }} for model
+              {{ "{{ $labels.model_name }}" }}/tenant {{ "{{ $labels.tenant }}" }}.
+            runbook_url: "https://runbooks.internal.example.com/teams/{{ .Values.team.slug }}/ml-accuracy"
+    {{- end }}

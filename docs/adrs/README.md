@@ -82,6 +82,7 @@ decision.
 | [0036](0036-gke-ml-infra-parity-multiregion.md) | GKE ML-infra parity + multi-region GKE + GCP cost guardrail (GPU Operator, DCGM, Volcano, billing-budget) | Accepted | pending | WS-A of GCP ML platform plan; design 2026-06-10 |
 | [0037](0037-ml-cicd-pipeline-mlflow.md) | ML CI/CD pipeline — Airflow orchestrator + MLflow registry + GCS artifact store | Proposed | pending | WS-B of GCP ML platform plan; design 2026-06-10 |
 | [0038](0038-ml-observability-drift.md) | ML observability — drift detection, accuracy monitoring, and retrain trigger (Evidently + whylogs, Prometheus-native) | Proposed | pending | WS-C of GCP ML platform plan; design 2026-06-10 |
+| [0039](0039-self-serve-observability.md) | Self-serve observability — templated Grafana folders, starter dashboards, and alert-rules-as-code (Backstage deferred, ADR-0034) | Proposed | pending | WS-D of GCP ML platform plan; design 2026-06-10 |
 
 
 

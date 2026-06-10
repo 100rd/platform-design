@@ -1,0 +1,427 @@
+---
+# Grafana self-serve: per-team folder + starter dashboard ConfigMap
+# The Grafana sidecar detects ConfigMaps with label grafana_dashboard: "1"
+# and loads them into the Grafana instance automatically.
+#
+# This template produces TWO ConfigMaps:
+#   1. <team-slug>-grafana-folder    — provisions the Grafana folder
+#   2. <team-slug>-grafana-dashboard — the starter dashboard (folder-scoped)
+#
+# ADR-0039: Self-Serve Observability
+# ADR-0028: platform.system = observability (mandatory on every resource)
+{{- include "grafana-self-serve.validate" . }}
+{{- $alertPrefix := include "grafana-self-serve.alertPrefix" . }}
+{{- $folderUid := include "grafana-self-serve.folderUid" . }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.team.slug }}-grafana-folder
+  namespace: {{ .Values.grafanaNamespace }}
+  labels:
+    {{- include "grafana-self-serve.dashboardLabels" . | nindent 4 }}
+  annotations:
+    grafana_folder: {{ printf "team-%s" .Values.team.slug | quote }}
+data:
+  {{ printf "%s-folder.json" .Values.team.slug }}: |
+    {
+      "__inputs": [
+        {
+          "name": "{{ printf "team-%s" .Values.team.slug }}",
+          "type": "folder",
+          "uid": "{{ $folderUid }}",
+          "title": "{{ .Values.team.name }}",
+          "description": "Dashboards for {{ .Values.team.name }} ({{ .Values.team.slug }}). ADR-0039 self-serve."
+        }
+      ],
+      "__requires": [],
+      "annotations": {"list": []},
+      "panels": [],
+      "schemaVersion": 38,
+      "title": "{{ .Values.team.name }}",
+      "uid": "{{ $folderUid }}-root",
+      "version": 1
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.team.slug }}-grafana-dashboard
+  namespace: {{ .Values.grafanaNamespace }}
+  labels:
+    {{- include "grafana-self-serve.dashboardLabels" . | nindent 4 }}
+  annotations:
+    grafana_folder: {{ printf "team-%s" .Values.team.slug | quote }}
+data:
+  {{ printf "%s-starter.json" .Values.team.slug }}: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "datasource": "{{ .Values.datasource.name }}",
+            "enable": true,
+            "expr": "changes(kube_deployment_status_observed_generation{namespace=\"{{ .Values.team.namespace }}\"}[5m]) > 0",
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Deployments",
+            "tagKeys": "deployment,namespace"
+          }
+        ]
+      },
+      "description": "Starter dashboard for {{ .Values.team.name }}. Namespace: {{ .Values.team.namespace }}. platform:system={{ .Values.team.system }}. ADR-0039.",
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+          "id": 100,
+          "title": "Service Health (RED Metrics)",
+          "type": "row"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line", "fillOpacity": 10,
+                "lineWidth": 2, "showPoints": "never", "spanNulls": false
+              },
+              "unit": "reqps"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 1},
+          "id": 1,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "sum by (service) (rate(http_server_requests_total{namespace=\"{{ .Values.team.namespace }}\",platform_system=\"{{ .Values.team.system }}\"}[5m]))",
+              "legendFormat": "{{ "{{service}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "Request Rate (RPS)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line", "fillOpacity": 10,
+                "lineWidth": 2, "showPoints": "never"
+              },
+              "max": 100, "min": 0, "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 1},
+          "id": 2,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "(sum(rate(http_server_requests_total{namespace=\"{{ .Values.team.namespace }}\",status=~\"5..\"}[5m])) / sum(rate(http_server_requests_total{namespace=\"{{ .Values.team.namespace }}\"}[5m]))) * 100",
+              "legendFormat": "5xx Error Rate",
+              "refId": "A"
+            },
+            {
+              "expr": "(sum(rate(http_server_requests_total{namespace=\"{{ .Values.team.namespace }}\",status=~\"4..\"}[5m])) / sum(rate(http_server_requests_total{namespace=\"{{ .Values.team.namespace }}\"}[5m]))) * 100",
+              "legendFormat": "4xx Error Rate",
+              "refId": "B"
+            }
+          ],
+          "title": "Error Rate (%)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line", "fillOpacity": 10,
+                "lineWidth": 2, "showPoints": "never"
+              },
+              "unit": "s"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 9},
+          "id": 3,
+          "options": {
+            "legend": {"calcs": ["mean", "p95", "p99"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum by (le, service) (rate(http_server_request_duration_seconds_bucket{namespace=\"{{ .Values.team.namespace }}\"}[5m])))",
+              "legendFormat": "P50 {{ "{{service}}" }}",
+              "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum by (le, service) (rate(http_server_request_duration_seconds_bucket{namespace=\"{{ .Values.team.namespace }}\"}[5m])))",
+              "legendFormat": "P95 {{ "{{service}}" }}",
+              "refId": "B"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum by (le, service) (rate(http_server_request_duration_seconds_bucket{namespace=\"{{ .Values.team.namespace }}\"}[5m])))",
+              "legendFormat": "P99 {{ "{{service}}" }}",
+              "refId": "C"
+            }
+          ],
+          "title": "Request Duration (P50 / P95 / P99)",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 17},
+          "id": 101,
+          "title": "Resource Saturation",
+          "type": "row"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line", "fillOpacity": 10,
+                "lineWidth": 2, "showPoints": "never"
+              },
+              "max": 100, "min": 0, "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 18},
+          "id": 4,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "(sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"{{ .Values.team.namespace }}\",container!=\"\"}[5m])) / sum by (pod) (kube_pod_container_resource_requests{namespace=\"{{ .Values.team.namespace }}\",resource=\"cpu\"})) * 100",
+              "legendFormat": "CPU {{ "{{pod}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "CPU Saturation (% of request)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line", "fillOpacity": 10,
+                "lineWidth": 2, "showPoints": "never"
+              },
+              "max": 100, "min": 0, "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 18},
+          "id": 5,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "(sum by (pod) (container_memory_working_set_bytes{namespace=\"{{ .Values.team.namespace }}\",container!=\"\"}) / sum by (pod) (kube_pod_container_resource_requests{namespace=\"{{ .Values.team.namespace }}\",resource=\"memory\"})) * 100",
+              "legendFormat": "Mem {{ "{{pod}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "Memory Saturation (% of request)",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 26},
+          "id": 102,
+          "title": "Active Alerts",
+          "type": "row"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "custom": {"align": "auto", "cellOptions": {"type": "color-text"}, "inspect": false},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 1},
+                  {"color": "red", "value": 5}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 6, "w": 24, "x": 0, "y": 27},
+          "id": 6,
+          "options": {"cellHeight": "sm", "showHeader": true},
+          "targets": [
+            {
+              "expr": "ALERTS{namespace=\"{{ .Values.team.namespace }}\",alertstate=\"firing\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Firing Alerts — {{ .Values.team.name }}",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {"Time": true, "__name__": true},
+                "renameByName": {
+                  "alertname": "Alert",
+                  "severity": "Severity",
+                  "namespace": "Namespace",
+                  "alertstate": "State"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        }
+        {{- if .Values.ml.enabled }},
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 33},
+          "id": 200,
+          "title": "ML Observability (ADR-0038 drift + accuracy metrics)",
+          "type": "row"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 0.2},
+                  {"color": "red", "value": 0.4}
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 34},
+          "id": 201,
+          "options": {
+            "legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "ml_monitoring_dataset_drift_score{namespace=\"{{ .Values.team.namespace }}\"{{ if .Values.ml.modelName }},model_name=\"{{ .Values.ml.modelName }}\"{{ end }}{{ if .Values.ml.tenant }},tenant=\"{{ .Values.ml.tenant }}\"{{ end }}}",
+              "legendFormat": "drift {{ "{{model_name}}" }}/{{ "{{tenant}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "ML Dataset Drift Score",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"
+              },
+              "max": 1, "min": 0, "unit": "percentunit"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 34},
+          "id": 202,
+          "options": {
+            "legend": {"calcs": ["lastNotNull", "min"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "ml_monitoring_model_accuracy{namespace=\"{{ .Values.team.namespace }}\"{{ if .Values.ml.modelName }},model_name=\"{{ .Values.ml.modelName }}\"{{ end }}{{ if .Values.ml.tenant }},tenant=\"{{ .Values.ml.tenant }}\"{{ end }}}",
+              "legendFormat": "accuracy {{ "{{model_name}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "Model Accuracy",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "bars", "fillOpacity": 80, "lineWidth": 1, "showPoints": "never"
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 6, "w": 12, "x": 0, "y": 42},
+          "id": 203,
+          "options": {
+            "legend": {"calcs": ["sum"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "increase(ml_monitoring_retrain_triggers_total{namespace=\"{{ .Values.team.namespace }}\"{{ if .Values.ml.tenant }},tenant=\"{{ .Values.ml.tenant }}\"{{ end }}}[1h])",
+              "legendFormat": "{{ "{{trigger}}" }}/{{ "{{outcome}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "Retrain Triggers (per hour)",
+          "type": "timeseries"
+        }
+        {{- end }}
+      ],
+      "refresh": "{{ .Values.defaultRefresh }}",
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["self-serve", "{{ .Values.team.slug }}", "{{ .Values.team.system }}"
+        {{- if .Values.ml.enabled }}, "ml"{{- end }}],
+      "templating": {
+        "list": [
+          {
+            "current": {"selected": false, "text": "{{ .Values.datasource.name }}", "value": "{{ .Values.datasource.name }}"},
+            "hide": 0,
+            "includeAll": false,
+            "label": "Datasource",
+            "multi": false,
+            "name": "DS_PROMETHEUS",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "skipUrlSync": false,
+            "type": "datasource"
+          }
+        ]
+      },
+      "time": {
+        "from": "{{ .Values.defaultTimeRange.from }}",
+        "to": "{{ .Values.defaultTimeRange.to }}"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "{{ .Values.team.name }} — Starter Dashboard",
+      "uid": "{{ printf "ss-%s" .Values.team.slug | trunc 40 }}",
+      "version": 1,
+      "weekStart": ""
+    }

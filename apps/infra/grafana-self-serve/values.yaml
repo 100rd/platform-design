@@ -1,0 +1,93 @@
+# grafana-self-serve — default values
+# ALL team.* fields are REQUIRED. There are no defaults; helm lint will fail
+# if any required field is missing or empty (enforced via required in templates).
+#
+# Override this file in example-teams/<team-slug>/values.yaml.
+# See docs/self-serve-observability.md for the full onboarding guide.
+#
+# ADR-0039: Self-Serve Observability
+
+team:
+  # Human-readable team name (used in Grafana folder title and dashboard title).
+  # Example: "Checkout"
+  name: ""
+
+  # Machine-safe slug — lowercase, hyphens only.
+  # Used as: Grafana folder name, alert rule prefix, label values.
+  # Example: "team-checkout"
+  slug: ""
+
+  # Kubernetes namespace where this team's workloads run.
+  # This is also where PrometheusRule and RBAC objects are deployed.
+  # Must already exist — CreateNamespace=false on the ArgoCD Application.
+  # Example: "checkout"
+  namespace: ""
+
+  # platform:system value (ADR-0028 taxonomy) for this team's workloads.
+  # Example: "checkout", "ml-monitoring", "auth"
+  system: ""
+
+  # platform:owner value (ADR-0028 taxonomy). Typically matches slug.
+  # Example: "team-checkout"
+  owner: ""
+
+  # Deployment environment. Must be one of: production, staging, dev, sandbox.
+  env: ""
+
+  # (Optional) Grafana service-account name used for Editor access on the folder.
+  # Create this service account in Grafana before deploying.
+  # Leave empty to skip folder permission provisioning.
+  grafanaServiceAccount: ""
+
+  # CI/CD service account name in team.namespace that needs PrometheusRule RBAC.
+  # Example: "checkout-ci"
+  # Leave empty to skip RoleBinding creation.
+  ciServiceAccount: ""
+
+# ML-specific configuration. Set ml.enabled: true for ML teams.
+# When enabled, extra dashboard panels for ADR-0038 drift/accuracy metrics
+# are added, and ML-specific alert groups are included in the PrometheusRule.
+ml:
+  enabled: false
+
+  # model_name label value to scope ML panels. Leave empty to show all models.
+  # Example: "domain-adapter-hft"
+  modelName: ""
+
+  # tenant label value from ADR-0038 metric labels.
+  # Example: "tenant-acme"
+  tenant: ""
+
+# Grafana namespace where the Grafana deployment lives and where ConfigMaps
+# must be created for the sidecar to discover them.
+grafanaNamespace: observability
+
+# Prometheus datasource settings (must match apps/infra/observability/grafana-dashboards/values.yaml).
+datasource:
+  name: "Prometheus"
+  uid: "prometheus"
+
+# Dashboard display defaults.
+defaultRefresh: "30s"
+defaultTimeRange:
+  from: "now-1h"
+  to: "now"
+
+# Alert thresholds — adjust per team in their values.yaml.
+alerts:
+  # HTTP error rate threshold (fraction). 0.05 = 5%.
+  errorRateThreshold: "0.05"
+  # CPU saturation threshold (fraction). 0.80 = 80%.
+  cpuSaturationThreshold: "0.80"
+  # Memory saturation threshold (fraction). 0.80 = 80%.
+  memorySaturationThreshold: "0.80"
+  # Sustained duration before availability alert fires.
+  availabilityFor: "5m"
+  # Sustained duration before saturation alert fires.
+  saturationFor: "15m"
+  # ML: drift score threshold (only used when ml.enabled: true).
+  mlDriftThreshold: "0.2"
+  # ML: model accuracy floor (only used when ml.enabled: true).
+  mlAccuracyThreshold: "0.85"
+  # ML: sustained duration before ML alert fires.
+  mlAlertFor: "10m"
