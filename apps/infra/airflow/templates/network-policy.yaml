@@ -1,0 +1,73 @@
+---
+# NetworkPolicy stub — ml-pipeline namespace (ADR-0037 D5)
+#
+# FOLLOW-UP: This is an intent declaration. The full CiliumNetworkPolicy manifests
+# (default-deny + scoped allows) are tracked in network-policies/ml-pipeline/
+# per the pattern in network-policies/gpu-inference/00-default-deny.yaml.
+#
+# Scoped allows required (to be implemented):
+#   1. Airflow workers  → MLflow tracking server (port 5000)
+#   2. MLflow server    → GCS endpoint (HTTPS 443, external)
+#   3. Airflow scheduler/webserver → Cloud SQL Auth Proxy (port 5432)
+#   4. Alertmanager     → Airflow webserver (port 8080, for retrain trigger)
+#   5. Ingress (Cilium Gateway) → Airflow webserver (port 8080)
+#
+# This standard K8s NetworkPolicy provides a default-deny baseline while the
+# CiliumNetworkPolicy follow-up is pending.
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ml-pipeline-default-deny
+  namespace: {{ .Release.Namespace }}
+  labels:
+    platform.system: ml-pipeline
+    platform.component: airflow
+    platform.managed-by: argocd
+  annotations:
+    platform.follow-up: "CiliumNetworkPolicy in network-policies/ml-pipeline/ — ADR-0037 D5"
+spec:
+  podSelector:
+    matchLabels:
+      platform.system: ml-pipeline
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow intra-namespace traffic (Airflow components inter-communicate)
+    - from:
+        - podSelector:
+            matchLabels:
+              platform.system: ml-pipeline
+    # Allow Alertmanager retrain-trigger webhook (WS-C integration)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - port: 8080
+          protocol: TCP
+  egress:
+    # Allow kube-dns
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow intra-namespace traffic
+    - to:
+        - podSelector:
+            matchLabels:
+              platform.system: ml-pipeline
+    # Allow GCP APIs (Secret Manager, GCS, Cloud SQL Auth Proxy)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 443
+          protocol: TCP
+{{- end }}
