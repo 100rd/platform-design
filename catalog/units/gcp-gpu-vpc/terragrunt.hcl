@@ -1,3 +1,7 @@
+include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
 # ---------------------------------------------------------------------------------------------------------------------
 # GCP GPU VPC — Catalog Unit
 # ---------------------------------------------------------------------------------------------------------------------
@@ -34,8 +38,13 @@ inputs = {
   environment  = local.environment
 
   labels = {
-    environment  = local.environment
-    managed-by   = "terragrunt"
-    cluster-role = "gpu-analysis"
+    environment         = local.environment
+    managed-by          = "terragrunt"
+    cluster-role        = "gpu-analysis"
+    platform_system     = "ml-infrastructure"
+    platform_component  = "gpu-vpc"
+    platform_env        = local.environment
+    platform_owner      = "team-data-platform"
+    platform_managed_by = "terraform"
   }
 }
