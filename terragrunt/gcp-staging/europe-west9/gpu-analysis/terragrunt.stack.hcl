@@ -23,3 +23,23 @@ unit "gcp-gpu-nodepools" {
   source = "${get_repo_root()}/catalog/units/gcp-gpu-nodepools"
   path   = "gcp-gpu-nodepools"
 }
+
+unit "gke-gpu-operator" {
+  source = "${get_repo_root()}/catalog/units/gke-gpu-operator"
+  path   = "gke-gpu-operator"
+}
+
+unit "gke-gpu-dcgm" {
+  source = "${get_repo_root()}/catalog/units/gke-gpu-dcgm"
+  path   = "gke-gpu-dcgm"
+}
+
+unit "gke-gpu-scheduling" {
+  source = "${get_repo_root()}/catalog/units/gke-gpu-scheduling"
+  path   = "gke-gpu-scheduling"
+}
+
+unit "gcp-billing-budget" {
+  source = "${get_repo_root()}/catalog/units/gcp-billing-budget"
+  path   = "gcp-billing-budget"
+}

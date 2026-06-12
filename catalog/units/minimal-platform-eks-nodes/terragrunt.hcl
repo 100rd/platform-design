@@ -51,7 +51,7 @@ dependency "eks_cluster" {
     cluster_name                       = "sandbox-eu-west-1-minimal-platform"
     cluster_version                    = "1.32"
     cluster_endpoint                   = "https://XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.gr7.eu-west-1.eks.amazonaws.com"
-    cluster_certificate_authority_data = "bW9jay1jYS1kYXRh"
+    cluster_certificate_authority_data = ""
     cluster_service_cidr               = "172.20.0.0/16"
     cluster_ip_family                  = "ipv4"
     cluster_primary_security_group_id  = "sg-MOCKMOCKMOCKMOCK01"
