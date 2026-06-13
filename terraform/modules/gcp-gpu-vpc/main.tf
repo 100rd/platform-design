@@ -20,6 +20,11 @@ resource "google_compute_network" "this" {
   auto_create_subnetworks = false
   routing_mode            = "REGIONAL"
   description             = "Custom VPC for GPU analysis workloads in ${var.environment}"
+
+  # ADR-0042 D1: jumbo frames are the universal GPU-network baseline. 8896 is the
+  # GPU-fabric MTU GCP documents for GPUDirect/RoCE; it cuts packet count on bulk
+  # tensor/NCCL transfers and is the prerequisite for the data-plane / RDMA fabrics.
+  mtu = var.mtu
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
