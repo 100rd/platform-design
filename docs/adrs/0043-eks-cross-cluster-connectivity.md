@@ -289,6 +289,7 @@ service; Lattice service network).
 - AWS Transit Gateway peering: <https://docs.aws.amazon.com/vpc/latest/tgw/tgw-peering.html>
 - EKS multi-cluster guidance: <https://aws.github.io/aws-eks-best-practices/networking/subnets/>
 - Submariner: <https://submariner.io/> · Skupper: <https://skupper.io/>
+- In-repo diagram: `docs/architecture/eks-cross-cluster-connectivity.excalidraw` (ClusterMesh design).
 - In-repo: `terraform/modules/{transit-gateway,tgw-peering,tgw-route-tables,clustermesh-connect,clustermesh-sg-rules,cilium,nlb-ingress,route53-resolver,vpc-lattice-resource}`;
   `apps/infra/cilium/values.yaml`; `network-policies/gpu-inference/04-clustermesh-cross-cluster.yaml`;
   `terragrunt/staging/eu-central-1/account.hcl`.
