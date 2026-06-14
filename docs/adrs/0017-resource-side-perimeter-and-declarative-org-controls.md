@@ -2,7 +2,7 @@
 
 - Status: **Accepted** — **partially implemented** (epic #252); research-backed + doc-verified.
 - Ratified: 2026-06-07 by platform owner.
-- platform-design status: **partial** — RCP + Access Analyzer gate merged (#256/#274); AFT = ADR-0035; EC2 Declarative Policies pending (#315).
+- platform-design status: **partial** — RCP + Access Analyzer gate merged (#256/#274); AFT = ADR-0035; EC2 Declarative Policies added in `modules/ec2-declarative-policies`, staged to the Policy-Staging OU (audit-mode allowed-AMI), root promotion + require_imdsv2-SCP retirement pending (#315).
 - Date: 2026-06-06
 - Authors: platform-team, security
 - Related issues: epic #252
