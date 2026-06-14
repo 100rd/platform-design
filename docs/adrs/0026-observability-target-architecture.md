@@ -1,10 +1,8 @@
 # ADR-0026: Observability target architecture (LGTM-aligned: Prometheus 3 + Thanos, Loki, Tempo, Alloy)
 
-- Status: **Accepted** — research-backed + doc-verified; ratified, not yet
-  implemented.
+- Status: **Accepted** — **Implemented** (epic #252); research-backed + doc-verified.
 - Ratified: 2026-06-07 by platform owner.
-- platform-design status: **pending** — the target stack below is not fully wired
-  in (Tempo is deployed-but-unfed per ADR-0019; the rest is partial/absent).
+- platform-design status: **implemented** — Prometheus 3.x + Thanos + Loki/Alloy + Tempo/OBI + Pyrra (#261/#275).
 - Date: 2026-06-07
 - Authors: platform-team
 - Related issues: epic #252

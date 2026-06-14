@@ -1,10 +1,8 @@
 # ADR-0024: ArgoCD operational hardening (PreDelete hooks, shallow clone, server-side diff/apply, progressive ApplicationSet rollout)
 
-- Status: **Accepted** — research-backed + doc-verified; ratified, not yet
-  implemented.
+- Status: **Accepted** — **Implemented** (epic #252); research-backed + doc-verified.
 - Ratified: 2026-06-07 by platform owner.
-- platform-design status: **pending** — none of the four ArgoCD capabilities below
-  are enabled in this repo's ArgoCD config.
+- platform-design status: **implemented** — shallow clone + server-side diff/apply + RollingSync + PreDelete (#259).
 - Date: 2026-06-07
 - Authors: platform-team
 - Related issues: epic #252

@@ -1,10 +1,8 @@
 # ADR-0019: Harvest unused Cilium / eBPF capabilities (OBI tracing, Hubble UI, Tetragon, ClusterMesh)
 
-- Status: **Accepted** — research-backed + doc-verified; ratified, not yet
-  implemented.
+- Status: **Accepted** — **partially implemented** (epic #252); research-backed + doc-verified.
 - Ratified: 2026-06-07 by platform owner.
-- platform-design status: **pending** — Cilium 1.19 is deployed but none of the
-  capabilities below are turned on in this repo.
+- platform-design status: **partial** — OBI/Beyla, Tetragon (enforce), Hubble UI + ClusterMesh (ADR-0043, #311) merged; netkit pilot pending (#314).
 - Date: 2026-06-06
 - Authors: platform-team, security
 - Related issues: epic #252

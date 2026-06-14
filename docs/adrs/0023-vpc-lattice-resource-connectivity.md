@@ -1,10 +1,8 @@
 # ADR-0023: VPC Lattice resource connectivity for cross-account/cross-VPC TCP resource access
 
-- Status: **Accepted** — research-backed + doc-verified; ratified, not yet
-  implemented.
+- Status: **Accepted** — **Implemented** (epic #252); research-backed + doc-verified.
 - Ratified: 2026-06-07 by platform owner.
-- platform-design status: **pending** — no VPC Lattice Resource Gateway, Resource
-  Configuration, or service-network resource sharing is wired into this repo.
+- platform-design status: **implemented** — VPC Lattice resource gateway + RAM + IAM auth (#265).
 - Date: 2026-06-07
 - Authors: platform-team, security
 - Related issues: epic #252

@@ -1,10 +1,8 @@
 # ADR-0027: Kubernetes cost allocation via OpenCost + AWS CUR/Athena cloud-integration
 
-- Status: **Accepted** — research-backed + doc-verified; ratified, not yet
-  implemented.
+- Status: **Accepted** — **Implemented** (epic #252); research-backed + doc-verified.
 - Ratified: 2026-06-07 by platform owner.
-- platform-design status: **pending** — no OpenCost install or CUR/Athena
-  cloud-integration is wired into this repo.
+- platform-design status: **implemented** — OpenCost + CUR/Athena cost export (#257).
 - Date: 2026-06-07
 - Authors: platform-team, finops
 - Related issues: epic #252

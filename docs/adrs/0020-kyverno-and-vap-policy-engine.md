@@ -1,10 +1,8 @@
 # ADR-0020: Kyverno + ValidatingAdmissionPolicy as the policy-engine layer
 
-- Status: **Accepted** — research-backed + doc-verified; ratified, not yet
-  implemented.
+- Status: **Accepted** — **Implemented** (epic #252); research-backed + doc-verified.
 - Ratified: 2026-06-07 by platform owner.
-- platform-design status: **pending** — Kyverno is scaffolded but disabled; no
-  ValidatingAdmissionPolicy resources are authored.
+- platform-design status: **implemented** — Kyverno + VAP in enforce (#266/#270).
 - Date: 2026-06-06
 - Authors: platform-team, security
 - Related issues: epic #252

@@ -16,9 +16,10 @@ Proposed to **Accepted — rolling out** once PR #241 implemented them in-repo
 ADRs 0017–0027 are **research-backed + doc-verified 2026-06-07 (Context7 + official
 AWS/vendor docs)** — formalized from the 2026 platform modernization deep-dives
 (grounded in `infra@572b54d` / `argocd@c364c6c`). They are all **Accepted** —
-**ratified 2026-06-07 by the platform owner** — but remain **pending** in
-platform-design (decided, not yet implemented). They are tracked by ROADMAP Phase 8
-under epic #252. ADRs 0017–0022 were corrected per the 2026-06-07 doc-verification
+**ratified 2026-06-07 by the platform owner** — and are now largely **implemented**
+in platform-design (epic #252), except 0017 / 0019 / 0022 which remain **partial**
+(see the platform-design status column + the remaining-work follow-ups #313/#314/#315).
+They are tracked by ROADMAP Phase 8 under epic #252. ADRs 0017–0022 were corrected per the 2026-06-07 doc-verification
 pass before ratification (e.g. AFT account vending in 0017, the six Pod Identity
 session tags + ESO upgrade prereq in 0018, netkit unblocked on kernel 6.12 in 0019,
 admission-time cosign verification in 0020, OTel SLO-gating in 0021, the supply-chain
@@ -61,17 +62,17 @@ decision.
 | [0014](0014-argo-rollouts-canary-progressive-delivery.md) | Argo Rollouts canary with Gateway API traffic-routing and analysis | Accepted | synced (#238) | ported · adopted |
 | [0015](0015-reusable-ci-pipelines.md) | Reusable CI/CD pipelines for the platform organisation | Accepted — rolling out | synced (#241) | ported · implemented by #241 |
 | [0016](0016-tier1-supply-chain-hardening.md) | Tier 1 CI/CD hardening — dep scan, secrets, SAST, signing, manifest validation, smoke | Accepted | synced (#241, #248) | ported · implemented by #241, #248 |
-| [0017](0017-resource-side-perimeter-and-declarative-org-controls.md) | Resource-side data perimeter and declarative org controls (AFT vending, RCPs, EC2 Declarative Policies, full-IAM SCPs) | Accepted | pending | research-backed + doc-verified |
-| [0018](0018-eks-pod-identity-as-default-workload-identity.md) | EKS Pod Identity as the default workload identity (IRSA becomes legacy) | Accepted | pending | research-backed + doc-verified |
-| [0019](0019-harvest-cilium-ebpf-capabilities.md) | Harvest unused Cilium / eBPF capabilities (OBI tracing, Hubble UI, Tetragon, ClusterMesh, netkit pilot) | Accepted | pending | research-backed + doc-verified |
-| [0020](0020-kyverno-and-vap-policy-engine.md) | Kyverno + ValidatingAdmissionPolicy as the policy-engine layer (admission-time cosign) | Accepted | pending | research-backed + doc-verified |
-| [0021](0021-kargo-gitops-promotion-layer.md) | Kargo as the GitOps environment-promotion layer (OTel SLO-gating) | Accepted | pending | research-backed + doc-verified |
-| [0022](0022-ci-supply-chain-runtime-hardening.md) | CI supply-chain runtime hardening — Actions SAST + runner egress monitoring | Accepted | pending | research-backed + doc-verified |
-| [0023](0023-vpc-lattice-resource-connectivity.md) | VPC Lattice resource connectivity (cross-account/cross-VPC TCP resource access) | Accepted | pending | research-backed + doc-verified |
-| [0024](0024-argocd-operational-hardening.md) | ArgoCD operational hardening (PreDelete hooks, shallow clone, server-side diff/apply, progressive ApplicationSet rollout) | Accepted | pending | research-backed + doc-verified |
-| [0025](0025-envoy-gateway-secondary-l7.md) | Envoy Gateway as a secondary L7 GatewayClass alongside Cilium | Accepted | pending | research-backed + doc-verified |
-| [0026](0026-observability-target-architecture.md) | Observability target architecture (LGTM: Prometheus 3 + Thanos, Loki, Tempo, Alloy) | Accepted | pending | research-backed + doc-verified |
-| [0027](0027-kubernetes-cost-opencost-cur.md) | Kubernetes cost allocation via OpenCost + AWS CUR/Athena | Accepted | pending | research-backed + doc-verified |
+| [0017](0017-resource-side-perimeter-and-declarative-org-controls.md) | Resource-side data perimeter and declarative org controls (AFT vending, RCPs, EC2 Declarative Policies, full-IAM SCPs) | Accepted | partial | research-backed + doc-verified |
+| [0018](0018-eks-pod-identity-as-default-workload-identity.md) | EKS Pod Identity as the default workload identity (IRSA becomes legacy) | Accepted | implemented | research-backed + doc-verified |
+| [0019](0019-harvest-cilium-ebpf-capabilities.md) | Harvest unused Cilium / eBPF capabilities (OBI tracing, Hubble UI, Tetragon, ClusterMesh, netkit pilot) | Accepted | partial | research-backed + doc-verified |
+| [0020](0020-kyverno-and-vap-policy-engine.md) | Kyverno + ValidatingAdmissionPolicy as the policy-engine layer (admission-time cosign) | Accepted | implemented | research-backed + doc-verified |
+| [0021](0021-kargo-gitops-promotion-layer.md) | Kargo as the GitOps environment-promotion layer (OTel SLO-gating) | Accepted | implemented | research-backed + doc-verified |
+| [0022](0022-ci-supply-chain-runtime-hardening.md) | CI supply-chain runtime hardening — Actions SAST + runner egress monitoring | Accepted | partial | research-backed + doc-verified |
+| [0023](0023-vpc-lattice-resource-connectivity.md) | VPC Lattice resource connectivity (cross-account/cross-VPC TCP resource access) | Accepted | implemented | research-backed + doc-verified |
+| [0024](0024-argocd-operational-hardening.md) | ArgoCD operational hardening (PreDelete hooks, shallow clone, server-side diff/apply, progressive ApplicationSet rollout) | Accepted | implemented | research-backed + doc-verified |
+| [0025](0025-envoy-gateway-secondary-l7.md) | Envoy Gateway as a secondary L7 GatewayClass alongside Cilium | Accepted | implemented | research-backed + doc-verified |
+| [0026](0026-observability-target-architecture.md) | Observability target architecture (LGTM: Prometheus 3 + Thanos, Loki, Tempo, Alloy) | Accepted | implemented | research-backed + doc-verified |
+| [0027](0027-kubernetes-cost-opencost-cur.md) | Kubernetes cost allocation via OpenCost + AWS CUR/Athena | Accepted | implemented | research-backed + doc-verified |
 | [0028](0028-unified-platform-tagging-and-labeling-taxonomy.md) | Unified Platform Tagging and Labeling Taxonomy | Accepted | pending | native |
 | [0029](0029-ecr-pull-through-cache.md) | ECR Pull-Through Cache for public upstream registries | Accepted | synced (module) | proposal — doc-verified 2026-06-08 |
 | [0030](0030-bottlerocket-node-os.md) | Bottlerocket as the EKS node operating system | Accepted | synced (module) / pending (manifests) | proposal — doc-verified 2026-06-08 |
