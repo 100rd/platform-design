@@ -401,6 +401,7 @@ Re-open this decision if any of the following hold:
   <https://cloud.google.com/kubernetes-engine/docs/concepts/about-gke-inference-gateway>
 - Cloud Armor (`google_compute_security_policy`):
   <https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_security_policy>
+- In-repo diagram: `docs/architecture/gcp-ml-stack-adr-0042.excalidraw` (reworked stack).
 - In-repo: `terraform/modules/gcp-gpu-vpc`, `terraform/modules/gcp-gke-gpu-nodepools`,
   `terraform/modules/gpu-inference-dra`, `terraform/modules/gpu-inference-vllm`,
   `terraform/modules/gke-gpu-operator`, `terraform/modules/gke-gpu-dcgm`,
