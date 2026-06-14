@@ -1,0 +1,5 @@
+environment: "production"
+rabbitmq:
+  replicas: 3
+  storageSize: 20Gi
+  storageClassName: gp3

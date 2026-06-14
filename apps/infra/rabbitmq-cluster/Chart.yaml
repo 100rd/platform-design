@@ -1,0 +1,6 @@
+apiVersion: v2
+name: rabbitmq-cluster
+description: Provisions the RabbitMQ cluster instance and associated vhosts, users, and permissions
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

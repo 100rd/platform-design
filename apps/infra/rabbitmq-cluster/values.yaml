@@ -1,0 +1,7 @@
+# Default values for rabbitmq-cluster.
+# Overridden per environment under envs/<env>/values/infra/rabbitmq-cluster.yaml.
+
+rabbitmq:
+  replicas: 1
+  storageSize: 10Gi
+  storageClassName: gp3
