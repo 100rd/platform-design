@@ -86,6 +86,7 @@ decision.
 | [0040](0040-soc-posture-and-oncall.md) | SOC2 posture — GCP org-policy parity + cross-cloud WIF (GCP↔AWS) + control-to-evidence matrix + ML on-call/runbooks | Proposed | pending | WS-E of GCP ML platform plan; design 2026-06-10 |
 | [0041](0041-golden-paths-collaboration.md) | Golden-path templates, shared contracts, and cross-team collaboration model (Backstage deferred, ADR-0034) | Proposed | pending | WS-F of GCP ML platform plan; design 2026-06-10 |
 | [0042](0042-gpu-inference-networking-serving-uplift.md) | GPU inference networking & serving uplift — per-family fabric (jumbo+gVNIC / GPUDirect-TCPX·TCPXO / DRANET·RoCE), GKE Inference Gateway, Cloud Armor | Proposed | pending | extends WS-A (network/serving axis); design 2026-06-13 |
+| [0043](0043-eks-cross-cluster-connectivity.md) | EKS cross-cluster connectivity (app A→B) — options survey + decision: peered TGW substrate, default Cilium ClusterMesh, per-flow PrivateLink / VPC Lattice / NLB+Route53 / private ingress | Proposed | pending | builds on ADR-0005/0013/0019/0023; design 2026-06-14 |
 
 
 
