@@ -1,10 +1,8 @@
 # ADR-0021: Kargo as the GitOps environment-promotion layer
 
-- Status: **Accepted** — research-backed + doc-verified; ratified, not yet
-  implemented.
+- Status: **Accepted** — **Implemented** (epic #252); research-backed + doc-verified.
 - Ratified: 2026-06-07 by platform owner.
-- platform-design status: **pending** — Kargo is scaffolded (Warehouse → Stage →
-  Freight graph) but not activated; the bootstrap App pins the old chart.
+- platform-design status: **implemented** — Kargo 1.9 + Prometheus/Tempo SLO gates (#258).
 - Date: 2026-06-06
 - Authors: platform-team
 - Related issues: epic #252

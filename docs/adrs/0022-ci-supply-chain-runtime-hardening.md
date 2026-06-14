@@ -1,10 +1,8 @@
 # ADR-0022: CI supply-chain runtime hardening — Actions SAST + runner egress monitoring
 
-- Status: **Accepted** — research-backed + doc-verified; ratified, partly spiked,
-  not yet fully implemented.
+- Status: **Accepted** — **partially implemented** (epic #252); research-backed + doc-verified.
 - Ratified: 2026-06-07 by platform owner.
-- platform-design status: **pending** — no Actions-workflow linting or runner
-  runtime monitoring is wired in; spike PR #251 prototypes part of it.
+- platform-design status: **partial** — zizmor SARIF gate merged; Harden-Runner/attestations/immutable-releases/cosign-2.4 pending (#313).
 - Implemented by: spike PR #251 (partial — prototypes the zizmor / Harden-Runner
   wiring).
 - Date: 2026-06-06

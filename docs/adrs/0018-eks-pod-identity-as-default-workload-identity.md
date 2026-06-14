@@ -1,10 +1,8 @@
 # ADR-0018: EKS Pod Identity as the default workload identity (IRSA becomes legacy)
 
-- Status: **Accepted** — research-backed + doc-verified; ratified, not yet
-  implemented.
+- Status: **Accepted** — **Implemented** (epic #252); research-backed + doc-verified.
 - Ratified: 2026-06-07 by platform owner.
-- platform-design status: **pending** — workloads still bind identity via IRSA
-  annotations; no `PodIdentityAssociation` resources are wired in.
+- platform-design status: **implemented** — Pod Identity + ESO 2.6 across workloads (#254/#267/#269).
 - Date: 2026-06-06
 - Authors: platform-team, security
 - Related issues: epic #252

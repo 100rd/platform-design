@@ -1,10 +1,8 @@
 # ADR-0025: Envoy Gateway as a secondary L7 GatewayClass alongside Cilium
 
-- Status: **Accepted** — research-backed + doc-verified; ratified, not yet
-  implemented.
+- Status: **Accepted** — **Implemented** (epic #252); research-backed + doc-verified.
 - Ratified: 2026-06-07 by platform owner.
-- platform-design status: **pending** — only the Cilium Gateway API GatewayClass
-  (ADR-0009) is present; no Envoy Gateway GatewayClass is deployed.
+- platform-design status: **implemented** — Envoy Gateway secondary GatewayClass (#260).
 - Date: 2026-06-07
 - Authors: platform-team
 - Related issues: epic #252
