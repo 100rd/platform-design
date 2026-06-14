@@ -1,4 +1,4 @@
-{"generated_at": "2026-06-10T20:32:47Z", "applications": [
+{"generated_at": "2026-06-14T12:55:07Z", "applications": [
 {
   "name": "airflow",
   "chartVersion": "1.0.0",
@@ -229,6 +229,14 @@
   "appVersion": "0.10.0",
   "description": "SLO operator and UI (Pyrra) — emits PrometheusRules from ServiceLevelObjective CRs (ADR-0026)",
   "path": "apps/infra/pyrra"
+}
+,
+{
+  "name": "rabbitmq-cluster",
+  "chartVersion": "1.0.0",
+  "appVersion": "1.0.0",
+  "description": "Provisions the RabbitMQ cluster instance and associated vhosts, users, and permissions",
+  "path": "apps/infra/rabbitmq-cluster"
 }
 ,
 {

@@ -37,6 +37,7 @@ Applications deployed via ArgoCD from `apps/infra/`
 | opencost | 1.0.0 | 1.113.0 | >- |
 | otel-operator | 0.1.0 |  | OpenTelemetry Operator with auto-instrumentation for Go appl |
 | pyrra | 1.0.0 | 0.10.0 | SLO operator and UI (Pyrra) — emits PrometheusRules from S |
+| rabbitmq-cluster | 1.0.0 | 1.0.0 | Provisions the RabbitMQ cluster instance and associated vhos |
 | rabbitmq-operator | 1.0.0 | 2.12.0 | RabbitMQ Cluster Operator - Kubernetes-native RabbitMQ lifec |
 | tetragon | 1.0.0 | 1.3.0 | | |
 | velero | 1.1.0 | 1.15.0 | Velero - Kubernetes backup and disaster recovery |
