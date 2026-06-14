@@ -31,7 +31,7 @@ jobs:
     name: Generate diagrams
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Need full history for the commit step.
           fetch-depth: 0

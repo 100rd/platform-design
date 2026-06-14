@@ -81,7 +81,7 @@ jobs:
       matrix:
         language: ${{ fromJSON(inputs.languages) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: CodeQL SAST
         uses: ./.github/actions/sast-codeql

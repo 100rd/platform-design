@@ -111,7 +111,7 @@ jobs:
       image_digest: ${{ steps.push.outputs.digest }}
       image_tag: ${{ steps.meta.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure AWS credentials via OIDC
         id: aws-creds

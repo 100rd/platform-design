@@ -22,7 +22,7 @@ jobs:
     name: HCL Format Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install Terragrunt
         run: |
           curl -Lo /tmp/terragrunt -L "https://github.com/gruntwork-io/terragrunt/releases/download/v${TG_VERSION}/terragrunt_linux_amd64"
@@ -41,7 +41,7 @@ jobs:
     name: Validate Catalog Units
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Validate HCL syntax (balanced braces)
         shell: bash
         run: |
