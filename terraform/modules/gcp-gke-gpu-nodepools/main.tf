@@ -88,6 +88,9 @@ resource "google_container_node_pool" "this" {
         "managed-by"   = "terraform"
         "cluster-role" = "gpu-analysis"
         "node-pool"    = each.key
+        # ADR-0042: record the fabric mode so gke-gpu-fabric / gke-gpu-dranet and
+        # workloads can node-select the right GPUDirect/RoCE pool.
+        "fabric-mode" = each.value.fabric_mode
       },
       local.operator_driver_labels,
     )
@@ -96,9 +99,32 @@ resource "google_container_node_pool" "this" {
       "https://www.googleapis.com/auth/cloud-platform",
     ]
 
+    # ADR-0042 D1: gVNIC is the GPU-network baseline and a hard prerequisite for
+    # GPUDirect-TCPX/TCPXO and RDMA NICs. On by default; opt-out per pool.
+    gvnic {
+      enabled = each.value.enable_gvnic
+    }
+
     # Workload Identity — use GKE metadata server
     workload_metadata_config {
       mode = "GKE_METADATA"
+    }
+  }
+
+  # ---------------------------------------------------------------------------
+  # ADR-0042 D2/D3 — additional GPU NICs (TCPX/TCPXO data-plane or RoCE RDMA).
+  # Empty by default → no network_config block, existing pools unchanged.
+  # ---------------------------------------------------------------------------
+  dynamic "network_config" {
+    for_each = length(each.value.additional_node_networks) > 0 ? [1] : []
+    content {
+      dynamic "additional_node_network_configs" {
+        for_each = each.value.additional_node_networks
+        content {
+          network    = additional_node_network_configs.value.network
+          subnetwork = additional_node_network_configs.value.subnetwork
+        }
+      }
     }
   }
 

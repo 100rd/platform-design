@@ -166,7 +166,7 @@ plan_unit() {
   # Run init (quiet)
   if ! timeout "${PLAN_TIMEOUT}" terragrunt init \
       --non-interactive \
-      --terragrunt-no-auto-init=false \
+      --no-auto-init=false \
       -no-color \
       2>&1 | tail -3 >/dev/null; then
     log_warn "Init failed for ${unit_name} — skipping"

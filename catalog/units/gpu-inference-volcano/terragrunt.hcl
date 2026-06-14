@@ -31,7 +31,7 @@ dependency "eks" {
   mock_outputs = {
     cluster_name                       = "mock-cluster"
     cluster_endpoint                   = "https://mock-endpoint.eks.amazonaws.com"
-    cluster_certificate_authority_data = "bW9jay1jZXJ0LWRhdGE="
+    cluster_certificate_authority_data = ""
   }
 
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]

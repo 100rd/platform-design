@@ -22,7 +22,7 @@
 locals {
   # ---- Tool versions ----
   terraform_version  = "1.14.8"
-  terragrunt_version = "0.99.5"
+  terragrunt_version = "1.0.8"
 
   # Pretty constraint forms (consumed by `required_version` and `terragrunt_version_constraint`)
   terraform_version_constraint  = "= ${local.terraform_version}"

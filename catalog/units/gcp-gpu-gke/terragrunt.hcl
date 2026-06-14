@@ -1,3 +1,7 @@
+include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
 # ---------------------------------------------------------------------------------------------------------------------
 # GCP GPU GKE Cluster — Catalog Unit
 # ---------------------------------------------------------------------------------------------------------------------
@@ -123,8 +127,13 @@ inputs = {
   # Cluster resource labels
   # ---------------------------------------------------------------------------
   cluster_resource_labels = {
-    environment  = local.environment
-    managed-by   = "terragrunt"
-    cluster-role = "gpu-analysis"
+    environment         = local.environment
+    managed-by          = "terragrunt"
+    cluster-role        = "gpu-analysis"
+    platform_system     = "ml-infrastructure"
+    platform_component  = "gke-cluster"
+    platform_env        = local.environment
+    platform_owner      = "team-data-platform"
+    platform_managed_by = "terraform"
   }
 }

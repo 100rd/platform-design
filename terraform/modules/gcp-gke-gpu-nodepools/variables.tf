@@ -36,7 +36,23 @@ variable "node_pool_configs" {
       value  = string
       effect = string
     })), [])
+
+    # ADR-0042 D1/D2/D3 — GPU fabric (additive; defaults preserve today's behaviour
+    # except gVNIC, which is the D1 baseline and on by default going forward).
+    enable_gvnic = optional(bool, true)
+    fabric_mode  = optional(string, "none") # none | tcpx | tcpxo | roce — recorded as a node label for fabric selection
+    additional_node_networks = optional(list(object({
+      network    = string
+      subnetwork = string
+    })), [])
   }))
+
+  validation {
+    condition = alltrue([
+      for k, v in var.node_pool_configs : contains(["none", "tcpx", "tcpxo", "roce"], v.fabric_mode)
+    ])
+    error_message = "fabric_mode must be one of: none, tcpx, tcpxo, roce."
+  }
 }
 
 variable "labels" {
