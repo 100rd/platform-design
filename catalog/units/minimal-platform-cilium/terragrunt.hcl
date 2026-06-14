@@ -53,7 +53,7 @@ dependency "eks_cluster" {
 
   mock_outputs = {
     cluster_endpoint                   = "https://XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.gr7.eu-central-1.eks.amazonaws.com"
-    cluster_certificate_authority_data = "bW9jay1jYS1kYXRh"
+    cluster_certificate_authority_data = ""
     cluster_name                       = "staging-eu-central-1-minimal-platform"
     cluster_oidc_issuer_url            = "https://oidc.eks.eu-central-1.amazonaws.com/id/MOCKMOCKMOCKMOCKMOCKMOCKMOCKMOCK"
     oidc_provider_arn                  = "arn:aws:iam::000000000000:oidc-provider/oidc.eks.eu-central-1.amazonaws.com/id/MOCKMOCKMOCKMOCKMOCKMOCKMOCKMOCK"

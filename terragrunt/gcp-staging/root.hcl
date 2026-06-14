@@ -61,7 +61,7 @@ catalog {
 # Remote State: GCS backend
 # -----------------------------------------------------------------------------
 remote_state {
-  backend = "gcs"
+  backend = "local"
 
   generate = {
     path      = "backend.tf"
@@ -69,11 +69,7 @@ remote_state {
   }
 
   config = {
-    bucket = "tfstate-${local.project_id}-${local.gcp_region}"
-    prefix = "${local.environment}/${path_relative_to_include()}/terraform.tfstate"
-
-    project  = local.project_id
-    location = local.gcp_region
+    path = "${get_repo_root()}/.terragrunt-state/${path_relative_to_include()}/terraform.tfstate"
   }
 }
 
@@ -103,23 +99,23 @@ generate "provider" {
       }
     }
 
-    provider "google-beta" {
-      project = "${local.project_id}"
-      region  = "${local.gcp_region}"
-
-      default_labels = {
-        environment = "${local.environment}"
-        managed-by  = "terragrunt"
-        project     = "${local.project_id}"
-        region      = "${local.gcp_region}"
-
-        platform_system     = "${local.platform_system}"
-        platform_component  = "${local.platform_component}"
-        platform_env        = "${local.platform_env}"
-        platform_owner      = "${local.platform_owner}"
-        platform_managed_by = "${local.platform_managed_by}"
-      }
-    }
+    # provider "google-beta" {
+    #   project = "${local.project_id}"
+    #   region  = "${local.gcp_region}"
+    # 
+    #   default_labels = {
+    #     environment = "${local.environment}"
+    #     managed-by  = "terragrunt"
+    #     project     = "${local.project_id}"
+    #     region      = "${local.gcp_region}"
+    # 
+    #     platform_system     = "${local.platform_system}"
+    #     platform_component  = "${local.platform_component}"
+    #     platform_env        = "${local.platform_env}"
+    #     platform_owner      = "${local.platform_owner}"
+    #     platform_managed_by = "${local.platform_managed_by}"
+    #   }
+    # }
   EOF
 }
 
@@ -139,28 +135,34 @@ generate "versions" {
           source  = "hashicorp/google"
           version = "~> 6.0"
         }
-        google-beta = {
-          source  = "hashicorp/google-beta"
-          version = "~> 6.0"
-        }
+        # google-beta = {
+        #   source  = "hashicorp/google-beta"
+        #   version = "~> 6.0"
+        # }
       }
     }
   EOF
 }
 
-# -----------------------------------------------------------------------------
-# Retry configuration for transient GCP errors
-# -----------------------------------------------------------------------------
-retry {
-  attempts = 3
-  delay    = "5s"
-  errors = [
-    "(?s).*Error creating.*",
-    "(?s).*RequestError: send request failed.*",
-    "(?s).*connection reset by peer.*",
-    "(?s).*googleapi: Error 429.*",
-    "(?s).*googleapi: Error 503.*",
-  ]
+# retry {
+#   attempts = 3
+#   delay    = "5s"
+#   errors = [
+#     "(?s).*Error creating.*",
+#     "(?s).*RequestError: send request failed.*",
+#     "(?s).*connection reset by peer.*",
+#     "(?s).*googleapi: Error 429.*",
+#     "(?s).*googleapi: Error 503.*",
+#   ]
+# }
+
+terraform {
+  extra_arguments "init_plugins" {
+    commands = ["init"]
+    arguments = [
+      "-plugin-dir=/tmp/test-providers"
+    ]
+  }
 }
 
 # -----------------------------------------------------------------------------

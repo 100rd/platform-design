@@ -91,6 +91,39 @@ unit "gke-gpu-scheduling-primary" {
   }
 }
 
+# ADR-0042 — networking & serving uplift (gated OFF by default; apply-gated to enable).
+unit "gcp-cloud-armor-primary" {
+  source = "${get_repo_root()}/catalog/units/gcp-cloud-armor"
+  path   = "${local.primary_region}/gcp-cloud-armor"
+  values = {
+    region = local.primary_region
+  }
+}
+
+unit "gke-gpu-dranet-primary" {
+  source = "${get_repo_root()}/catalog/units/gke-gpu-dranet"
+  path   = "${local.primary_region}/gke-gpu-dranet"
+  values = {
+    region = local.primary_region
+  }
+}
+
+unit "gke-gpu-fabric-primary" {
+  source = "${get_repo_root()}/catalog/units/gke-gpu-fabric"
+  path   = "${local.primary_region}/gke-gpu-fabric"
+  values = {
+    region = local.primary_region
+  }
+}
+
+unit "gke-inference-gateway-primary" {
+  source = "${get_repo_root()}/catalog/units/gke-inference-gateway"
+  path   = "${local.primary_region}/gke-inference-gateway"
+  values = {
+    region = local.primary_region
+  }
+}
+
 # ---------------------------------------------------------------------------------------------------------------------
 # Secondary region — full GPU analysis stack.
 # ---------------------------------------------------------------------------------------------------------------------
@@ -141,4 +174,57 @@ unit "gke-gpu-scheduling-secondary" {
   values = {
     region = local.secondary_region
   }
+}
+
+# ADR-0042 — networking & serving uplift (gated OFF by default; apply-gated to enable).
+unit "gcp-cloud-armor-secondary" {
+  source = "${get_repo_root()}/catalog/units/gcp-cloud-armor"
+  path   = "${local.secondary_region}/gcp-cloud-armor"
+  values = {
+    region = local.secondary_region
+  }
+}
+
+unit "gke-gpu-dranet-secondary" {
+  source = "${get_repo_root()}/catalog/units/gke-gpu-dranet"
+  path   = "${local.secondary_region}/gke-gpu-dranet"
+  values = {
+    region = local.secondary_region
+  }
+}
+
+unit "gke-gpu-fabric-secondary" {
+  source = "${get_repo_root()}/catalog/units/gke-gpu-fabric"
+  path   = "${local.secondary_region}/gke-gpu-fabric"
+  values = {
+    region = local.secondary_region
+  }
+}
+
+unit "gke-inference-gateway-secondary" {
+  source = "${get_repo_root()}/catalog/units/gke-inference-gateway"
+  path   = "${local.secondary_region}/gke-inference-gateway"
+  values = {
+    region = local.secondary_region
+  }
+}
+
+unit "gke-gpu-operator" {
+  source = "${get_repo_root()}/catalog/units/gke-gpu-operator"
+  path   = "gke-gpu-operator"
+}
+
+unit "gke-gpu-dcgm" {
+  source = "${get_repo_root()}/catalog/units/gke-gpu-dcgm"
+  path   = "gke-gpu-dcgm"
+}
+
+unit "gke-gpu-scheduling" {
+  source = "${get_repo_root()}/catalog/units/gke-gpu-scheduling"
+  path   = "gke-gpu-scheduling"
+}
+
+unit "gcp-billing-budget" {
+  source = "${get_repo_root()}/catalog/units/gcp-billing-budget"
+  path   = "gcp-billing-budget"
 }
