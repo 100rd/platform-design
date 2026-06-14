@@ -182,8 +182,8 @@ resource "aws_db_instance" "main" {
 
 # IAM Role for Enhanced Monitoring
 resource "aws_iam_role" "rds_monitoring" {
-  count              = var.monitoring_interval > 0 ? 1 : 0
-  name_prefix        = "${var.name_prefix}-rds-monitoring-"
+  count       = var.monitoring_interval > 0 ? 1 : 0
+  name_prefix = "${var.name_prefix}-rds-monitoring-"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{

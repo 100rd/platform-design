@@ -110,3 +110,71 @@ run "operator_managed_driver_true_omits_driver_and_adds_labels" {
     error_message = "Operator path must still carry the baseline managed-by = terraform label."
   }
 }
+
+# ---------------------------------------------------------------------------------------------------------------------
+# ADR-0042 — GPU fabric: gVNIC baseline (D1) + per-family fabric attach (D2/D3).
+# ---------------------------------------------------------------------------------------------------------------------
+
+run "gvnic_on_and_no_extra_nics_by_default" {
+  command = plan
+
+  variables {
+    node_pool_configs = {
+      a100 = {
+        machine_type      = "a2-ultragpu-1g"
+        accelerator_type  = "nvidia-a100-80gb"
+        accelerator_count = 1
+      }
+    }
+  }
+
+  # D1: gVNIC defaults on.
+  assert {
+    condition     = google_container_node_pool.this["a100"].node_config[0].gvnic[0].enabled == true
+    error_message = "gVNIC must default to enabled (ADR-0042 D1)."
+  }
+
+  # fabric_mode defaults to "none" → recorded as a node label.
+  assert {
+    condition     = google_container_node_pool.this["a100"].node_config[0].labels["fabric-mode"] == "none"
+    error_message = "fabric-mode label must default to none."
+  }
+
+  # No additional NICs unless requested → no network_config block.
+  assert {
+    condition     = length(google_container_node_pool.this["a100"].network_config) == 0
+    error_message = "No network_config (extra NICs) should be created by default."
+  }
+}
+
+run "tcpx_attaches_four_data_plane_nics" {
+  command = plan
+
+  variables {
+    node_pool_configs = {
+      h100 = {
+        machine_type      = "a3-highgpu-8g"
+        accelerator_type  = "nvidia-h100-80gb"
+        accelerator_count = 8
+        fabric_mode       = "tcpx"
+        additional_node_networks = [
+          { network = "gpu-dp-0", subnetwork = "gpu-dp-0-subnet" },
+          { network = "gpu-dp-1", subnetwork = "gpu-dp-1-subnet" },
+          { network = "gpu-dp-2", subnetwork = "gpu-dp-2-subnet" },
+          { network = "gpu-dp-3", subnetwork = "gpu-dp-3-subnet" },
+        ]
+      }
+    }
+  }
+
+  assert {
+    condition     = google_container_node_pool.this["h100"].node_config[0].labels["fabric-mode"] == "tcpx"
+    error_message = "H100 pool must carry fabric-mode = tcpx."
+  }
+
+  assert {
+    condition     = length(google_container_node_pool.this["h100"].network_config[0].additional_node_network_configs) == 4
+    error_message = "TCPX H100 pool must attach 4 data-plane NICs."
+  }
+}
+
