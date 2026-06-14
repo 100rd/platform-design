@@ -1,3 +1,7 @@
+include "root" {
+  path = find_in_parent_folders("root.hcl")
+}
+
 # ---------------------------------------------------------------------------------------------------------------------
 # GCP GPU Node Pools — Catalog Unit
 # ---------------------------------------------------------------------------------------------------------------------
@@ -60,4 +64,11 @@ inputs = {
     managed-by   = "terragrunt"
     cluster-role = "gpu-analysis"
   }
+
+  # ADR-0028 taxonomy
+  platform_system     = "ml-infrastructure"
+  platform_component  = "gpu-nodepools"
+  platform_env        = local.environment
+  platform_owner      = "team-data-platform"
+  platform_managed_by = "terraform"
 }

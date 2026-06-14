@@ -37,3 +37,32 @@ output "router_name" {
   description = "The name of the Cloud Router."
   value       = google_compute_router.this.name
 }
+
+# ---------------------------------------------------------------------------------------------------------------------
+# ADR-0042 — GPU fabric network outputs (consumed by gcp-gke-gpu-nodepools / gke-gpu-fabric / gke-gpu-dranet)
+# ---------------------------------------------------------------------------------------------------------------------
+
+output "mtu" {
+  description = "The MTU applied to the GPU VPC network(s)."
+  value       = google_compute_network.this.mtu
+}
+
+output "data_plane_network_self_links" {
+  description = "Self-links of the GPUDirect-TCPX/TCPXO data-plane networks (empty when data_plane_network_count = 0)."
+  value       = google_compute_network.data_plane[*].self_link
+}
+
+output "data_plane_subnet_self_links" {
+  description = "Self-links of the data-plane subnetworks, index-aligned with data_plane_network_self_links."
+  value       = google_compute_subnetwork.data_plane[*].self_link
+}
+
+output "rdma_network_self_link" {
+  description = "Self-link of the RoCE RDMA network, or null when enable_rdma_network = false."
+  value       = var.enable_rdma_network ? google_compute_network.rdma[0].self_link : null
+}
+
+output "rdma_subnet_self_link" {
+  description = "Self-link of the RDMA subnetwork, or null when enable_rdma_network = false."
+  value       = var.enable_rdma_network ? google_compute_subnetwork.rdma[0].self_link : null
+}

@@ -14,8 +14,8 @@ on:
   workflow_dispatch:
 
 env:
-  # Pin to match root.hcl terragrunt_version_constraint = "= 0.99.5"
-  TG_VERSION: "0.99.5"
+  # Pin to match root.hcl terragrunt_version_constraint = "= 1.0.8"
+  TG_VERSION: "1.0.8"
 
 jobs:
   hclfmt:

@@ -30,7 +30,7 @@ dependency "eks" {
   mock_outputs = {
     cluster_name                       = "mock-cluster"
     cluster_endpoint                   = "https://mock-endpoint.eks.amazonaws.com"
-    cluster_certificate_authority_data = "bW9jay1jZXJ0LWRhdGE="
+    cluster_certificate_authority_data = ""
     oidc_provider_arn                  = "arn:aws:iam::123456789012:oidc-provider/oidc.eks.eu-west-1.amazonaws.com/id/MOCK"
   }
 
