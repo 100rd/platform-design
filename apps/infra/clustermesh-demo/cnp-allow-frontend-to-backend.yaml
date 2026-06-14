@@ -1,0 +1,32 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# Cross-cluster allow policy — apply in cluster B (staging-eu-central-1)
+# ---------------------------------------------------------------------------------------------------------------------
+# With default-deny in force, this is the ONLY thing that lets frontend in cluster A
+# (staging-euw1) reach backend in cluster B. The source is selected by Cilium's
+# cross-cluster identity label `io.cilium.k8s.policy.cluster`, plus the app label.
+# L7 rule restricts it to GET on / (tighten per real API).
+# ---------------------------------------------------------------------------------------------------------------------
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-frontend-a-to-backend
+  namespace: clustermesh-demo
+spec:
+  endpointSelector:
+    matchLabels:
+      app: backend
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            # Remote-cluster identity: only the frontend in cluster A may call us.
+            io.cilium.k8s.policy.cluster: staging-euw1
+            k8s:io.kubernetes.pod.namespace: clustermesh-demo
+            app: frontend
+      toPorts:
+        - ports:
+            - port: "9898"
+              protocol: TCP
+          rules:
+            http:
+              - method: "GET"
+                path: "/"

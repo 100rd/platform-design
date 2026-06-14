@@ -1,0 +1,124 @@
+# ---------------------------------------------------------------------------------------------------------------------
+# ClusterMesh cross-cluster demo — app in cluster A (staging-euw1) calls a service in cluster B (staging-euc1)
+# ---------------------------------------------------------------------------------------------------------------------
+# Reference manifests for ADR-0043 D2 (Cilium ClusterMesh, WireGuard-encrypted). NOT auto-applied —
+# apply per cluster with kubectl or wire into ArgoCD once the mesh is connected
+# (docs/runbooks/cilium-clustermesh-connect.md).
+#
+# Topology:
+#   - `backend` runs in cluster B (staging-eu-central-1) and is exposed as a GLOBAL service.
+#   - `frontend` runs in cluster A (staging-eu-west-1) and calls `backend` by its normal
+#     in-cluster DNS name; Cilium resolves it to the remote endpoints across the mesh.
+#   - Traffic is WireGuard-encrypted pod-to-pod (Cilium encryption.type=wireguard).
+#   - Default-deny is in force (CiliumClusterwideNetworkPolicy default-deny-all); the
+#     CiliumNetworkPolicy below is what explicitly allows frontend(A) -> backend(B).
+# ---------------------------------------------------------------------------------------------------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: clustermesh-demo
+  labels:
+    app.kubernetes.io/part-of: clustermesh-demo
+---
+# ---------------------------------------------------------------------------------------------------------------------
+# BACKEND — deploy in cluster B (staging-eu-central-1). The Service is GLOBAL so its
+# endpoints are advertised across the mesh. `affinity: local` makes callers prefer
+# same-cluster endpoints and only spill cross-cluster when none are local.
+# ---------------------------------------------------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: clustermesh-demo
+  labels:
+    app: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: ghcr.io/stefanprodan/podinfo:6.7.1
+          ports:
+            - name: http
+              containerPort: 9898
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: clustermesh-demo
+  annotations:
+    service.cilium.io/global: "true"      # advertise endpoints across the mesh
+    service.cilium.io/affinity: "local"   # prefer local endpoints, spill cross-cluster
+spec:
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+# ---------------------------------------------------------------------------------------------------------------------
+# FRONTEND — deploy in cluster A (staging-eu-west-1). Calls the backend by its normal
+# in-cluster name; with no local backend endpoints, Cilium routes to cluster B over the
+# mesh. (Annotate the same-named Service global in A so the name resolves mesh-wide.)
+# ---------------------------------------------------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: clustermesh-demo
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: curlimages/curl:8.11.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              while true; do
+                echo "[frontend@A] GET http://backend.clustermesh-demo.svc.cluster.local:8080/";
+                curl -fsS --max-time 5 http://backend.clustermesh-demo.svc.cluster.local:8080/ || echo "call failed";
+                sleep 10;
+              done
+---
+# Global stub Service in cluster A so the name resolves to the mesh-wide endpoint set
+# (cluster A has no local backend pods; endpoints come from cluster B).
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: clustermesh-demo
+  annotations:
+    service.cilium.io/global: "true"
+    service.cilium.io/affinity: "remote"  # in A there are no local endpoints; use remote
+  labels:
+    app.kubernetes.io/note: apply-in-cluster-A-only
+spec:
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

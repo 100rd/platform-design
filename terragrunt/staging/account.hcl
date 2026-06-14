@@ -58,6 +58,36 @@ locals {
     "eu-central-1" = "10.13.0.0/16"
   }
 
+  # ClusterMesh cross-cluster connect (cross-region cert exchange).
+  # Gated: stays false (and the connect unit is inert) until both clusters' Cilium
+  # apiservers are up and each peer's CA/client cert/key have been exchanged into
+  # AWS Secrets Manager. See docs/runbooks/cilium-clustermesh-connect.md.
+  # When flipped to true, the connect unit on each cluster reads its peer's TLS
+  # material from Secrets Manager and writes the cilium-clustermesh-<remote> secret.
+  clustermesh_connect_enabled = false
+  clustermesh_remote_clusters = {
+    # On eu-central-1 (cluster id 2) the peer is eu-west-1 (cluster id 1).
+    "eu-central-1" = [
+      {
+        name           = "staging-euw1"
+        endpoint       = "clustermesh-apiserver.staging-euw1.internal:2379"
+        ca_secret_id   = "staging/eu-west-1/clustermesh/ca-cert"
+        cert_secret_id = "staging/eu-west-1/clustermesh/client-cert"
+        key_secret_id  = "staging/eu-west-1/clustermesh/client-key"
+      },
+    ]
+    # On eu-west-1 (cluster id 1) the peer is eu-central-1 (cluster id 2).
+    "eu-west-1" = [
+      {
+        name           = "staging-euc1"
+        endpoint       = "clustermesh-apiserver.staging-euc1.internal:2379"
+        ca_secret_id   = "staging/eu-central-1/clustermesh/ca-cert"
+        cert_secret_id = "staging/eu-central-1/clustermesh/client-cert"
+        key_secret_id  = "staging/eu-central-1/clustermesh/client-key"
+      },
+    ]
+  }
+
   # --- External traffic (multi-region) ---
   enable_nlb_ingress        = true
   enable_global_accelerator = true

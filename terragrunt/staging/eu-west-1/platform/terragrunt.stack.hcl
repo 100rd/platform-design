@@ -39,6 +39,11 @@ unit "clustermesh-sg-rules" {
   path   = "clustermesh-sg-rules"
 }
 
+unit "clustermesh-connect" {
+  source = "${get_repo_root()}/catalog/units/clustermesh-connect"
+  path   = "clustermesh-connect"
+}
+
 unit "karpenter-iam" {
   source = "${get_repo_root()}/catalog/units/karpenter-iam"
   path   = "karpenter-iam"
