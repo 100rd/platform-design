@@ -1,0 +1,64 @@
+---
+# Kargo Stage -- ml-pipeline-baremetal prod (WS-B, ADR-0037 reused)
+# Two-step rollout: staging (auto) -> prod (human-gated).
+# Prod promotion requires explicit human approval via Kargo UI or CLI.
+# ADR-0028: platform.system=ml-pipeline, platform.managed-by=kargo.
+# ADR-0037: gated prod promotion (no auto-advance from staging to prod).
+# ADR-0049: UK-isolated; production model artifacts stay in UK DC.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: prod
+  namespace: ml-pipeline-baremetal
+  labels:
+    platform.system: ml-pipeline
+    platform.component: model-registry
+    platform.managed-by: kargo
+spec:
+  requestedFreight:
+    - origin:
+        kind: Warehouse
+        name: ml-pipeline-baremetal
+      sources:
+        # Prod only accepts freight that has passed staging (two-step rollout).
+        stages:
+          - staging
+
+  promotionTemplate:
+    spec:
+      steps:
+        - uses: git-clone
+          config:
+            repoURL: git@github.com:100rd/platform-design.git
+            checkout:
+              - branch: main
+                path: ./src
+
+        - uses: yaml-update
+          as: update-mlflow-baremetal-prod-tag
+          config:
+            path: ./src/apps/infra/mlflow-baremetal/values.yaml
+            updates:
+              - key: mlflow.image.tag
+                value: ${{ imageFrom("ghcr.io/100rd/ml-models").Tag }}
+
+        - uses: git-commit
+          config:
+            path: ./src
+            message: "chore(ml-pipeline): promote baremetal-prod model"
+
+        - uses: git-push
+          config:
+            path: ./src
+
+        - uses: argocd-update
+          config:
+            apps:
+              - name: mlflow-baremetal
+
+  verification:
+    analysisTemplates:
+      - name: health-check
+      - name: smoke-test
+      - name: prometheus-5xx-error-rate
+      - name: prometheus-p95-latency

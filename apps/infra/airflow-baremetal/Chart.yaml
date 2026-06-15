@@ -1,0 +1,35 @@
+apiVersion: v2
+name: airflow-baremetal
+description: >-
+  Apache Airflow ML pipeline orchestrator re-targeted at the bare-metal Talos
+  UK cluster. KubernetesExecutor; GPU training tasks use Volcano scheduler
+  via executor_config (UK DC training-* queues per 06-uk-datacenters.md).
+  PostgreSQL backend via CloudNativePG (UK DC inventory). Secrets from Vault/ESO.
+  ADR-0037 (reused) + ADR-0052 (storage substrate). WS-B bare metal.
+type: application
+version: 1.0.0
+appVersion: "2.9.3"
+
+keywords:
+  - airflow
+  - ml-pipeline
+  - orchestration
+  - bare-metal
+  - talos
+  - volcano
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+annotations:
+  category: ML Platform
+  platform: Kubernetes (Talos bare metal)
+  adr: "0037,0049,0052"
+
+dependencies:
+  # Official Apache Airflow Helm chart.
+  - name: airflow
+    version: "1.15.0"
+    repository: https://airflow.apache.org
+    condition: airflow.enabled
