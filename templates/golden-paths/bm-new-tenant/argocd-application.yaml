@@ -1,0 +1,75 @@
+---
+# Golden Path: bm-new-tenant -- ArgoCD Application (tenant-bootstrap GitOps updates)
+# Substrate: bare-metal Talos UK DC cluster (ADR-0049), KubePrism API
+#
+# USAGE: commit this file at:
+#   apps/infra/tenants/{{TENANT_ID}}/argocd-application.yaml
+#
+# This Application manages subsequent GitOps updates to the tenant bundle after
+# the first Helm install (Step 2 in README.md). The first install is manual
+# (apply-gated, requires platform lead approval per .claude/rules/critical-decisions.md).
+#
+# Wave 5 -- before any tenant workload Applications (waves 20-30).
+# ADR-0028 platform labels: system=tenant-bootstrap, component=namespace.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  # Substitute: tenant-{{TENANT_ID}}
+  name: "tenant-{{TENANT_ID}}"
+  namespace: argocd
+  labels:
+    # ADR-0028 platform taxonomy (K8s plane -- dotted form)
+    platform.system: "tenant-bootstrap"
+    platform.component: "namespace"
+    # Substitute: {{PLATFORM_ENV}}
+    platform.env: "{{PLATFORM_ENV}}"
+    # Substitute: {{TEAM_OWNER}}
+    platform.owner: "{{TEAM_OWNER}}"
+    platform.managed-by: "argocd"
+    # Substitute: tenant-{{TENANT_ID}}
+    app.kubernetes.io/name: "tenant-{{TENANT_ID}}"
+    app.kubernetes.io/component: "namespace"
+    app.kubernetes.io/managed-by: "argocd"
+    # Tenant label for multi-tenant filtering.
+    # Substitute: {{TENANT_ID}}
+    tenant: "{{TENANT_ID}}"
+    # Bare-metal cluster identifier.
+    cluster-substrate: "baremetal-uk"
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/your-org/platform-design.git
+    targetRevision: main
+    path: charts/tenant-bootstrap
+    helm:
+      valueFiles:
+        - values.yaml
+        # Substitute: apps/infra/tenants/{{TENANT_ID}}/helm-values.yaml
+        - "apps/infra/tenants/{{TENANT_ID}}/helm-values.yaml"
+  destination:
+    # Bare-metal cluster in-cluster API via KubePrism (ADR-0049 D2).
+    server: https://kubernetes.default.svc
+    # The chart creates the tenant namespace; ArgoCD manages the parent app here.
+    namespace: argocd
+  syncPolicy:
+    automated:
+      # prune: false -- tenant deletion is destructive; require explicit PR + approval.
+      prune: false
+      # selfHeal: false -- prevent unintended auto-revert of manual emergency changes.
+      selfHeal: false
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=false
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 2m

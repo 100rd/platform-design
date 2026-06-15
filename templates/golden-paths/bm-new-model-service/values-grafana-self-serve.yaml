@@ -1,0 +1,119 @@
+# Golden Path: bm-new-model-service -- grafana-self-serve values
+# WS-D (ADR-0039) chart: apps/infra/grafana-self-serve
+# Substrate: bare-metal Talos (ADR-0049) -- includes BM-specific panels
+#
+# USAGE: substitute all {{PLACEHOLDER}} values before committing.
+# Place the substituted file at:
+#   apps/infra/grafana-self-serve/example-teams/{{TEAM_SLUG}}/values.yaml
+#
+# BM additions vs GCP path (baremetal.enabled: true):
+#   - Talos node health (machine API liveness, kubelet ready)
+#   - InfiniBand/RoCEv2 fabric (NCCL all-reduce bandwidth, NVLink counters)
+#   - Cilium BGP session state (ToR peering; per cilium-bgp-issues.md)
+#   - Ceph cluster health (HEALTH_OK / HEALTH_WARN, OSD up/in)
+#   - etcd latency + quorum (self-operated control plane)
+#
+# See README.md Step 4 for full instructions.
+
+team:
+  # Human-readable team name shown in the Grafana folder title.
+  # Substitute: {{TEAM_NAME}}
+  name: "{{TEAM_NAME}}"
+
+  # Machine-safe slug -- lowercase, hyphens only.
+  # Substitute: {{TEAM_SLUG}}
+  slug: "{{TEAM_SLUG}}"
+
+  # Kubernetes namespace where this team's workloads run.
+  # Must already exist (CreateNamespace=false on the ArgoCD Application).
+  # Substitute: {{MODEL_NAMESPACE}}
+  namespace: "{{MODEL_NAMESPACE}}"
+
+  # platform.system value (ADR-0028). For a model service: ml-pipeline.
+  system: "ml-pipeline"
+
+  # platform.owner value (ADR-0028).
+  # Substitute: {{TEAM_OWNER}}
+  owner: "{{TEAM_OWNER}}"
+
+  # Deployment environment.
+  # Substitute: {{PLATFORM_ENV}}
+  env: "{{PLATFORM_ENV}}"
+
+  # Grafana service account for folder Editor access.
+  # Create this SA in Grafana before ArgoCD sync.
+  # Substitute: grafana-sa-{{TEAM_SLUG}}
+  grafanaServiceAccount: "grafana-sa-{{TEAM_SLUG}}"
+
+  # CI/CD service account in team.namespace for PrometheusRule RBAC.
+  # Substitute: {{TEAM_SLUG}}-ci
+  ciServiceAccount: "{{TEAM_SLUG}}-ci"
+
+# ML panels enabled -- wires ADR-0038 drift + accuracy metrics into the dashboard.
+ml:
+  enabled: true
+
+  # Scope ML panels to this specific model.
+  # Substitute: {{MODEL_NAME}}
+  modelName: "{{MODEL_NAME}}"
+
+  # Scope ML panels to this tenant (ADR-0038 multi-tenant label).
+  # Substitute: {{TENANT}}
+  tenant: "{{TENANT}}"
+
+# Bare-metal specific panels (BM cluster only; set enabled: false on GCP/AWS).
+# Metric sources: talos-log-shipper, DCGM exporter (baremetal-gpu-dcgm),
+#   Rook-Ceph mgr exporter (baremetal-rook-ceph), Cilium BGP metrics (ADR-0051),
+#   etcd metrics from control-plane nodes (ADR-0049 D3).
+baremetal:
+  enabled: true
+
+  # Talos node health panel.
+  # Metric: talos_machine_api_liveness (via talos-log-shipper -> Loki scrape)
+  talosNodeHealth:
+    enabled: true
+    # ADR-0028 label selector for GPU worker nodes.
+    nodeSelector: "platform_system=\"gpu-worker\""
+
+  # InfiniBand / RoCEv2 fabric panel.
+  # Metric: DCGM_FI_DEV_NVLINK_BANDWIDTH_TOTAL, ib_port_rcv_data_bytes
+  # Acceptance gate: NCCL all-reduce >= floor from nccl-troubleshooting.md
+  gpuFabric:
+    enabled: true
+    # H100 NVSwitch + 400 Gbps IB target. Alert if below floor.
+    nccAllReduceBandwidthFloorGbs: 200
+    nccAllReduceBandwidthTargetGbs: 300
+
+  # Cilium BGP session state panel.
+  # Metric: cilium_bgp_peer_session_state (ADR-0051 Cilium LB-IPAM + BGP)
+  # Per cilium-bgp-issues.md: hold-timer 180 s; alert if not Established.
+  ciliumBgp:
+    enabled: true
+    # Expected BGP peers per DC (ToR switches). Alert if count drops.
+    expectedPeerCount: 2
+
+  # Rook-Ceph cluster health panel.
+  # Metric: ceph_health_status, ceph_osd_up, ceph_osd_in
+  cephHealth:
+    enabled: true
+    alertWarnThreshold: "10m"
+    alertCritThreshold: "5m"
+
+  # etcd control-plane panel (self-operated; absent on managed K8s paths).
+  # Metric: etcd_server_leader_changes_seen_total, etcd_server_proposals_failed_total
+  etcd:
+    enabled: true
+    leaderElectionAlertWindow: "10m"
+    proposalFailureRateThreshold: "0.01"
+
+# Alert thresholds -- adjust for your model SLOs.
+alerts:
+  errorRateThreshold: "0.05"
+  cpuSaturationThreshold: "0.80"
+  memorySaturationThreshold: "0.80"
+  availabilityFor: "5m"
+  saturationFor: "15m"
+  # Drift and accuracy floors from docs/contracts/model-api-contract.md.
+  mlDriftThreshold: "0.2"
+  mlAccuracyThreshold: "0.85"
+  mlAlertFor: "10m"

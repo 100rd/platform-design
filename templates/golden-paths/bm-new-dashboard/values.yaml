@@ -1,0 +1,107 @@
+# Golden Path: bm-new-dashboard -- grafana-self-serve values
+# WS-D (ADR-0039) chart: apps/infra/grafana-self-serve
+# Substrate: bare-metal Talos (ADR-0049) -- baremetal panels enabled
+#
+# USAGE: substitute all {{PLACEHOLDER}} values before committing.
+# Place the substituted file at:
+#   apps/infra/grafana-self-serve/example-teams/{{TEAM_SLUG}}/values.yaml
+#
+# For ML teams that also need drift + accuracy panels, set ml.enabled: true,
+# or use the bm-new-model-service template instead.
+#
+# See README.md for full instructions and panel selection guidance.
+
+team:
+  # Human-readable team name shown in the Grafana folder title.
+  # Substitute: {{TEAM_NAME}}
+  name: "{{TEAM_NAME}}"
+
+  # Machine-safe slug -- lowercase, hyphens only.
+  # Substitute: {{TEAM_SLUG}}
+  slug: "{{TEAM_SLUG}}"
+
+  # Kubernetes namespace where this team's workloads run.
+  # Must already exist (provisioned by bm-new-tenant golden path).
+  # Substitute: {{TEAM_NAMESPACE}}
+  namespace: "{{TEAM_NAMESPACE}}"
+
+  # platform.system value (ADR-0028 taxonomy).
+  # Substitute: {{TEAM_SYSTEM}}  e.g., checkout, auth, data-pipeline
+  system: "{{TEAM_SYSTEM}}"
+
+  # platform.owner value (ADR-0028 taxonomy).
+  # Substitute: {{TEAM_OWNER}}
+  owner: "{{TEAM_OWNER}}"
+
+  # Deployment environment.
+  # Substitute: {{PLATFORM_ENV}}
+  env: "{{PLATFORM_ENV}}"
+
+  # Grafana service account for folder Editor access.
+  # Create this SA in Grafana before ArgoCD sync.
+  # Substitute: grafana-sa-{{TEAM_SLUG}}
+  grafanaServiceAccount: "grafana-sa-{{TEAM_SLUG}}"
+
+  # CI/CD service account for PrometheusRule RBAC.
+  # Substitute: {{TEAM_SLUG}}-ci
+  ciServiceAccount: "{{TEAM_SLUG}}-ci"
+
+# ML panels -- set enabled: true if this team owns a model service.
+# Otherwise use bm-new-model-service template instead.
+ml:
+  enabled: false
+  modelName: ""
+  tenant: ""
+
+# Bare-metal specific panels (BM cluster only; set enabled: false on GCP/AWS).
+# Enable per-panel based on your team's scope (see README.md Step 4).
+# Metric sources:
+#   talosNodeHealth : talos-log-shipper -> Loki + node_exporter
+#   gpuFabric       : DCGM exporter (baremetal-gpu-dcgm, ADR-0049)
+#                     DCGM_FI_DEV_NVLINK_BANDWIDTH_TOTAL, ib_port_rcv_data_bytes
+#   ciliumBgp       : cilium_bgp_peer_session_state (ADR-0051)
+#   cephHealth      : ceph_health_status, ceph_osd_up, ceph_osd_in (ADR-0052)
+#   etcd            : etcd_server_leader_changes_seen_total (ADR-0049 D3)
+baremetal:
+  enabled: true
+
+  talosNodeHealth:
+    # Always enable for all teams on the BM cluster.
+    enabled: true
+    # ADR-0028 node label selector (adjust for your pool).
+    nodeSelector: "platform_system=~\"gpu-worker|cpu-pool\""
+
+  gpuFabric:
+    # Enable for teams owning GPU workloads (training or inference).
+    enabled: false
+    # H100 NVSwitch + 400 Gbps IB target. Alert if NCCL all-reduce drops below floor.
+    nccAllReduceBandwidthFloorGbs: 200
+    nccAllReduceBandwidthTargetGbs: 300
+
+  ciliumBgp:
+    # Enable for Platform/SRE teams monitoring LB VIPs (ADR-0051).
+    enabled: false
+    # Expected BGP peers per DC (ToR switches). Alert if count drops.
+    expectedPeerCount: 2
+
+  cephHealth:
+    # Enable for teams owning persistent storage (MLflow, Postgres, MinIO).
+    enabled: false
+    alertWarnThreshold: "10m"
+    alertCritThreshold: "5m"
+
+  etcd:
+    # Enable for Platform/SRE only -- self-operated control plane health.
+    enabled: false
+    # Alert if etcd leader elections > 0 in this window (unexpected re-election).
+    leaderElectionAlertWindow: "10m"
+    # Alert if etcd proposal failure rate > threshold/s.
+    proposalFailureRateThreshold: "0.01"
+
+# Alert thresholds -- adjust for your team SLOs.
+alerts:
+  errorRateThreshold: "0.05"
+  cpuSaturationThreshold: "0.80"
+  memorySaturationThreshold: "0.80"
+  availabilityFor: "5m"
+  saturationFor: "15m"

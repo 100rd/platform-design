@@ -1,0 +1,94 @@
+# Golden Path: bm-new-model-service -- ml-monitoring per-model override
+# WS-C (ADR-0038) chart: apps/infra/ml-monitoring
+# Substrate: bare-metal Talos / MinIO/Ceph-RGW (ADR-0052), NOT GCS
+#
+# USAGE: substitute all {{PLACEHOLDER}} values, then append this block
+# under `modelNamespaces:` in apps/infra/ml-monitoring/values.yaml
+# (or mount as a second values file in a per-model ArgoCD Application).
+#
+# Key difference from GCP path:
+#   referenceBucketUri uses s3:// (MinIO/Ceph-RGW in-DC) instead of gs://
+#   s3Endpoint must be set to the in-DC MinIO/Ceph-RGW address (UK data residency).
+#   Do NOT point at external AWS S3 -- that breaks UK data-residency (ADR-0052).
+#
+# ADR-0028 platform labels (K8s plane):
+#   platform.system     = ml-monitoring
+#   platform.component  = drift-exporter
+#   platform.env        = {{PLATFORM_ENV}}
+#   platform.owner      = {{TEAM_OWNER}}
+#   platform.managed-by = argocd
+
+# Namespace for this model's drift-monitoring components.
+# Substitute: {{MODEL_NAMESPACE}}
+namespace: "{{MODEL_NAMESPACE}}"
+
+driftExporter:
+  enabled: true
+
+  # Per-model reference dataset path in MinIO or Ceph-RGW (S3-compatible, in-DC).
+  # Pattern: <bucket>/<modelName>/<tenantId>/<domain>/reference.parquet
+  # Substitute: {{MINIO_BUCKET}}, {{MODEL_NAME}}, {{TENANT_ID}}, {{DOMAIN}}
+  referenceBucketUri: "s3://{{MINIO_BUCKET}}/{{MODEL_NAME}}/{{TENANT_ID}}/{{DOMAIN}}/reference.parquet"
+
+  # In-DC S3-compatible endpoint (MinIO or Ceph-RGW). NOT external AWS.
+  # Substitute: {{MINIO_ENDPOINT}}
+  # Example: http://minio.minio.svc.cluster.local:9000
+  s3Endpoint: "{{MINIO_ENDPOINT}}"
+
+  # Force path-style S3 addressing (required for MinIO and Ceph-RGW).
+  s3ForcePathStyle: true
+
+  # Credentials sourced from Vault / ESO ExternalSecret -- never hardcoded.
+  # The ExternalSecret is provisioned by charts/tenant-bootstrap/ for the tenant.
+  s3CredentialsSecretRef:
+    # Substitute: minio-creds-{{TENANT_ID}}
+    name: "minio-creds-{{TENANT_ID}}"
+    accessKeyKey: access_key
+    secretKeyKey: secret_key
+
+  # Model-specific drift thresholds.
+  # Adjust to match the contract floors in docs/contracts/model-api-contract.md
+  # and docs/contracts/bm-model-api-contract-addendum.md.
+  defaultThresholds:
+    datasetDriftScore:
+      warning: 0.20
+      critical: 0.40
+    featurePsiScore:
+      warning: 0.10
+      critical: 0.25
+    featureKlDivergence:
+      warning: 0.10
+      critical: 0.30
+    modelAccuracy:
+      warning: 0.85
+      critical: 0.75
+    modelF1Score:
+      warning: 0.80
+      critical: 0.65
+
+whylogsProfiler:
+  enabled: true
+
+  # Pushgateway address -- shared across model namespaces on the BM cluster.
+  pushgatewayAddress: "http://prometheus-pushgateway.ml-monitoring.svc.cluster.local:9091"
+
+  # Labels injected into every whylogs push for multi-tenant PromQL queries.
+  extraLabels:
+    # Substitute: {{MODEL_NAME}}
+    model_name: "{{MODEL_NAME}}"
+    # Substitute: {{TENANT}}  (full tenant label, e.g. tenant-acme)
+    tenant: "{{TENANT}}"
+    # Substitute: {{DOMAIN}}
+    domain: "{{DOMAIN}}"
+    # BM cluster identifier (distinguishes from GCP/AWS metrics in shared Thanos)
+    cluster_substrate: "baremetal-uk"
+
+# ADR-0028 platform labels applied to all K8s resources in this release.
+platformLabels:
+  "platform.system": "ml-monitoring"
+  "platform.component": "drift-exporter"
+  # Substitute: {{PLATFORM_ENV}}
+  "platform.env": "{{PLATFORM_ENV}}"
+  # Substitute: {{TEAM_OWNER}}
+  "platform.owner": "{{TEAM_OWNER}}"
+  "platform.managed-by": "argocd"

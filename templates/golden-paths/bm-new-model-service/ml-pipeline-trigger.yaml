@@ -1,0 +1,87 @@
+# Golden Path: bm-new-model-service -- ml-pipeline-baremetal.yml dispatch payload
+# WS-B (ADR-0037) re-targeted at bare-metal: .github/workflows/ml-pipeline-baremetal.yml
+# Substrate: bare-metal Talos / MinIO/Ceph-RGW (ADR-0052)
+#
+# This is a REFERENCE file, not a deployed Kubernetes manifest.
+# It documents the GitHub workflow_dispatch payload for your model on bare metal.
+#
+# USAGE (after substituting {{PLACEHOLDER}} values):
+#
+#   gh workflow run ml-pipeline-baremetal.yml \
+#     --ref main \
+#     --field model={{MODEL_NAME}} \
+#     --field environment={{PLATFORM_ENV}} \
+#     --field tenant={{TENANT_ID}}
+#
+# The ml-pipeline-baremetal.yml workflow:
+#   1. POST $AIRFLOW_BASE_URL/api/v1/dags/train_domain_adapter/dagRuns
+#      conf: {model_id, tenant, domain, volcano_queue, trigger_reason: "manual"}
+#      DAG submits VolcanoJob on H100 training pool (spec.queue: {{VOLCANO_QUEUE}})
+#   2. Poll eval_adapter_debate dag run (VolcanoJob on eval-judge H200 queue)
+#      until terminal state
+#   3. Quality gate: win_rate >= 0.55
+#   4. Register model version in MLflow:
+#      artifact_uri: s3://{{MINIO_BUCKET}}/{{MODEL_NAME}}/<git-sha>
+#      mlflow_tracking_uri: $MLFLOW_TRACKING_URI (in-DC CloudNativePG backend)
+#   5. SBOM (syft) + cosign sign (.github/actions/sign-image/)
+#   6. Kargo promotion: dev (auto) -> staging (reviewer gate) -> prod (manual gate)
+#
+# Key differences from GCP path (ml-pipeline.yml):
+#   - Workflow: ml-pipeline-baremetal.yml (not ml-pipeline.yml)
+#   - artifact_uri: s3:// (MinIO/Ceph-RGW, in-DC) not gs://
+#   - VolcanoJob queues follow UK DC taxonomy (06-uk-datacenters.md):
+#     H100 training: training-default (w100) / training-bootstrap (w30) /
+#                    training-urgent (w200, cap 2 jobs)
+#     H200 inference: serving-vllm (w150) / eval-judge (w200) /
+#                     engine-build (w80) / batch-rescore (w50)
+
+dispatch:
+  workflow: ml-pipeline-baremetal.yml
+  ref: main
+  inputs:
+    # Substitute: {{MODEL_NAME}}
+    model: "{{MODEL_NAME}}"
+    # Substitute: {{PLATFORM_ENV}}
+    environment: "{{PLATFORM_ENV}}"
+    # Substitute: {{TENANT_ID}}  (short form, e.g. acme)
+    tenant: "{{TENANT_ID}}"
+
+# Airflow DAG conf injected via dagRuns (for reference):
+airflow_dag_conf:
+  model_id: "{{MODEL_NAME}}"
+  # Substitute: {{TENANT}}  (full label, e.g. tenant-acme)
+  tenant: "{{TENANT}}"
+  # Substitute: {{DOMAIN}}  (hft | solana | insurance | rtb)
+  domain: "{{DOMAIN}}"
+  # UK DC Volcano queue on H100 pool.
+  # Substitute: {{VOLCANO_QUEUE}}
+  volcano_queue: "{{VOLCANO_QUEUE}}"
+  # First run is always manual. Drift-triggered retrains use trigger_reason: drift.
+  trigger_reason: "manual"
+
+# MLflow registration (for reference):
+mlflow:
+  # Substitute: {{MODEL_NAME}}
+  model_name: "{{MODEL_NAME}}"
+  # MinIO/Ceph-RGW S3 artifact path (in-DC -- UK data residency, ADR-0052):
+  # Substitute: {{MINIO_BUCKET}}, {{MODEL_NAME}}
+  artifact_uri: "s3://{{MINIO_BUCKET}}/{{MODEL_NAME}}/<git-sha>"
+  # In-DC S3 endpoint injected via ESO ExternalSecret -- not hardcoded here.
+  # Substitute: {{MINIO_ENDPOINT}}
+  s3_endpoint_url: "{{MINIO_ENDPOINT}}"
+
+# VolcanoJob training parameters (for reference -- rendered by the Airflow DAG):
+# ADR-0053: GPU + IB NIC scheduled as one DRA claim (baremetal-gpu-scheduling module).
+volcanoJob:
+  # Substitute: {{VOLCANO_QUEUE}}
+  queue: "{{VOLCANO_QUEUE}}"
+  # H100 SXM5 nodes: 8 GPUs per node.
+  minAvailable: 8
+  tasks:
+    - name: worker
+      replicas: 8
+      resources:
+        limits:
+          "nvidia.com/gpu": "1"
+          # DRA ResourceClaimTemplate for H100 + IB NIC (ADR-0053 one-DRA-model).
+          "resource.k8s.io/gpu-ib-claim": "1"
