@@ -1,0 +1,66 @@
+---
+# ArgoCD Application: team-baremetal-gpu self-serve observability
+# Onboarded via ADR-0039 template PR.
+#
+# Deploys into the ml-baremetal namespace (must pre-exist, created by WS-A
+# talos-gpu-nodepool / talos-cluster modules). CreateNamespace=false enforced.
+#
+# Wave 30 — after all observability + ml-monitoring components (wave 10-20).
+# Destination: the bare-metal UK primary DC cluster registered in ArgoCD.
+# In the UK-DC ArgoCD instance the cluster server is registered by name
+# (not https://kubernetes.default.svc, which routes to the management cluster).
+#
+# ADR-0039: Self-Serve Observability
+# ADR-0028: platform.system = observability (mandatory on every resource)
+# ADR-0049: Talos foundation (target cluster)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana-self-serve-team-baremetal-gpu
+  namespace: argocd
+  labels:
+    platform.system: "observability"
+    platform.component: "self-serve"
+    platform.env: "production"
+    platform.owner: "team-baremetal-gpu"
+    platform.managed-by: "argocd"
+    app.kubernetes.io/name: "grafana-self-serve-team-baremetal-gpu"
+    app.kubernetes.io/component: "self-serve"
+    app.kubernetes.io/managed-by: "argocd"
+  annotations:
+    argocd.argoproj.io/sync-wave: "30"
+    # Substrate label for ArgoCD multi-cluster routing (ADR-0049).
+    platform.substrate: "baremetal-uk-primary"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/your-org/platform-design.git
+    targetRevision: main
+    path: apps/infra/grafana-self-serve
+    helm:
+      valueFiles:
+        - values.yaml
+        - example-teams/team-baremetal-gpu/values.yaml
+  destination:
+    # The bare-metal cluster is registered by name in the ArgoCD cluster secret.
+    # Replace with the registered server URL for the UK primary DC cluster.
+    server: https://baremetal-uk-primary.internal.example.com:6443
+    namespace: ml-baremetal
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=false
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m

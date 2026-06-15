@@ -1,0 +1,29 @@
+---
+# Kargo Warehouse -- ml-pipeline-baremetal (WS-B, ADR-0037 reused)
+# Subscribes to the model image registry and the GitOps repo for the
+# bare-metal ML pipeline. Mirrors kargo/warehouses/chains.yaml pattern.
+# ADR-0028: platform.system = ml-pipeline, platform.managed-by = kargo.
+# ADR-0037: Kargo promotes model artifacts (not cluster infra).
+# ADR-0049: UK-isolated; promotion does NOT route artifacts outside UK DC.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Warehouse
+metadata:
+  name: ml-pipeline-baremetal
+  namespace: ml-pipeline-baremetal
+  labels:
+    platform.system: ml-pipeline
+    platform.component: model-registry
+    platform.managed-by: kargo
+spec:
+  subscriptions:
+    # Model serving image (built + signed by ml-pipeline-baremetal.yml GH Actions)
+    - image:
+        repoURL: ghcr.io/100rd/ml-models
+        semverConstraint: ">=0.1.0"
+        discoveryLimit: 5
+    # GitOps repo changes (values.yaml for model serving ArgoCD apps)
+    - git:
+        repoURL: git@github.com:100rd/platform-design.git
+        includePaths:
+          - apps/infra/mlflow-baremetal/**
+          - apps/infra/airflow-baremetal/**

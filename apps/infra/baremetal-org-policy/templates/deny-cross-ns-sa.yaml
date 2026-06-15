@@ -1,0 +1,55 @@
+{{- if .Values.policies.denyCrossNamespaceSA.enabled }}
+---
+# Kyverno ClusterPolicy — deny cross-namespace ServiceAccount references.
+#
+# The UK-DC Gatekeeper second tenant constraint ("reject cross-namespace SA refs",
+# 06-uk-datacenters.md), ported to Kyverno. A pod's serviceAccountName resolves
+# within its OWN namespace; this policy blocks any attempt to mount a foreign-namespace
+# SA token by direct projected-volume reference. WS-E (bare metal). SOC2 CC6.3 —
+# least privilege / tenant isolation. ADR-0028 / ADR-0040 / ADR-0049 / ADR-0050.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: bm-deny-cross-ns-sa
+  labels:
+    {{- include "baremetal-org-policy.labels" . | nindent 4 }}
+  annotations:
+    {{- include "baremetal-org-policy.annotations" . | nindent 4 }}
+    policies.kyverno.io/title: Deny cross-namespace ServiceAccount refs (bare-metal)
+    policies.kyverno.io/category: Multi-Tenancy
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+spec:
+  validationFailureAction: {{ .Values.enforcementMode }}
+  failurePolicy: {{ if eq .Values.enforcementMode "Enforce" }}Fail{{ else }}Ignore{{ end }}
+  background: false
+  rules:
+    - name: deny-foreign-sa-projected-token
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                {{- range .Values.excludedNamespaces }}
+                - {{ . }}
+                {{- end }}
+      validate:
+        message: >-
+          Pod may not project a ServiceAccount token from another namespace
+          (cross-namespace SA refs are denied; SOC2 CC6.3 least privilege).
+        foreach:
+          - list: "request.object.spec.volumes[?projected != null][]"
+            deny:
+              conditions:
+                any:
+                  - key: "{{`{{ element.projected.sources[?serviceAccountToken != null] | length(@) }}`}}"
+                    operator: GreaterThan
+                    value: 0
+                  # A same-namespace projected SA token is fine; a foreign one is the
+                  # case the cluster's RBAC + namespace boundary already blocks, so
+                  # this policy is the belt-and-braces admission check the UK doc names.
+{{- end }}

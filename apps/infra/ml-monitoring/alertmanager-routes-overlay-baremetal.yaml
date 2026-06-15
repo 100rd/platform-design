@@ -1,0 +1,136 @@
+# Alertmanager Routes Overlay — Bare-Metal (Talos) — ADR-0038 D3, ADR-0049
+#
+# PURPOSE:
+#   Bare-metal-specific Alertmanager route/receiver patch for the in-DC
+#   Prometheus stack (Prometheus/Thanos/Alertmanager deployed by WS-D on the
+#   Talos UK cluster). Extends the base alertmanager-routes-overlay.yaml.
+#
+#   Key differences from the base (cloud/EKS) overlay:
+#     - secretStoreRef: Vault (in-DC, UK-resident) not AWS Secrets Manager
+#     - Alertmanager namespace: 'monitoring' on bare metal (matches in-DC stack)
+#     - cluster matcher added: platform_system=ml-monitoring AND cluster=talos-uk-primary
+#     - Retrain webhook URL: points at in-DC Airflow (WS-B bare-metal)
+#
+#   The routing LOGIC (matchers, continue:true, repeat_interval: 6h,
+#   group_by, group_wait) is IDENTICAL to the base overlay per ADR-0038 D3.
+#   Only substrate references change — demonstrating cluster-agnostic reuse.
+#
+# APPLY GATE:
+#   plan/validate-only. Platform team action required before WS-C go-live.
+#
+# MERGE INSTRUCTIONS (platform team action, same pattern as base overlay):
+#   1. Add the two routes (routes_patch below) into the routes: list in
+#      apps/infra/observability/prometheus-stack/values.yaml BEFORE the
+#      existing severity = critical catch-all routes.
+#   2. Add the two receivers to the receivers: list.
+#   3. Add alertmanager-retrain-token to alertmanagerSpec.secrets.
+#   4. Deploy the cross-namespace ExternalSecret (see CROSS-NAMESPACE NOTE).
+#   5. yamllint and helm lint prometheus-stack before applying.
+#
+# ============================================================================
+# ADD to kube-prometheus-stack.alertmanager.alertmanagerSpec.config.route.routes
+# (insert BEFORE existing severity = critical catch-all routes)
+# ============================================================================
+
+# routes_patch:
+# -----------------------------------------------------------------------
+#   # ML Monitoring (bare-metal): critical drift/accuracy -> PagerDuty
+#   # continue: true so the retrain webhook route also fires
+#   - matchers:
+#     - platform_system = ml-monitoring
+#     - severity = critical
+#     - cluster = talos-uk-primary
+#     receiver: 'ml-drift-pagerduty'
+#     continue: true
+#     group_wait: 10s
+#     group_by: ['model_name', 'tenant', 'domain', 'alertname', 'cluster']
+#
+#   # ML Monitoring (bare-metal): critical drift/accuracy -> retrain webhook
+#   # repeat_interval: 6h prevents retrain storms between drift recovery cycles
+#   - matchers:
+#     - platform_system = ml-monitoring
+#     - severity = critical
+#     - cluster = talos-uk-primary
+#     receiver: 'ml-retrain-webhook-baremetal'
+#     group_wait: 10s
+#     group_by: ['model_name', 'tenant', 'domain', 'alertname']
+#     repeat_interval: 6h
+# -----------------------------------------------------------------------
+
+# ============================================================================
+# ADD to kube-prometheus-stack.alertmanager.alertmanagerSpec.config.receivers
+# ============================================================================
+
+# receivers_patch:
+# -----------------------------------------------------------------------
+#   - name: 'ml-drift-pagerduty'
+#     pagerduty_configs:
+#     - service_key_file: '/etc/alertmanager/secrets/alertmanager-pagerduty-secret/service-key'
+#       description: >-
+#         ML drift (bare-metal): ALERTNAME MODELNAME (TENANT/DOMAIN) cluster=CLUSTER
+#       details:
+#         model_name: '{{ .GroupLabels.model_name }}'
+#         tenant: '{{ .GroupLabels.tenant }}'
+#         domain: '{{ .GroupLabels.domain }}'
+#         severity: '{{ .GroupLabels.severity }}'
+#         platform_system: 'ml-monitoring'
+#         cluster: '{{ .GroupLabels.cluster }}'
+#       send_resolved: true
+#
+#   - name: 'ml-retrain-webhook-baremetal'
+#     webhook_configs:
+#     # ml-retrain-trigger proxy (in-cluster; targets in-DC Airflow; WS-B bare-metal)
+#     # The proxy translates to:
+#     #   POST /api/v1/dags/train_domain_adapter/dagRuns
+#     #   body: { conf: { tenant: "...", domain: "...", trigger: "drift" } }
+#     # Falls back to K8s Job in ml-monitoring namespace if Airflow unreachable.
+#     - url: 'http://ml-retrain-trigger.ml-monitoring.svc.cluster.local:8080/webhook'
+#       send_resolved: false
+#       http_config:
+#         bearer_token_file: '/etc/alertmanager/secrets/alertmanager-retrain-token/token'
+#       max_alerts: 10
+# -----------------------------------------------------------------------
+
+# ============================================================================
+# ADD to kube-prometheus-stack.alertmanager.alertmanagerSpec.secrets
+# ============================================================================
+
+# secrets_patch:
+# -----------------------------------------------------------------------
+#   - alertmanager-retrain-token
+# -----------------------------------------------------------------------
+#
+# CROSS-NAMESPACE NOTE (bare-metal Vault-backed ESO):
+#   The alertmanager-retrain-token ExternalSecret in the ml-monitoring chart
+#   creates the Secret in namespace 'ml-monitoring'. Alertmanager mounts
+#   secrets from its own namespace ('monitoring' on this bare-metal cluster).
+#
+#   Deploy this cross-namespace ExternalSecret (Vault-backed; ADR-0049 D4):
+#
+#     apiVersion: external-secrets.io/v1beta1
+#     kind: ExternalSecret
+#     metadata:
+#       name: alertmanager-retrain-token
+#       namespace: monitoring
+#       labels:
+#         platform.system: ml-monitoring
+#         platform.component: alertmanager
+#         platform.env: production
+#         platform.owner: team-ml-platform
+#         platform.managed-by: argocd
+#     spec:
+#       refreshInterval: 1h
+#       secretStoreRef:
+#         name: vault-cluster-secret-store
+#         kind: ClusterSecretStore
+#       target:
+#         name: alertmanager-retrain-token
+#         creationPolicy: Owner
+#       data:
+#         - secretKey: token
+#           remoteRef:
+#             key: secret/ml-monitoring/alertmanager-retrain-token
+#             property: token
+#
+#   OR deploy a single ClusterExternalSecret covering both namespaces.
+#   See ADR-0038 Implementation Notes and ADR-0049 D4.

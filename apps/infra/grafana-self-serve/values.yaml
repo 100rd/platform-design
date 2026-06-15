@@ -4,8 +4,14 @@
 #
 # Override this file in example-teams/<team-slug>/values.yaml.
 # See docs/self-serve-observability.md for the full onboarding guide.
+# See docs/baremetal-ml-platform/self-serve-observability-baremetal.md for the
+# bare-metal onboarding runbook (baremetal.enabled: true teams).
 #
 # ADR-0039: Self-Serve Observability
+# ADR-0049: Talos foundation (self-operated control plane panels)
+# ADR-0051: Cilium BGP (BGP session panels)
+# ADR-0052: Rook-Ceph (Ceph health panels)
+# ADR-0053: RoCE / InfiniBand GPU fabric (IB / NVLink panels)
 
 team:
   # Human-readable team name (used in Grafana folder title and dashboard title).
@@ -57,6 +63,53 @@ ml:
   # tenant label value from ADR-0038 metric labels.
   # Example: "tenant-acme"
   tenant: ""
+
+# Bare-metal-specific configuration. Set baremetal.enabled: true for teams
+# running on the Talos bare-metal cluster (UK DCs; ADR-0049).
+# When enabled:
+#   - baremetal-dashboard.yaml produces a ConfigMap with Talos/IB/BGP/Ceph/etcd panels.
+#   - baremetal-prometheusrule.yaml produces a PrometheusRule with bare-metal alert groups.
+# When disabled (default), both templates produce no output and cloud-only teams are unaffected.
+baremetal:
+  enabled: false
+
+  # Prometheus node label regex to scope Talos node metrics to this team's nodes.
+  # Used in: up{job="talos-nodes", node=~"..."}, talos_version, talos_apid_request_total,
+  #           node_infiniband_port_* metrics (node-exporter / Talos metrics).
+  # Example: "uk-primary-gpu-.*" to scope to primary DC GPU nodes.
+  nodeSelectorRegex: ".*"
+
+  # Prometheus label selector for Cilium BGP peer addresses to scope BGP panels.
+  # Example: "10\\.0\\.1\\.(1|2)" to scope to known ToR peer IPs.
+  bgpPeerFilter: ".*"
+
+  # Bare-metal-specific alert thresholds. All overridable per team in their values.yaml.
+  alerts:
+    # Talos: non-OK machined API responses in 5m before TalosAPIdErrors fires.
+    talosMachinedErrorThreshold: "10"
+
+    # IB fabric: IB constraint error rate per second before IBConstraintErrors fires.
+    ibConstraintErrorRate: "1"
+
+    # IB fabric: NVLink bandwidth floor (GB/s) — below this fires NVLinkBandwidthLow.
+    # H100 NVSwitch peak ~900 GB/s aggregate; this floor catches severe degradation.
+    nvlinkBandwidthFloorGbps: "100"
+
+    # Cilium BGP: max announced prefixes per peer before CiliumBGPPrefixCountHigh fires.
+    bgpMaxPrefixes: "200"
+
+    # Ceph: degraded placement group count before CephPGsDegraded fires.
+    cephPGDegradedThreshold: "1"
+
+    # etcd: WAL fsync P99 latency (seconds) before EtcdHighWALFsyncLatency fires.
+    # etcd recommends < 10ms; alert at 100ms to catch I/O contention early.
+    etcdWALFsyncLatencySeconds: "0.1"
+
+    # etcd: leader changes per hour before EtcdLeaderChanges fires.
+    etcdLeaderChangesPerHour: "3"
+
+    # Kubernetes API: P99 request latency (seconds) before KubeAPIServerLatencyHigh fires.
+    kubeAPILatencySeconds: "1.0"
 
 # Grafana namespace where the Grafana deployment lives and where ConfigMaps
 # must be created for the sidecar to discover them.

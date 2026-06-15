@@ -1,0 +1,534 @@
+---
+# Grafana Dashboard ConfigMap: ML Drift & Accuracy — Bare-Metal (Talos)
+# WS-C — ADR-0038 D2, ADR-0049
+#
+# DESIGN NOTE:
+#   Bare-metal mirror of configmap-ml-drift.yaml (cloud/EKS).
+#   ALL PromQL expressions are cluster-agnostic (platform_system="ml-monitoring"
+#   label filter per ADR-0028). The uid is distinct:
+#     cloud/EKS:   ml-drift-accuracy-v1    (configmap-ml-drift.yaml)
+#     bare-metal:  ml-drift-accuracy-bm-v1 (this file)
+#   Both dashboards can coexist in a multi-cluster Grafana instance without
+#   uid collision. Each can be scoped to the right Thanos endpoint.
+#
+# APPLY GATE: plan/validate-only. No helm install without human approval.
+# Label grafana_dashboard=1 causes the Grafana sidecar to auto-import.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-ml-drift-baremetal
+  namespace: {{ .Values.grafanaNamespace }}
+  labels:
+    {{- range $key, $val := .Values.dashboardLabels }}
+    {{ $key }}: {{ $val | quote }}
+    {{- end }}
+    platform.system: "ml-monitoring"
+    platform.component: "grafana-dashboard"
+    platform.env: "production"
+    platform.owner: "team-ml-platform"
+    platform.managed-by: "argocd"
+    platform.cluster: "talos-uk-primary"
+data:
+  ml-drift-accuracy-baremetal.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": "-- Grafana --",
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "description": "ML model drift detection, feature distribution shift, and accuracy degradation on the Talos bare-metal UK cluster. Per-tenant/domain view. ADR-0038 / ADR-0049.",
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [
+        {
+          "asDropdown": true,
+          "icon": "external link",
+          "includeVars": true,
+          "keepTime": true,
+          "tags": ["ml-monitoring"],
+          "title": "ML Monitoring Dashboards",
+          "type": "dashboards"
+        }
+      ],
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+          "id": 100,
+          "title": "Overview — Bare-Metal Cluster",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.datasources.prometheus.uid }}"
+          },
+          "description": "Number of models currently in critical drift state",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 1},
+                  {"color": "red", "value": 3}
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 4, "x": 0, "y": 1},
+          "id": 1,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "reduceOptions": {"calcs": ["lastNotNull"]}
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "{{ .Values.datasources.prometheus.uid }}"
+              },
+              "expr": "count(ml_monitoring_dataset_drift_score{platform_system=\"ml-monitoring\"} > 0.40) or vector(0)",
+              "legendFormat": "Critical drift models",
+              "refId": "A"
+            }
+          ],
+          "title": "Models in Critical Drift",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.datasources.prometheus.uid }}"
+          },
+          "description": "Retrain DAG runs triggered in the last 24 h",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 3},
+                  {"color": "red", "value": 10}
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 4, "x": 4, "y": 1},
+          "id": 2,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "reduceOptions": {"calcs": ["sum"]}
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "{{ .Values.datasources.prometheus.uid }}"
+              },
+              "expr": "increase(ml_monitoring_retrain_triggers_total{platform_system=\"ml-monitoring\"}[24h])",
+              "legendFormat": "Retrain triggers",
+              "refId": "A"
+            }
+          ],
+          "title": "Retrain Triggers (24h)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.datasources.prometheus.uid }}"
+          },
+          "description": "Models with accuracy below warning threshold (< 0.85)",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 1},
+                  {"color": "red", "value": 3}
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 4, "x": 8, "y": 1},
+          "id": 3,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "reduceOptions": {"calcs": ["lastNotNull"]}
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "{{ .Values.datasources.prometheus.uid }}"
+              },
+              "expr": "count(ml_monitoring_model_accuracy{platform_system=\"ml-monitoring\"} < 0.85) or vector(0)",
+              "legendFormat": "Low accuracy models",
+              "refId": "A"
+            }
+          ],
+          "title": "Models Below Accuracy Warning",
+          "type": "stat"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 5},
+          "id": 101,
+          "title": "Dataset Drift",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.datasources.prometheus.uid }}"
+          },
+          "description": "Evidently dataset drift score per model/tenant/domain. Warning >= 0.20, Critical >= 0.40 (ADR-0038 D2).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "spanNulls": false
+              },
+              "unit": "percentunit",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 0.20},
+                  {"color": "red", "value": 0.40}
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+          "id": 10,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"}
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "{{ .Values.datasources.prometheus.uid }}"
+              },
+              "expr": "ml_monitoring_dataset_drift_score{platform_system=\"ml-monitoring\", model_name=~\"$model_name\", tenant=~\"$tenant\"}",
+              "legendFormat": "{{ "{{" }}model_name{{ "}}" }}/{{ "{{" }}tenant{{ "}}" }}/{{ "{{" }}domain{{ "}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "Dataset Drift Score",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.datasources.prometheus.uid }}"
+          },
+          "description": "Feature-level PSI (Population Stability Index). Warning >= 0.10, Critical >= 0.25 (ADR-0038 D2).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6},
+          "id": 11,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"}
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "{{ .Values.datasources.prometheus.uid }}"
+              },
+              "expr": "topk(10, ml_monitoring_feature_psi_score{platform_system=\"ml-monitoring\", model_name=~\"$model_name\", tenant=~\"$tenant\"})",
+              "legendFormat": "{{ "{{" }}feature_name{{ "}}" }} ({{ "{{" }}model_name{{ "}}" }})",
+              "refId": "A"
+            }
+          ],
+          "title": "Top-10 Feature PSI",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 14},
+          "id": 102,
+          "title": "Model Accuracy & F1",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.datasources.prometheus.uid }}"
+          },
+          "description": "Model accuracy over time. Warning < 0.85, Critical < 0.75 (ADR-0038 D2).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2
+              },
+              "min": 0,
+              "max": 1,
+              "unit": "percentunit",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 0.75},
+                  {"color": "green", "value": 0.85}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 15},
+          "id": 20,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"}
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "{{ .Values.datasources.prometheus.uid }}"
+              },
+              "expr": "ml_monitoring_model_accuracy{platform_system=\"ml-monitoring\", model_name=~\"$model_name\", tenant=~\"$tenant\"}",
+              "legendFormat": "{{ "{{" }}model_name{{ "}}" }}/{{ "{{" }}tenant{{ "}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "Model Accuracy",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.datasources.prometheus.uid }}"
+          },
+          "description": "F1 score over time. Warning < 0.80, Critical < 0.65 (ADR-0038 D2).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2
+              },
+              "min": 0,
+              "max": 1,
+              "unit": "percentunit"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 15},
+          "id": 21,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"}
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "{{ .Values.datasources.prometheus.uid }}"
+              },
+              "expr": "ml_monitoring_model_f1_score{platform_system=\"ml-monitoring\", model_name=~\"$model_name\", tenant=~\"$tenant\"}",
+              "legendFormat": "{{ "{{" }}model_name{{ "}}" }}/{{ "{{" }}tenant{{ "}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "Model F1 Score",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 23},
+          "id": 103,
+          "title": "Serving Latency (OTel/Tempo)",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.datasources.prometheus.uid }}"
+          },
+          "description": "p50/p95/p99 inference serving latency via OTel metrics. Tracks serving degradation correlated with drift events.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2
+              },
+              "unit": "ms"
+            }
+          },
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+          "id": 30,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"}
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "{{ .Values.datasources.prometheus.uid }}"
+              },
+              "expr": "histogram_quantile(0.50, sum(rate(inference_request_duration_milliseconds_bucket{platform_system=\"ml-monitoring\", model_name=~\"$model_name\"}[5m])) by (le, model_name, tenant))",
+              "legendFormat": "p50 {{ "{{" }}model_name{{ "}}" }}/{{ "{{" }}tenant{{ "}}" }}",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "{{ .Values.datasources.prometheus.uid }}"
+              },
+              "expr": "histogram_quantile(0.95, sum(rate(inference_request_duration_milliseconds_bucket{platform_system=\"ml-monitoring\", model_name=~\"$model_name\"}[5m])) by (le, model_name, tenant))",
+              "legendFormat": "p95 {{ "{{" }}model_name{{ "}}" }}/{{ "{{" }}tenant{{ "}}" }}",
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "{{ .Values.datasources.prometheus.uid }}"
+              },
+              "expr": "histogram_quantile(0.99, sum(rate(inference_request_duration_milliseconds_bucket{platform_system=\"ml-monitoring\", model_name=~\"$model_name\"}[5m])) by (le, model_name, tenant))",
+              "legendFormat": "p99 {{ "{{" }}model_name{{ "}}" }}/{{ "{{" }}tenant{{ "}}" }}",
+              "refId": "C"
+            }
+          ],
+          "title": "Inference Latency (p50/p95/p99)",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 32},
+          "id": 104,
+          "title": "Retrain Trigger History",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.datasources.prometheus.uid }}"
+          },
+          "description": "Retrain trigger events rate. Each spike = Alertmanager webhook fired to Airflow train_domain_adapter (ADR-0038 D3).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "drawStyle": "bars",
+                "fillOpacity": 80,
+                "lineWidth": 1
+              },
+              "unit": "reqps"
+            }
+          },
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 33},
+          "id": 40,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"}
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "{{ .Values.datasources.prometheus.uid }}"
+              },
+              "expr": "sum(rate(ml_monitoring_retrain_triggers_total{platform_system=\"ml-monitoring\", model_name=~\"$model_name\", tenant=~\"$tenant\"}[5m])) by (model_name, tenant, trigger_reason)",
+              "legendFormat": "{{ "{{" }}model_name{{ "}}" }}/{{ "{{" }}tenant{{ "}}" }} ({{ "{{" }}trigger_reason{{ "}}" }})",
+              "refId": "A"
+            }
+          ],
+          "title": "Retrain Trigger Rate",
+          "type": "timeseries"
+        }
+      ],
+      "refresh": "1m",
+      "schemaVersion": 36,
+      "style": "dark",
+      "tags": ["ml-monitoring", "baremetal", "talos"],
+      "templating": {
+        "list": [
+          {
+            "current": {},
+            "datasource": {
+              "type": "prometheus",
+              "uid": "{{ .Values.datasources.prometheus.uid }}"
+            },
+            "definition": "label_values(ml_monitoring_dataset_drift_score{platform_system=\"ml-monitoring\"}, model_name)",
+            "hide": 0,
+            "includeAll": true,
+            "multi": true,
+            "name": "model_name",
+            "options": [],
+            "query": "label_values(ml_monitoring_dataset_drift_score{platform_system=\"ml-monitoring\"}, model_name)",
+            "refresh": 2,
+            "regex": "",
+            "sort": 1,
+            "type": "query",
+            "label": "Model"
+          },
+          {
+            "current": {},
+            "datasource": {
+              "type": "prometheus",
+              "uid": "{{ .Values.datasources.prometheus.uid }}"
+            },
+            "definition": "label_values(ml_monitoring_dataset_drift_score{platform_system=\"ml-monitoring\"}, tenant)",
+            "hide": 0,
+            "includeAll": true,
+            "multi": true,
+            "name": "tenant",
+            "options": [],
+            "query": "label_values(ml_monitoring_dataset_drift_score{platform_system=\"ml-monitoring\"}, tenant)",
+            "refresh": 2,
+            "regex": "",
+            "sort": 1,
+            "type": "query",
+            "label": "Tenant"
+          }
+        ]
+      },
+      "time": {"from": "now-6h", "to": "now"},
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "ML Drift & Accuracy — Bare-Metal (Talos UK)",
+      "uid": "ml-drift-accuracy-bm-v1",
+      "version": 1
+    }
