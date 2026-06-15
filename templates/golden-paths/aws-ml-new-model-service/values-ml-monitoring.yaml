@@ -1,0 +1,81 @@
+# Golden Path: aws-ml-new-model-service -- ml-monitoring per-model override
+# WS-C (ADR-0048 <- ADR-0038) chart: apps/infra/ml-monitoring
+#
+# USAGE: substitute all {{PLACEHOLDER}} values, then add this as a
+# modelNamespaces entry in apps/infra/ml-monitoring/values.yaml
+# (or mount as a second values file in a per-model ArgoCD Application).
+#
+# AWS DELTA vs GCP etalon (templates/golden-paths/new-model-service/values-ml-monitoring.yaml):
+#   referenceBucketUri is an S3 URI (s3://) not GCS (gs://).
+#   Access to the reference dataset is via EKS Pod Identity + ABAC:
+#   the drift-exporter ServiceAccount must have a Pod Identity binding
+#   to an IAM role scoped to the reference-dataset prefix.
+#   awsRegion is required for the S3 client.
+#
+# See README.md Step 3 for full instructions.
+#
+# ADR-0028 platform labels (Kubernetes plane):
+#   platform.system     = ml-monitoring
+#   platform.component  = drift-exporter
+#   platform.env        = {{PLATFORM_ENV}}
+#   platform.owner      = {{TEAM_OWNER}}
+#   platform.managed-by = argocd
+
+# Namespace for this model's drift-monitoring components.
+# Substitute: {{MODEL_NAMESPACE}}
+namespace: "{{MODEL_NAMESPACE}}"
+
+driftExporter:
+  enabled: true
+
+  # Per-model S3 reference dataset path (AWS: s3:// not gs://).
+  # Pattern: s3://<bucket>/<modelName>/<tenant>/<domain>/reference.parquet
+  # The drift-exporter Pod Identity role must have s3:GetObject on this prefix.
+  # Substitutes: {{S3_MLFLOW_ARTIFACTS_BUCKET}}, {{MODEL_NAME}}, {{TENANT}}, {{DOMAIN}}
+  referenceBucketUri: "s3://{{S3_MLFLOW_ARTIFACTS_BUCKET}}/{{MODEL_NAME}}/{{TENANT}}/{{DOMAIN}}/reference.parquet"
+
+  # AWS region for the S3 client (must match the bucket region).
+  # Substitute: {{AWS_REGION}}
+  awsRegion: "{{AWS_REGION}}"
+
+  # Model-specific drift thresholds.
+  # Adjust to match the contract floors in:
+  #   docs/contracts/model-api-contract.md
+  #   docs/contracts/aws-ml-model-api-contract.md
+  defaultThresholds:
+    datasetDriftScore:
+      warning: 0.20
+      critical: 0.40
+    featurePsiScore:
+      warning: 0.10
+      critical: 0.25
+    featureKlDivergence:
+      warning: 0.10
+      critical: 0.30
+    modelAccuracy:
+      warning: 0.85
+      critical: 0.75
+    modelF1Score:
+      warning: 0.80
+      critical: 0.65
+
+whylogsProfiler:
+  enabled: true
+
+  # Pushgateway address -- shared across all model namespaces.
+  pushgatewayAddress: "http://prometheus-pushgateway.ml-monitoring.svc.cluster.local:9091"
+
+  # Labels injected into every whylogs push for multi-tenant PromQL queries.
+  # Must match ADR-0038 D1 label set: model_name, tenant, domain.
+  extraLabels:
+    model_name: "{{MODEL_NAME}}"
+    tenant: "{{TENANT}}"
+    domain: "{{DOMAIN}}"
+
+# ADR-0028 platform labels applied to all Kubernetes resources in this release.
+platformLabels:
+  "platform.system": "ml-monitoring"
+  "platform.component": "drift-exporter"
+  "platform.env": "{{PLATFORM_ENV}}"
+  "platform.owner": "{{TEAM_OWNER}}"
+  "platform.managed-by": "argocd"
