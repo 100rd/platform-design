@@ -1,0 +1,236 @@
+# ML Monitoring Helm values — AWS overrides (ADR-0048 D4, ADR-0038)
+# platform:system = ml-monitoring (ADR-0028 taxonomy)
+#
+# This file overrides values.yaml with AWS-specific settings:
+#   - S3 reference-dataset bucket URI (s3://) instead of GCS (gs://)
+#   - ECR image repositories instead of gcr.io / dockerhub
+#   - EKS Pod Identity annotation absent (ADR-0018; Pod Identity uses no SA annotation)
+#   - AWS Secrets Manager secret paths (ADR-0008 ESO with AWS provider)
+#
+# Cited ADRs:
+#   ADR-0048 D4 — drift monitor on EKS with AWS metrics backend
+#   ADR-0038    — Evidently/whylogs architecture (inherited cluster-agnostic)
+#   ADR-0028    — platform:system = ml-monitoring label taxonomy
+#   ADR-0018    — EKS Pod Identity (replaces GKE Workload Identity)
+#   ADR-0008    — ExternalSecrets Operator (AWS Secrets Manager provider)
+#   ADR-0029    — ECR pull-through cache (upstream image base)
+
+# ---------------------------------------------------------------------------
+# ADR-0028 platform labels — same system value as GCP
+# ---------------------------------------------------------------------------
+platformLabels:
+  "platform.system": "ml-monitoring"
+  "platform.env": "production"
+  "platform.owner": "team-ml-platform"
+  "platform.managed-by": "argocd"
+
+# ---------------------------------------------------------------------------
+# Shared namespace (same as GCP)
+# ---------------------------------------------------------------------------
+namespace: ml-monitoring
+
+# ---------------------------------------------------------------------------
+# Evidently drift-exporter — AWS delta: S3 reference bucket + ECR image
+# ---------------------------------------------------------------------------
+driftExporter:
+  enabled: true
+  image:
+    # ECR pull-through cache (ADR-0029): upstream evidently image cached in ECR.
+    # Replace <account-id> and <region> with environment-specific values set
+    # via ArgoCD ApplicationSet or environment-specific parameter overrides.
+    repository: "<account-id>.dkr.ecr.<region>.amazonaws.com/evidently-ai/drift-exporter"
+    tag: "0.4.35"
+    pullPolicy: IfNotPresent
+
+  port: 8001
+  evaluationIntervalSeconds: 300
+
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+
+  # AWS delta (ADR-0048 D4): S3 reference-dataset bucket (s3://) replaces GCS (gs://).
+  # Naming mirrors aws-ml-artifact-store (WS-B): mlflow-reference-data-{env}-{account}
+  # Path pattern inside bucket: <modelName>/<tenant>/<domain>/reference.parquet
+  # Access via EKS Pod Identity + ABAC condition (ADR-0018):
+  #   aws:PrincipalTag/platform:system == aws:ResourceTag/platform:system
+  referenceBucketUri: "s3://mlflow-reference-data-production-<account-id>"
+
+  defaultThresholds:
+    datasetDriftScore:
+      warning: 0.20
+      critical: 0.40
+    featurePsiScore:
+      warning: 0.10
+      critical: 0.25
+    featureKlDivergence:
+      warning: 0.10
+      critical: 0.30
+    modelAccuracy:
+      warning: 0.85
+      critical: 0.75
+    modelF1Score:
+      warning: 0.80
+      critical: 0.65
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop: ["ALL"]
+
+# ---------------------------------------------------------------------------
+# whylogs distribution profiler — AWS delta: ECR image
+# ---------------------------------------------------------------------------
+whylogsProfiler:
+  enabled: true
+  image:
+    # ECR pull-through cache (ADR-0029): whylabs/whylogs-profiler base image.
+    repository: "<account-id>.dkr.ecr.<region>.amazonaws.com/whylabs/whylogs-profiler"
+    tag: "1.3.7"
+    pullPolicy: IfNotPresent
+
+  pushgatewayUrl: "http://prometheus-pushgateway.monitoring.svc:9091"
+  windowSeconds: 3600
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "300m"
+      memory: "512Mi"
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop: ["ALL"]
+
+# ---------------------------------------------------------------------------
+# Retrain-trigger webhook proxy — AWS delta: ECR image
+# ---------------------------------------------------------------------------
+retrainTrigger:
+  enabled: true
+  image:
+    # Build + push to ECR (ADR-0029 / ADR-0048 D5).
+    # cosign-sign + syft-sbom composites applied in ml-pipeline.yml (WS-B).
+    repository: "<account-id>.dkr.ecr.<region>.amazonaws.com/platform/ml-retrain-trigger"
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+
+  port: 8080
+  replicas: 2
+  deduplicationWindowSeconds: 900
+
+  airflow:
+    baseUrl: "http://airflow-webserver.airflow.svc:8080"
+    dagId: "train_domain_adapter"
+    credentialsSecretName: "airflow-api-credentials"
+
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop: ["ALL"]
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+# ---------------------------------------------------------------------------
+# ExternalSecrets — AWS delta: AWS Secrets Manager key paths (ADR-0008)
+# The cluster-secret-store uses the AWS Secrets Manager provider.
+# Secret names follow: aws-ml-platform/<component>/<secret-name>
+# Rotation handled by ADR-0031 automation.
+# ---------------------------------------------------------------------------
+externalSecrets:
+  enabled: true
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: cluster-secret-store
+    kind: ClusterSecretStore
+  airflowCredentials:
+    secretName: airflow-api-credentials
+    remoteRef:
+      # AWS Secrets Manager key (ADR-0031 rotation applied to this secret).
+      # GCP equivalent: ml-monitoring/airflow-api-credentials
+      key: aws-ml-platform/ml-monitoring/airflow-api-credentials
+  alertmanagerRetrainToken:
+    secretName: alertmanager-retrain-token
+    remoteRef:
+      key: aws-ml-platform/ml-monitoring/alertmanager-retrain-token
+
+# ---------------------------------------------------------------------------
+# ServiceMonitor — inherited ADR-0038 (cluster-agnostic)
+# ---------------------------------------------------------------------------
+serviceMonitor:
+  enabled: true
+  prometheusSelector:
+    prometheus: kube-prometheus
+  scrapeInterval: "30s"
+  scrapeTimeout: "10s"
+
+# ---------------------------------------------------------------------------
+# PrometheusRule — inherited thresholds from ADR-0038 (unchanged on AWS)
+# ---------------------------------------------------------------------------
+prometheusRule:
+  enabled: true
+  additionalLabels:
+    prometheus: kube-prometheus
+
+# ---------------------------------------------------------------------------
+# RBAC — AWS delta: EKS Pod Identity (ADR-0018) replaces GKE Workload Identity.
+#
+# EKS Pod Identity does NOT use a K8s annotation on the ServiceAccount.
+# The Pod Identity Association is created by the aws-eks-gpu Terraform module
+# (WS-A/WS-B) and references this ServiceAccount by name and namespace.
+# The IAM role ARN is injected via the EKS Pod Identity Agent sidecar.
+# Leave workloadIdentityAnnotation empty for AWS.
+# ---------------------------------------------------------------------------
+rbac:
+  create: true
+  serviceAccountName: ml-retrain-trigger
+  workloadIdentityAnnotation: ""
+
+# ---------------------------------------------------------------------------
+# NetworkPolicy — toggle default-off (same as GCP).
+# Set to true after confirming pushgateway + whylogs co-component allow rules.
+# ---------------------------------------------------------------------------
+networkPolicy:
+  enabled: false
+
+# ---------------------------------------------------------------------------
+# Model namespaces — populate per tenant/domain before applying (cluster-agnostic).
+# ---------------------------------------------------------------------------
+modelNamespaces: []
+# Example:
+# - namespace: ml-tenant-acme-hft
+#   modelName: domain-adapter-hft
+#   tenant: tenant-acme
+#   domain: hft
+#   thresholds: {}

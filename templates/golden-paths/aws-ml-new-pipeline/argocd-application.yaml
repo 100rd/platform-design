@@ -1,0 +1,73 @@
+---
+# Golden Path: aws-ml-new-pipeline -- ArgoCD Application stub (Airflow gitSync)
+# WS-B (ADR-0048 <- ADR-0037) chart: apps/infra/airflow
+#
+# USAGE: substitute all {{PLACEHOLDER}} values, then commit this file at:
+#   apps/infra/airflow/example-pipelines/{{DAG_NAME}}/argocd-application.yaml
+#
+# This stub documents the ArgoCD Application for a new Airflow pipeline.
+# In most cases the DAG file (dag_template.py) is picked up by Airflow's
+# gitSync automatically -- this Application is only needed when deploying
+# a per-pipeline ArgoCD ApplicationSet slice.
+#
+# AWS DELTA vs GCP etalon (templates/golden-paths/new-ml-pipeline/argocd-application.yaml):
+#   No chart-level differences -- Airflow gitSync is cluster-agnostic.
+#   Added: platform.aws/task-pod-identity-role annotation to document the
+#   IAM role ARN backing the task pod ServiceAccount's Pod Identity binding (ADR-0018).
+#
+# Wave 20 -- after ml-monitoring (wave 10) and before grafana-self-serve (wave 30).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  # Substitute: airflow-pipeline-{{DAG_NAME}}
+  name: "airflow-pipeline-{{DAG_NAME}}"
+  namespace: argocd
+  labels:
+    # ADR-0028 platform taxonomy (Kubernetes plane)
+    platform.system: "ml-pipeline"
+    platform.component: "airflow"
+    # Substitute: {{PLATFORM_ENV}}
+    platform.env: "{{PLATFORM_ENV}}"
+    # Substitute: {{TEAM_OWNER}}
+    platform.owner: "{{TEAM_OWNER}}"
+    platform.managed-by: "argocd"
+    # Substitute: airflow-pipeline-{{DAG_NAME}}
+    app.kubernetes.io/name: "airflow-pipeline-{{DAG_NAME}}"
+    app.kubernetes.io/component: "airflow"
+    app.kubernetes.io/managed-by: "argocd"
+  annotations:
+    argocd.argoproj.io/sync-wave: "20"
+    # AWS-specific: document the IAM role ARN for the task pod Pod Identity binding.
+    # Provisioned by WS-B terraform; record the ARN here for audit traceability.
+    # Substitute: arn:aws:iam::{{AWS_ACCOUNT_ID}}:role/airflow-task-{{DAG_NAME}}
+    platform.aws/task-pod-identity-role: "arn:aws:iam::{{AWS_ACCOUNT_ID}}:role/airflow-task-{{DAG_NAME}}"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/your-org/platform-design.git
+    targetRevision: main
+    path: apps/infra/airflow
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: airflow
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=false
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m

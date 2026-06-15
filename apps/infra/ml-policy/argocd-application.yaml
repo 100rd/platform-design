@@ -1,0 +1,63 @@
+---
+# ArgoCD Application — ml-policy (WS-E, ADR-0020/0028/0044/0048)
+#
+# In-cluster ML/GPU policy enforcement: Kyverno ClusterPolicies (require platform
+# taxonomy labels on ML/GPU workloads; forbid privileged GPU pods) + a Gatekeeper
+# Constraint reusing the existing K8sBlockPrivileged template. The admission-plane parity
+# to the SCP/OPA control plane (terraform/modules/aws-ml-scp-parity,
+# tests/opa/platform_tags_ml.rego).
+#
+# Sync wave 6 — AFTER kyverno (wave 5) and gatekeeper so the ClusterPolicy / Constraint
+# CRDs exist; before ML workloads land.
+#
+# Apply-gated posture: ships Audit-first (values.enforcement.*=Audit); no workload is
+# blocked until a human promotes to Enforce after a clean soak window.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ml-policy
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: ml-policy
+    app.kubernetes.io/component: policy-enforcement
+    platform.system: security
+    platform.component: ml-policy
+    platform.env: production
+    platform.owner: team-sec
+    platform.managed-by: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+    adr: ADR-0020,ADR-0028,ADR-0044,ADR-0048
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/100rd/platform-design.git
+    targetRevision: HEAD
+    path: apps/infra/ml-policy
+    helm:
+      valueFiles:
+        - values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

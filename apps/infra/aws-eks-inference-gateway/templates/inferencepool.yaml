@@ -1,0 +1,15 @@
+{{- if .Values.enabled }}
+# InferencePool — the set of vLLM replicas sharing accelerator + base model (ADR-0047 D1).
+apiVersion: inference.networking.k8s.io/v1
+kind: InferencePool
+metadata:
+  name: {{ .Values.inferencePool.name }}
+  labels:
+    {{- include "aws-eks-inference-gateway.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- toYaml .Values.inferencePool.selector | nindent 4 }}
+  targetPortNumber: {{ .Values.inferencePool.targetPort }}
+  extensionRef:
+    name: {{ .Values.inferencePool.name }}-epp
+{{- end }}

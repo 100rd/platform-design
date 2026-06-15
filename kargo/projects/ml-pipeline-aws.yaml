@@ -1,0 +1,24 @@
+---
+# Kargo Project — ML Pipeline (AWS) (ADR-0048 D1 / ADR-0021)
+# Governs promotion of ML model serving images through dev -> staging -> prod
+# on the AWS EKS GPU ML cluster. Mirrors kargo/projects/mono.yaml pattern.
+# platform:system = ml-pipeline (ADR-0028).
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Project
+metadata:
+  name: ml-pipeline-aws
+  labels:
+    platform.system: ml-pipeline
+    platform.component: model-registry
+    platform.managed-by: argocd
+spec:
+  promotionPolicies:
+    # dev: auto-promote on every commit (fast feedback loop).
+    - stage: dev
+      autoPromotionEnabled: true
+    # staging: auto-promote after dev passes (integration validation).
+    - stage: staging
+      autoPromotionEnabled: true
+    # prod: human gate required (blast-radius control, plan §3 apply-gated rule).
+    - stage: prod
+      autoPromotionEnabled: false

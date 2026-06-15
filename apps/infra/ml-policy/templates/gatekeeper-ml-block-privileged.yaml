@@ -1,0 +1,47 @@
+{{- if .Values.gatekeeper.enabled }}
+---
+# Gatekeeper Constraint — block privileged containers on the ML/GPU serving nodes.
+#
+# REUSES the existing K8sBlockPrivileged ConstraintTemplate shipped by
+# apps/infra/gatekeeper/.../block-privileged-containers.yaml — we add a SECOND, ML-scoped
+# Constraint instance rather than redefine the template. This gives belt-and-suspenders
+# coverage alongside the Kyverno no-privileged-gpu policy (two engines, ADR-0020): if one
+# admission webhook is unavailable the other still denies.
+#
+# enforcementAction is driven by values.enforcement.noPrivilegedGpu: "Audit" maps to
+# Gatekeeper "dryrun" (observe), "Enforce" maps to "deny". Default Audit/dryrun.
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sBlockPrivileged
+metadata:
+  name: ml-block-privileged-containers
+  labels:
+    platform.system: {{ .Values.platformLabels.system | quote }}
+    platform.component: {{ .Values.platformLabels.component | quote }}
+    platform.owner: {{ .Values.platformLabels.owner | quote }}
+    platform.env: {{ .Values.platformLabels.env | quote }}
+    platform.managed-by: {{ .Values.platformLabels.managedBy | quote }}
+  annotations:
+    adr: ADR-0020,ADR-0028,ADR-0044
+    description: ML-namespace-scoped block on privileged GPU pods (parity with Kyverno no-privileged-gpu)
+spec:
+  enforcementAction: {{ if eq .Values.enforcement.noPrivilegedGpu "Enforce" }}deny{{ else }}dryrun{{ end }}
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      {{- range .Values.mlNamespaces }}
+      - {{ . }}
+      {{- end }}
+    excludedNamespaces:
+      {{- range .Values.excludedNamespaces }}
+      - {{ . }}
+      {{- end }}
+  parameters:
+    # Vendor driver / device-plugin images that legitimately need privileged mode.
+    # The ML serving / batch workloads themselves match none of these.
+    allowedImages:
+      - "^nvcr.io/nvidia/.*"
+      - "^registry.k8s.io/.*"
+      - "^602401143452.dkr.ecr.*.amazonaws.com/amazon-k8s-cni.*"
+{{- end }}

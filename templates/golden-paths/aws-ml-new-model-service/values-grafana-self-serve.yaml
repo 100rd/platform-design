@@ -1,0 +1,77 @@
+# Golden Path: aws-ml-new-model-service -- grafana-self-serve values
+# WS-D (ADR-0039) chart: apps/infra/grafana-self-serve
+#
+# USAGE: substitute all {{PLACEHOLDER}} values before committing.
+# Place the substituted file at:
+#   apps/infra/grafana-self-serve/example-teams/{{TEAM_SLUG}}/values.yaml
+#
+# This file is structurally identical to the GCP etalon
+# (templates/golden-paths/new-model-service/values-grafana-self-serve.yaml)
+# because WS-D (grafana-self-serve) is cluster-agnostic: it runs on the
+# same Prometheus/Grafana stack regardless of cloud provider.
+# The ML metric PromQL queries are cloud-agnostic.
+#
+# See README.md Step 4 for full instructions.
+
+team:
+  # Human-readable team name shown in the Grafana folder title.
+  # Substitute: {{TEAM_NAME}}
+  name: "{{TEAM_NAME}}"
+
+  # Machine-safe slug -- lowercase, hyphens only.
+  # Substitute: {{TEAM_SLUG}}
+  slug: "{{TEAM_SLUG}}"
+
+  # Kubernetes namespace where this team's workloads run.
+  # Must already exist (CreateNamespace=false on the ArgoCD Application).
+  # Substitute: {{MODEL_NAMESPACE}}
+  namespace: "{{MODEL_NAMESPACE}}"
+
+  # platform.system value (ADR-0028). For an AWS ML model service: ml-pipeline.
+  system: "ml-pipeline"
+
+  # platform.owner value (ADR-0028).
+  # Substitute: {{TEAM_OWNER}}
+  owner: "{{TEAM_OWNER}}"
+
+  # Deployment environment.
+  # Substitute: {{PLATFORM_ENV}}
+  env: "{{PLATFORM_ENV}}"
+
+  # Grafana service account for folder Editor access.
+  # Create this SA in Grafana before ArgoCD sync.
+  # Substitute: grafana-sa-{{TEAM_SLUG}}
+  grafanaServiceAccount: "grafana-sa-{{TEAM_SLUG}}"
+
+  # CI/CD service account in team.namespace for PrometheusRule RBAC.
+  # Substitute: {{TEAM_SLUG}}-ci
+  ciServiceAccount: "{{TEAM_SLUG}}-ci"
+
+# ML panels enabled -- wires ADR-0038 drift + accuracy metrics into the dashboard.
+# On AWS these metrics originate from the Evidently drift-exporter reading from
+# the S3 reference dataset via Pod Identity/ABAC. The PromQL selectors are
+# cloud-agnostic (model_name, tenant, domain labels).
+ml:
+  enabled: true
+
+  # Scope ML panels to this specific model.
+  # Substitute: {{MODEL_NAME}}
+  modelName: "{{MODEL_NAME}}"
+
+  # Scope ML panels to this tenant (ADR-0038 multi-tenant label).
+  # Substitute: {{TENANT}}
+  tenant: "{{TENANT}}"
+
+# Alert thresholds -- adjust for your model SLOs.
+alerts:
+  errorRateThreshold: "0.05"
+  cpuSaturationThreshold: "0.80"
+  memorySaturationThreshold: "0.80"
+  availabilityFor: "5m"
+  saturationFor: "15m"
+  # Drift and accuracy floors from:
+  #   docs/contracts/model-api-contract.md
+  #   docs/contracts/aws-ml-model-api-contract.md
+  mlDriftThreshold: "0.2"
+  mlAccuracyThreshold: "0.85"
+  mlAlertFor: "10m"

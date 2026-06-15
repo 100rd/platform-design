@@ -1,0 +1,437 @@
+---
+# Grafana self-serve: AWS GPU + EFA + Karpenter + ML-pipeline dashboard ConfigMap
+#
+# Gated by .Values.aws.gpuPanels.enabled (absent/false = this template produces nothing).
+# Only rendered for teams that set aws.gpuPanels.enabled: true in their values.yaml.
+# Non-AWS and non-GPU teams are entirely unaffected.
+#
+# Produces ONE additional ConfigMap per qualifying team:
+#   <team-slug>-grafana-aws-gpu  — GPU compute + EFA fabric + Karpenter + ML-pipeline
+#
+# Metric sources:
+#   - DCGM Exporter DaemonSet (apps/infra/dcgm-exporter, WS-A, ADR-0044 D2):
+#       DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED, DCGM_FI_DEV_FB_FREE,
+#       DCGM_FI_DEV_POWER_USAGE, DCGM_FI_DEV_XID_ERRORS
+#   - node_exporter (EFA fabric, ADR-0045):
+#       node_network_receive_bytes_total, node_network_transmit_bytes_total,
+#       node_network_receive_packets_total, node_network_transmit_packets_total
+#   - Karpenter controller metrics (ADR-0046):
+#       karpenter_nodes_allocatable, karpenter_disruptions_disrupted_pod_count_total
+#   - Airflow StatsD/OpenMetrics exporter (ADR-0048, WS-B):
+#       airflow_dag_run_duration_success_bucket, airflow_task_instance_created_count,
+#       airflow_task_instance_failed_count
+#
+# ADR-0039: Self-Serve Observability — templated dashboard extension.
+# ADR-0028: platform.system = observability (mandatory on every resource).
+# ADR-0044: AWS EKS GPU ML foundation (DCGM integration, aws-eks-gpu-* labels).
+# ADR-0045: AWS EFA fabric (EFA interface panels).
+# ADR-0046: Node strategy — Karpenter GPU pools (provisioner panels).
+# ADR-0048: AWS ML CI/CD (Airflow DAG + task panels).
+{{- include "grafana-self-serve.validate" . }}
+{{- if and .Values.aws .Values.aws.gpuPanels .Values.aws.gpuPanels.enabled }}
+{{- $folderUid   := include "grafana-self-serve.folderUid" . }}
+{{- $dcgmPrefix  := .Values.aws.gpuPanels.dcgmMetricPrefix | default "DCGM_FI_DEV" }}
+{{- $nodePool    := .Values.aws.gpuPanels.nodePoolLabel | default "aws-eks-gpu" }}
+{{- $efaEnabled  := and .Values.aws.efaPanels .Values.aws.efaPanels.enabled }}
+{{- $efaIface    := "" }}
+{{- if and .Values.aws.efaPanels .Values.aws.efaPanels.efaInterface }}
+{{- $efaIface = .Values.aws.efaPanels.efaInterface }}
+{{- else }}
+{{- $efaIface = "eth0" }}
+{{- end }}
+{{- $karpenterEnabled := and .Values.aws.karpenterPanels .Values.aws.karpenterPanels.enabled }}
+{{- $karpenterPool    := "" }}
+{{- if and .Values.aws.karpenterPanels .Values.aws.karpenterPanels.gpuNodePoolName }}
+{{- $karpenterPool = .Values.aws.karpenterPanels.gpuNodePoolName }}
+{{- else }}
+{{- $karpenterPool = "aws-eks-gpu-spot" }}
+{{- end }}
+{{- $mlPipelineEnabled := and .Values.aws.mlPipelinePanels .Values.aws.mlPipelinePanels.enabled }}
+{{- $airflowNs := "" }}
+{{- if and .Values.aws.mlPipelinePanels .Values.aws.mlPipelinePanels.airflowNamespace }}
+{{- $airflowNs = .Values.aws.mlPipelinePanels.airflowNamespace }}
+{{- else }}
+{{- $airflowNs = "ml-pipeline" }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.team.slug }}-grafana-aws-gpu
+  namespace: {{ .Values.grafanaNamespace }}
+  labels:
+    {{- include "grafana-self-serve.dashboardLabels" . | nindent 4 }}
+  annotations:
+    grafana_folder: {{ printf "team-%s" .Values.team.slug | quote }}
+data:
+  {{ printf "%s-aws-gpu.json" .Values.team.slug }}: |
+    {
+      "annotations": {"list": []},
+      "description": "AWS GPU + EFA + Karpenter + ML-pipeline — {{ .Values.team.name }}. system={{ .Values.team.system }}. ADR-0039/0044/0045/0046/0048.",
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+          "id": 300,
+          "title": "GPU Compute (DCGM — ADR-0044)",
+          "type": "row"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "max": 100, "min": 0, "unit": "percent"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 1},
+          "id": 301,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "{{ $dcgmPrefix }}_GPU_UTIL{kubernetes_node=~\".*{{ $nodePool }}.*\"}",
+              "legendFormat": "{{ "{{gpu}}" }} / {{ "{{kubernetes_node}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "GPU Utilisation (%)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "bytes"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 1},
+          "id": 302,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "{{ $dcgmPrefix }}_FB_USED{kubernetes_node=~\".*{{ $nodePool }}.*\"} * 1048576",
+              "legendFormat": "used {{ "{{gpu}}" }}",
+              "refId": "A"
+            },
+            {
+              "expr": "{{ $dcgmPrefix }}_FB_FREE{kubernetes_node=~\".*{{ $nodePool }}.*\"} * 1048576",
+              "legendFormat": "free {{ "{{gpu}}" }}",
+              "refId": "B"
+            }
+          ],
+          "title": "GPU Framebuffer Memory (used / free)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "watt"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 9},
+          "id": 303,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "{{ $dcgmPrefix }}_POWER_USAGE{kubernetes_node=~\".*{{ $nodePool }}.*\"}",
+              "legendFormat": "{{ "{{gpu}}" }} / {{ "{{kubernetes_node}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "GPU Power Draw (W)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "custom": {"align": "auto", "cellOptions": {"type": "color-background"}},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "red", "value": 1}
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 9},
+          "id": 304,
+          "options": {"cellHeight": "sm", "showHeader": true},
+          "targets": [
+            {
+              "expr": "{{ $dcgmPrefix }}_XID_ERRORS{kubernetes_node=~\".*{{ $nodePool }}.*\"}",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "GPU XID Errors (non-zero = hardware fault)",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {"Time": true, "__name__": true},
+                "renameByName": {"gpu": "GPU", "kubernetes_node": "Node", "Value": "XID Errors"}
+              }
+            }
+          ],
+          "type": "table"
+        }
+        {{- if $efaEnabled }},
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 17},
+          "id": 400,
+          "title": "EFA Fabric Network (ADR-0045)",
+          "type": "row"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "Bps"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 18},
+          "id": 401,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "sum by (instance) (rate(node_network_receive_bytes_total{device=\"{{ $efaIface }}\",instance=~\".*{{ $nodePool }}.*\"}[5m]))",
+              "legendFormat": "rx {{ "{{instance}}" }}",
+              "refId": "A"
+            },
+            {
+              "expr": "sum by (instance) (rate(node_network_transmit_bytes_total{device=\"{{ $efaIface }}\",instance=~\".*{{ $nodePool }}.*\"}[5m]))",
+              "legendFormat": "tx {{ "{{instance}}" }}",
+              "refId": "B"
+            }
+          ],
+          "title": "EFA Network Throughput (Rx / Tx)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "pps"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 18},
+          "id": 402,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "sum by (instance) (rate(node_network_receive_packets_total{device=\"{{ $efaIface }}\",instance=~\".*{{ $nodePool }}.*\"}[5m]))",
+              "legendFormat": "rx {{ "{{instance}}" }}",
+              "refId": "A"
+            },
+            {
+              "expr": "sum by (instance) (rate(node_network_transmit_packets_total{device=\"{{ $efaIface }}\",instance=~\".*{{ $nodePool }}.*\"}[5m]))",
+              "legendFormat": "tx {{ "{{instance}}" }}",
+              "refId": "B"
+            }
+          ],
+          "title": "EFA Packet Rate (pps)",
+          "type": "timeseries"
+        }
+        {{- end }}
+        {{- if $karpenterEnabled }},
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 26},
+          "id": 500,
+          "title": "Karpenter GPU Pool (ADR-0046)",
+          "type": "row"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 27},
+          "id": 501,
+          "options": {
+            "legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "karpenter_nodes_allocatable{nodepool=\"{{ $karpenterPool }}\",resource=\"nvidia.com/gpu\"}",
+              "legendFormat": "allocatable GPU",
+              "refId": "A"
+            },
+            {
+              "expr": "sum(kube_pod_container_resource_requests{resource=\"nvidia.com/gpu\",namespace=\"{{ .Values.team.namespace }}\"})",
+              "legendFormat": "requested GPU",
+              "refId": "B"
+            }
+          ],
+          "title": "GPU Capacity vs Requests (pool: {{ $karpenterPool }})",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "bars", "fillOpacity": 80, "lineWidth": 1, "showPoints": "never"},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 27},
+          "id": 502,
+          "options": {
+            "legend": {"calcs": ["sum"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "increase(karpenter_disruptions_disrupted_pod_count_total{nodepool=\"{{ $karpenterPool }}\"}[1h])",
+              "legendFormat": "disrupted pods/hr",
+              "refId": "A"
+            }
+          ],
+          "title": "Karpenter Spot Disruptions (pods/hr)",
+          "type": "timeseries"
+        }
+        {{- end }}
+        {{- if $mlPipelineEnabled }},
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 35},
+          "id": 600,
+          "title": "ML Pipeline (Airflow + MLflow — ADR-0048)",
+          "type": "row"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "s"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 36},
+          "id": 601,
+          "options": {
+            "legend": {"calcs": ["mean", "p95"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum by (le, dag_id) (rate(airflow_dag_run_duration_success_bucket{namespace=\"{{ $airflowNs }}\"}[15m])))",
+              "legendFormat": "P50 {{ "{{dag_id}}" }}",
+              "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum by (le, dag_id) (rate(airflow_dag_run_duration_success_bucket{namespace=\"{{ $airflowNs }}\"}[15m])))",
+              "legendFormat": "P95 {{ "{{dag_id}}" }}",
+              "refId": "B"
+            }
+          ],
+          "title": "Airflow DAG Run Duration (P50 / P95)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 36},
+          "id": 602,
+          "options": {
+            "legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "airflow_task_instance_created_count{namespace=\"{{ $airflowNs }}\"}",
+              "legendFormat": "created {{ "{{task_id}}" }}",
+              "refId": "A"
+            },
+            {
+              "expr": "airflow_task_instance_failed_count{namespace=\"{{ $airflowNs }}\"}",
+              "legendFormat": "failed {{ "{{task_id}}" }}",
+              "refId": "B"
+            }
+          ],
+          "title": "Airflow Task Instances (created vs failed)",
+          "type": "timeseries"
+        }
+        {{- end }}
+      ],
+      "refresh": "{{ .Values.defaultRefresh }}",
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["self-serve", "{{ .Values.team.slug }}", "gpu", "efa", "aws", "ml-pipeline", "karpenter"],
+      "templating": {
+        "list": [
+          {
+            "current": {"selected": false, "text": "{{ .Values.datasource.name }}", "value": "{{ .Values.datasource.name }}"},
+            "hide": 0,
+            "includeAll": false,
+            "label": "Datasource",
+            "multi": false,
+            "name": "DS_PROMETHEUS",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "skipUrlSync": false,
+            "type": "datasource"
+          }
+        ]
+      },
+      "time": {
+        "from": "{{ .Values.defaultTimeRange.from }}",
+        "to": "{{ .Values.defaultTimeRange.to }}"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "{{ .Values.team.name }} — AWS GPU + EFA + ML Pipeline",
+      "uid": "{{ printf "aws-gpu-%s" .Values.team.slug | trunc 40 }}",
+      "version": 1,
+      "weekStart": ""
+    }
+{{- end }}
