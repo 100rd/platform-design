@@ -16,8 +16,12 @@ Applications deployed via ArgoCD from `apps/infra/`
 
 | Application | Chart Version | App Version | Description |
 |-------------|---------------|-------------|-------------|
+| airflow-aws | 1.0.0 | 2.9.3 | >- |
+| airflow-baremetal | 1.0.0 | 2.9.3 | >- |
 | airflow | 1.0.0 | 2.9.3 | >- |
+| aws-eks-inference-gateway | 1.0.0 | v1.0.0 | >- |
 | aws-lb-controller | 3.1.0 | 3.1.0 | AWS Load Balancer Controller - manages ALB and NLB for Kuber |
+| baremetal-org-policy | 1.0.0 | 1.0.0 | >- |
 | cert-manager | 1.2.0 | 1.20.1 | cert-manager - Automatic TLS certificate management for Kube |
 | cilium | 1.1.0 | 1.19.4 | Cilium CNI with Hubble observability for Kubernetes networki |
 | cluster-secret-store | 1.0.0 | 1.0.0 | ClusterSecretStore for AWS Secrets Manager — deployed per  |
@@ -33,6 +37,9 @@ Applications deployed via ArgoCD from `apps/infra/`
 | kargo | 0.2.0 | 1.9.0 | Kargo progressive delivery controller |
 | kyverno | 1.1.0 | 1.18.1 | Kyverno - Kubernetes Native Policy Management (ADR-0020) |
 | ml-monitoring | 0.1.0 | 0.1.0 | >- |
+| ml-policy | 0.1.0 | 1.0.0 | >- |
+| mlflow-aws | 1.0.0 | 2.21.3 | >- |
+| mlflow-baremetal | 1.0.0 | 2.21.3 | >- |
 | mlflow | 1.0.0 | 2.21.3 | >- |
 | opencost | 1.0.0 | 1.113.0 | >- |
 | otel-operator | 0.1.0 |  | OpenTelemetry Operator with auto-instrumentation for Go appl |
