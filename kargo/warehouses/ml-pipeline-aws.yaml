@@ -1,0 +1,27 @@
+---
+# Kargo Warehouse — ML Pipeline (AWS) (ADR-0048 D5 / ADR-0021)
+# Watches the ECR repository for new ML model serving image tags
+# pushed by .github/workflows/ml-pipeline-aws.yml (register job).
+# On a new tag, Kargo creates a Freight that can be promoted through
+# ml-pipeline-aws Project stages (dev -> staging -> prod).
+# ADR-0028: platform:system = ml-pipeline.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Warehouse
+metadata:
+  name: ml-pipeline-aws
+  namespace: ml-pipeline-aws
+  labels:
+    platform.system: ml-pipeline
+    platform.component: model-registry
+    platform.managed-by: argocd
+spec:
+  subscriptions:
+    - image:
+        # ECR pull-through cache repository for ML model serving images.
+        # Full URI populated per-environment via ArgoCD Application parameter.
+        # Pattern: <account-id>.dkr.ecr.<region>.amazonaws.com/ml/<model-id>
+        # Placeholder replaced at deploy time with the actual ECR endpoint.
+        repoURL: "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/ml/model"
+        # Track by digest so only cosign-signed, SBOM-attested images promote.
+        tagSelectionStrategy: Digest
+        imageSelectionPolicy: Digest

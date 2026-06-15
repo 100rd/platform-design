@@ -1,0 +1,36 @@
+apiVersion: v2
+name: mlflow-aws
+description: >-
+  MLflow tracking server + Model Registry on EKS — ML model versioning and
+  artifact storage for the train->eval->gate->deploy pipeline. S3 artifact store
+  + dedicated RDS PostgreSQL backend. HA 2-replica deployment. EKS Pod Identity
+  provides credential-less S3 access (ADR-0018). ADR-0048 D2/D3 + ADR-0037
+  (cluster-agnostic ML logic inherited unchanged).
+type: application
+version: 1.0.0
+appVersion: "2.21.3"
+
+keywords:
+  - mlflow
+  - model-registry
+  - ml-pipeline
+  - s3
+  - aws
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+annotations:
+  category: ML Platform
+  platform: Kubernetes
+  adr: "0048"
+
+dependencies:
+  # community-charts MLflow Helm chart
+  # https://github.com/community-charts/helm-charts/tree/main/charts/mlflow
+  # Pinned to 1.4.x (MLflow 2.21.x); bump after staging validation.
+  - name: mlflow
+    version: "1.4.1"
+    repository: https://community-charts.github.io/helm-charts
+    condition: mlflow.enabled

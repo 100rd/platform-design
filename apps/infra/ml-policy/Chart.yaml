@@ -1,0 +1,32 @@
+apiVersion: v2
+name: ml-policy
+description: >-
+  WS-E in-cluster policy enforcement for the greenfield AWS EKS GPU/ML estate —
+  Kyverno ClusterPolicies + a Gatekeeper constraint that require the ADR-0028
+  platform taxonomy labels on the net-new ML/GPU workload kinds and forbid
+  privileged GPU pods. The in-cluster parity to the SCP/OPA control plane
+  (aws-ml-scp-parity, tests/opa/platform_tags_ml.rego).
+version: 0.1.0
+appVersion: "1.0.0"
+type: application
+
+# This chart ships only ClusterPolicy / Constraint manifests (no upstream
+# dependency). Kyverno (ADR-0020, apps/infra/kyverno) and Gatekeeper
+# (apps/infra/gatekeeper) provide the admission engines these objects target.
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - policy
+  - security
+  - ml
+  - gpu
+  - platform-taxonomy
+  - abac
+
+annotations:
+  category: Security
+  platform: Kubernetes
+  adr: ADR-0020,ADR-0028,ADR-0044,ADR-0048

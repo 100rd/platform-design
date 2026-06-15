@@ -1,0 +1,67 @@
+---
+# aws-eks-inference-gateway — in-cluster serving front (ADR-0047). WS-A — ml-platform.
+#
+# Delivered by ArgoCD onto the greenfield aws-eks-gpu cluster. Default-OFF: the whole
+# chart is gated by `enabled` so nothing renders until a human enables it (apply-gated).
+# This is the in-cluster (GitOps) companion to the terraform/modules/aws-eks-inference-gateway
+# module — the module owns the InferencePool/InferenceObjective/EPP plumbing at plan time;
+# this app owns the day-2 GitOps delivery + values. Reuses Envoy Gateway (ADR-0025);
+# AWS WAF (ADR-0047 D4) is reused from the `waf` module and bound to the upstream LB.
+
+enabled: false
+
+# ---------------------------------------------------------------------------
+# Gateway API data plane (ADR-0047 D2 default / D3 fallback)
+# ---------------------------------------------------------------------------
+gateway:
+  # "envoy-gateway" (default, ADR-0047 D2) or the ALB LBC GatewayClass (fallback, D3).
+  className: envoy-gateway
+  name: vllm-inference-gateway
+  listenerPort: 80
+
+# ---------------------------------------------------------------------------
+# Gateway API Inference Extension (v1 GA CRDs — pinned, ADR-0047 D1)
+# ---------------------------------------------------------------------------
+inferenceExtension:
+  # Pin the CRD/extension version explicitly (no main/latest) — CRD skew risk (D1/Risks).
+  crdVersion: v1.0.0
+
+inferencePool:
+  name: vllm-pool
+  targetPort: 8000
+  selector:
+    app: vllm
+
+# Multi-LoRA → multiple InferenceObjectives (v1 GA; was InferenceModel). ADR-0047 D1.
+inferenceObjectives:
+  - name: default-model
+    criticality: Standard
+    targetModel: default-model-v1
+
+# ---------------------------------------------------------------------------
+# Endpoint Picker (EPP) — deployed EXPLICITLY (ADR-0047 D2; NOT automatic)
+# ---------------------------------------------------------------------------
+endpointPicker:
+  enabled: true
+  image: registry.k8s.io/gateway-api-inference-extension/epp:v1.0.0
+  replicas: 2
+  # Routes on KV-cache utilisation + queue depth, not round-robin (the throughput win).
+  config:
+    kvCacheWeight: "1.0"
+    queueDepthWeight: "1.0"
+
+# ---------------------------------------------------------------------------
+# AWS WAF (ADR-0047 D4) — the reused `waf` module's WebACL, bound to the upstream LB.
+# Provide the ARN out-of-band (Terraform `waf` output); empty leaves the front unguarded
+# (surface a warning in review). Start rules in count mode, then block (D4/Risks).
+# ---------------------------------------------------------------------------
+waf:
+  webAclArn: ""
+  mode: count
+
+# ADR-0028 platform taxonomy labels on every rendered object.
+platformLabels:
+  platform.system: ml-platform
+  platform.component: inference-gateway
+  platform.owner: team-ml-platform
+  platform.managed-by: argocd
