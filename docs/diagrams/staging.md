@@ -10,9 +10,12 @@ graph LR
     staging__global_clustermesh_connect["staging/_global/clustermesh-connect<br/>(clustermesh-connect)"]
     staging__global_global_accelerator["staging/_global/global-accelerator<br/>(global-accelerator)"]
     staging__global_iam["staging/_global/iam<br/>(iam)"]
+    staging_eu_west_1_platform_secret_rotation["staging/eu-west-1/platform/secret-rotation<br/>(secret-rotation)"]
   end
   staging__global_clustermesh_connect -->|depends on| staging__global_clustermesh_connect__dep__cilium_euc1(cilium_euc1)
   staging__global_clustermesh_connect -->|depends on| staging__global_clustermesh_connect__dep__cilium_euw1(cilium_euw1)
   staging__global_global_accelerator -->|depends on| staging__global_global_accelerator__dep__nlb_euc1(nlb_euc1)
   staging__global_global_accelerator -->|depends on| staging__global_global_accelerator__dep__nlb_euw1(nlb_euw1)
+  staging_eu_west_1_platform_secret_rotation -->|depends on| staging_eu_west_1_platform_secret_rotation__dep__kms(kms)
+  staging_eu_west_1_platform_secret_rotation -->|depends on| staging_eu_west_1_platform_secret_rotation__dep__network(network)
 ```
