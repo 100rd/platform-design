@@ -1,0 +1,28 @@
+apiVersion: v2
+name: rook-ceph
+description: >-
+  Rook-Ceph storage cluster CRs (CephCluster / CephBlockPool / CephFilesystem /
+  CephObjectStore-RGW-S3) for the bare-metal GPU cluster. The operator is installed by the
+  baremetal-rook-ceph Terraform module; this app holds the cluster/pool/object CRs. WS-A,
+  ADR-0052.
+version: 1.0.0
+appVersion: "v1.15.6"
+type: application
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - rook
+  - ceph
+  - storage
+  - rbd
+  - s3
+  - rgw
+
+annotations:
+  category: Storage
+  platform: Kubernetes
+  platform.system: ml-infra
+  adr: "0052"

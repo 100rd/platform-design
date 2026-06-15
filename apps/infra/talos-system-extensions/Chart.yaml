@@ -1,0 +1,27 @@
+apiVersion: v2
+name: talos-system-extensions
+description: >-
+  Talos system-extension catalog/version pins (GitOps source of truth) for the bare-metal
+  GPU cluster — the NVIDIA driver + container toolkit extensions baked into the Talos boot
+  image. WS-A, ADR-0050.
+version: 1.0.0
+appVersion: "v1.9.2"
+type: application
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - talos
+  - system-extension
+  - nvidia
+  - gpu
+  - driver
+  - immutable
+
+annotations:
+  category: GPU
+  platform: Talos
+  platform.system: ml-infra
+  adr: "0050"

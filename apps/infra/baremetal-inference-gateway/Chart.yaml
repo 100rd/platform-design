@@ -1,0 +1,28 @@
+apiVersion: v2
+name: baremetal-inference-gateway
+description: >-
+  Model-/KV-cache-aware serving front for vLLM on the bare-metal cluster — Gateway API
+  inference extension (Gateway / InferencePool / InferenceObjective / HTTPRoute) on
+  Cilium or Envoy Gateway, NOT a cloud LB. The on-prem mirror of gke-inference-gateway.
+  WS-A, ADR-0053.
+version: 1.0.0
+appVersion: "1.0.0"
+type: application
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - inference
+  - gateway-api
+  - vllm
+  - inferencepool
+  - inferenceobjective
+  - serving
+
+annotations:
+  category: Serving
+  platform: Kubernetes
+  platform.system: ml-inference
+  adr: "0053"

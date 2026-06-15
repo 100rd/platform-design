@@ -1,0 +1,44 @@
+---
+# Talos system-extension catalog/version pins (ADR-0050) — the GitOps source of truth for
+# the extensions baked into the Talos boot image. This is a DOC/pin chart: it does not
+# install anything on a running host (Talos extensions ship in the image, applied via a
+# re-image — never `apt install`). The terraform talos-machineconfig module references the
+# same pins; this app keeps them visible and reviewable in GitOps.
+#
+# APPLY-GATED: enabling/changing an extension is a Talos image change + node re-image, which
+# is apply-gated and staged on the standby DC first (risk R2). Nothing here mutates a host.
+
+talosVersion: v1.9.2
+
+# ADR-0028 labels (dotted, Kubernetes/Talos plane).
+platformLabels:
+  platform.system: ml-infra
+  platform.component: compute
+  platform.managed-by: argocd
+
+# The system extensions pinned to the Talos release (ADR-0050). Driver coupling to the
+# Talos version is intentional — accept the coupled-upgrade cost for image reproducibility.
+extensions:
+  - name: nonfree-kmod-nvidia
+    image: ghcr.io/siderolabs/nonfree-kmod-nvidia:535.183.06-v1.9.2
+    purpose: NVIDIA kernel driver (GPU workers) — the immutable-OS replacement for a host install
+  - name: nvidia-container-toolkit
+    image: ghcr.io/siderolabs/nvidia-container-toolkit:535.183.06-v1.17.3
+    purpose: NVIDIA container runtime hooks
+
+# Kernel modules these extensions + Rook-Ceph require (mirrors the talos-machineconfig
+# module; rbd+ceph is the ADR-0052 prerequisite, nvidia* backs the driver, ADR-0050).
+kernelModules:
+  - rbd
+  - ceph
+  - nvidia
+  - nvidia_uvm
+  - nvidia_drm
+  - nvidia_modeset
+
+# Upgrade gate (ADR-0050 / risk R2): stage on standby, A/B partition + auto-rollback,
+# run the gpu-driver-updates.md post-update checklist before promoting to primary.
+upgradePolicy:
+  stageOnStandbyFirst: true
+  autoRollbackOnBootFailure: true
+  postUpgradeChecklist: ai-sre/knowledge/gpu-driver-updates.md
