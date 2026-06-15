@@ -1,0 +1,96 @@
+# Example: team-ml-platform-aws (AWS ML Platform team)
+# Template PR example for the AWS ML Platform team.
+#
+# This example extends the base chart (apps/infra/grafana-self-serve) with:
+#   - GPU compute panels: DCGM utilisation, GPU memory, GPU power, XID errors
+#   - EFA fabric panels: network throughput, packet rate (sourced from node_exporter
+#     on EFA interfaces exposed via the DCGM / YACE stack)
+#   - Karpenter provisioner panels: node provisioning latency, spot interruption rate,
+#     disruption budget usage
+#   - ML pipeline panels: ADR-0048 AWS-side ML metrics (Airflow task lag, MLflow
+#     experiment count, S3 artifact write throughput)
+#   - ML observability panels (ml.enabled: true): ADR-0038/0048 drift + accuracy
+#
+# Reuses: apps/infra/grafana-self-serve (ADR-0039), existing Prometheus/Grafana/Loki/
+#          Tempo/Alertmanager stack (ADR-0026). No new operators.
+# ADR-0028: platform:system = ml-platform (AWS ML cluster workloads).
+# ADR-0039: Self-Serve Observability.
+# ADR-0048: AWS ML CI/CD + MLflow registry + drift.
+
+team:
+  name: "ML Platform (AWS)"
+  slug: "team-ml-platform-aws"
+  namespace: "ml-platform"
+  # platform:system for AWS ML cluster workloads. Matches the value used
+  # by the aws-eks-gpu-* resources (ADR-0028, WS-A).
+  system: "ml-platform"
+  owner: "team-ml-platform-aws"
+  env: "production"
+  # Optional: Grafana service account for Editor access to this team's folder.
+  # Create the service account in the Grafana UI before deploying.
+  grafanaServiceAccount: "grafana-sa-team-ml-platform-aws"
+  # Optional: CI/CD service account for PrometheusRule management RBAC.
+  ciServiceAccount: "ml-platform-aws-ci"
+
+# Enable ML observability panels (ADR-0038 drift + accuracy metrics).
+ml:
+  enabled: true
+  # Scope ML panels to a specific model. Remove or leave empty to show all models.
+  modelName: ""
+  # Scope ML panels to a specific tenant. Remove or leave empty to show all tenants.
+  tenant: ""
+
+# AWS GPU + ML-specific extensions to the base self-serve chart.
+# These keys are consumed by the aws-specific dashboard/alert overlays in
+# templates/aws-gpu-dashboard.yaml and templates/aws-gpu-prometheusrule.yaml.
+aws:
+  # GPU compute panels (sourced from DCGM Exporter — apps/infra/dcgm-exporter).
+  # Set to false to disable the GPU panel row (e.g. for non-GPU teams reusing
+  # this template).
+  gpuPanels:
+    enabled: true
+    # Node selector label used by the DCGM exporter DaemonSet. Used in PromQL
+    # label selectors to scope panels to the AWS ML GPU pool.
+    # Matches aws-eks-gpu-* Karpenter NodePool labels (ADR-0044/ADR-0046).
+    nodePoolLabel: "aws-eks-gpu"
+    # DCGM metric prefix. Default matches the DCGM exporter helm chart defaults.
+    dcgmMetricPrefix: "DCGM_FI_DEV"
+
+  # EFA fabric panels (sourced from node_exporter on EFA network interfaces,
+  # exported via YACE or node_exporter with interface=eth0/rdma0).
+  # Only meaningful on EFA-enabled pools (ADR-0045).
+  efaPanels:
+    enabled: true
+    # Network interface name used by EFA on the GPU instances.
+    # Typical: "eth0" (EFA device on p4d/p5/p5en). Override if your AMI differs.
+    efaInterface: "eth0"
+
+  # Karpenter provisioner panels (sourced from Karpenter controller metrics).
+  karpenterPanels:
+    enabled: true
+    # NodePool name for the GPU pool managed by WS-A (ADR-0046).
+    gpuNodePoolName: "aws-eks-gpu-spot"
+
+  # ML pipeline panels (AWS-specific: ADR-0048).
+  mlPipelinePanels:
+    enabled: true
+    # Airflow namespace. Matches apps/infra/airflow destination namespace.
+    airflowNamespace: "ml-pipeline"
+    # MLflow namespace. Matches apps/infra/mlflow destination namespace.
+    mlflowNamespace: "ml-pipeline"
+
+# Thresholds — tighter tolerances for GPU/ML workloads.
+alerts:
+  errorRateThreshold: "0.02"
+  cpuSaturationThreshold: "0.85"
+  memorySaturationThreshold: "0.90"
+  availabilityFor: "5m"
+  saturationFor: "10m"
+  # ML drift/accuracy thresholds (ml.enabled: true).
+  mlDriftThreshold: "0.2"
+  mlAccuracyThreshold: "0.85"
+  mlAlertFor: "10m"
+  # GPU-specific alert thresholds (aws.gpuPanels.enabled: true).
+  gpuUtilLowThreshold: "0.10"
+  gpuMemSaturationThreshold: "0.90"
+  gpuXidErrorThreshold: "0"
