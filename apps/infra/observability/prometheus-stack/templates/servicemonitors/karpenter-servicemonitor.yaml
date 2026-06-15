@@ -116,7 +116,7 @@ spec:
         team: platform
       annotations:
         summary: "High rate of Karpenter provisioning failures"
-        description: "Karpenter is failing to provision nodes at a rate of {{ $value }} nodes/sec."
+        description: "Karpenter is failing to provision nodes at a rate of {{ "{{" }} $value {{ "}}" }} nodes/sec."
         runbook_url: "https://runbooks.internal.example.com/karpenter/provisioning-failures"
 
     # Alert: Provisioning latency is high
@@ -131,7 +131,7 @@ spec:
         team: platform
       annotations:
         summary: "Karpenter provisioning latency is high"
-        description: "P99 node provisioning latency is {{ $value }}s (threshold: 120s). Pods are waiting longer for nodes."
+        description: "P99 node provisioning latency is {{ "{{" }} $value {{ "}}" }}s (threshold: 120s). Pods are waiting longer for nodes."
         runbook_url: "https://runbooks.internal.example.com/karpenter/high-latency"
 
     # Alert: CloudProvider API errors
@@ -144,7 +144,7 @@ spec:
         team: platform
       annotations:
         summary: "Karpenter CloudProvider API errors"
-        description: "Karpenter is experiencing CloudProvider API errors at {{ $value }} errors/sec."
+        description: "Karpenter is experiencing CloudProvider API errors at {{ "{{" }} $value {{ "}}" }} errors/sec."
         runbook_url: "https://runbooks.internal.example.com/karpenter/cloudprovider-errors"
 
     # Alert: Interrupted nodes not draining
@@ -158,7 +158,7 @@ spec:
         team: platform
       annotations:
         summary: "Interrupted nodes not draining"
-        description: "{{ $value }} interrupted nodes are stuck and not draining properly."
+        description: "{{ "{{" }} $value {{ "}}" }} interrupted nodes are stuck and not draining properly."
         runbook_url: "https://runbooks.internal.example.com/karpenter/stuck-nodes"
 
     # Recording rule: Node creation rate by provisioner

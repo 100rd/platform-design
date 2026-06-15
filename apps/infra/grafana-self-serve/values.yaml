@@ -1,6 +1,9 @@
 # grafana-self-serve — default values
-# ALL team.* fields are REQUIRED. There are no defaults; helm lint will fail
-# if any required field is missing or empty (enforced via required in templates).
+# ALL team.* fields are REQUIRED. Override every team.* field in the team's
+# own values.yaml (example-teams/<team-slug>/values.yaml) before deploying.
+# The placeholder strings below are CI-only defaults so that `helm template`
+# can render the chart without -f flags during kubeconform validation.
+# They are NOT valid for a real deployment and WILL be rejected by OPA policy.
 #
 # Override this file in example-teams/<team-slug>/values.yaml.
 # See docs/self-serve-observability.md for the full onboarding guide.
@@ -16,29 +19,29 @@
 team:
   # Human-readable team name (used in Grafana folder title and dashboard title).
   # Example: "Checkout"
-  name: ""
+  name: "ci-placeholder"
 
   # Machine-safe slug — lowercase, hyphens only.
   # Used as: Grafana folder name, alert rule prefix, label values.
   # Example: "team-checkout"
-  slug: ""
+  slug: "ci-placeholder"
 
   # Kubernetes namespace where this team's workloads run.
   # This is also where PrometheusRule and RBAC objects are deployed.
   # Must already exist — CreateNamespace=false on the ArgoCD Application.
   # Example: "checkout"
-  namespace: ""
+  namespace: "ci-placeholder"
 
   # platform:system value (ADR-0028 taxonomy) for this team's workloads.
   # Example: "checkout", "ml-monitoring", "auth"
-  system: ""
+  system: "ci-placeholder"
 
   # platform:owner value (ADR-0028 taxonomy). Typically matches slug.
   # Example: "team-checkout"
-  owner: ""
+  owner: "ci-placeholder"
 
   # Deployment environment. Must be one of: production, staging, dev, sandbox.
-  env: ""
+  env: "ci-placeholder"
 
   # (Optional) Grafana service-account name used for Editor access on the folder.
   # Create this service account in Grafana before deploying.

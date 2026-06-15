@@ -347,7 +347,7 @@ data:
           "targets": [
             {
               "expr": "sum by (label_karpenter_sh_capacity_type) (kube_node_labels{cluster=\"$cluster\",label_karpenter_sh_capacity_type!=\"\"})",
-              "legendFormat": "{{label_karpenter_sh_capacity_type}}",
+              "legendFormat": "{{ "{{" }}label_karpenter_sh_capacity_type{{ "}}" }}",
               "refId": "A"
             }
           ],
@@ -598,7 +598,7 @@ data:
           "targets": [
             {
               "expr": "(1 - avg by (node) (rate(node_cpu_seconds_total{mode=\"idle\",cluster=\"$cluster\",node=~\"$node\"}[5m]))) * 100",
-              "legendFormat": "{{node}}",
+              "legendFormat": "{{ "{{" }}node{{ "}}" }}",
               "refId": "A"
             }
           ],
@@ -648,7 +648,7 @@ data:
           "targets": [
             {
               "expr": "(1 - node_memory_MemAvailable_bytes{cluster=\"$cluster\",node=~\"$node\"} / node_memory_MemTotal_bytes{cluster=\"$cluster\",node=~\"$node\"}) * 100",
-              "legendFormat": "{{node}}",
+              "legendFormat": "{{ "{{" }}node{{ "}}" }}",
               "refId": "A"
             }
           ],
@@ -696,12 +696,12 @@ data:
           "targets": [
             {
               "expr": "rate(node_network_receive_bytes_total{cluster=\"$cluster\",node=~\"$node\",device!~\"lo|veth.*|docker.*|flannel.*|cali.*|cbr.*\"}[5m])",
-              "legendFormat": "{{node}} - receive",
+              "legendFormat": "{{ "{{" }}node{{ "}}" }} - receive",
               "refId": "A"
             },
             {
               "expr": "rate(node_network_transmit_bytes_total{cluster=\"$cluster\",node=~\"$node\",device!~\"lo|veth.*|docker.*|flannel.*|cali.*|cbr.*\"}[5m])",
-              "legendFormat": "{{node}} - transmit",
+              "legendFormat": "{{ "{{" }}node{{ "}}" }} - transmit",
               "refId": "B"
             }
           ],
@@ -751,7 +751,7 @@ data:
           "targets": [
             {
               "expr": "(1 - node_filesystem_avail_bytes{cluster=\"$cluster\",node=~\"$node\",fstype!~\"tmpfs|fuse.lxcfs|squashfs|vfat\"} / node_filesystem_size_bytes{cluster=\"$cluster\",node=~\"$node\",fstype!~\"tmpfs|fuse.lxcfs|squashfs|vfat\"}) * 100",
-              "legendFormat": "{{node}} - {{mountpoint}}",
+              "legendFormat": "{{ "{{" }}node{{ "}}" }} - {{ "{{" }}mountpoint{{ "}}" }}",
               "refId": "A"
             }
           ],
@@ -1057,7 +1057,7 @@ data:
           "targets": [
             {
               "expr": "sum by (label_karpenter_sh_capacity_type) (kube_node_labels{cluster=\"$cluster\",label_karpenter_sh_capacity_type!=\"\"})",
-              "legendFormat": "{{label_karpenter_sh_capacity_type}}",
+              "legendFormat": "{{ "{{" }}label_karpenter_sh_capacity_type{{ "}}" }}",
               "refId": "A"
             }
           ],
@@ -1091,7 +1091,7 @@ data:
           "targets": [
             {
               "expr": "sum by (label_kubernetes_io_arch) (kube_node_labels{cluster=\"$cluster\",label_kubernetes_io_arch!=\"\"})",
-              "legendFormat": "{{label_kubernetes_io_arch}}",
+              "legendFormat": "{{ "{{" }}label_kubernetes_io_arch{{ "}}" }}",
               "refId": "A"
             }
           ],
@@ -1178,7 +1178,7 @@ data:
           "targets": [
             {
               "expr": "sum by (action) (rate(karpenter_consolidation_actions_performed_total{cluster=\"$cluster\"}[5m]))",
-              "legendFormat": "{{action}}",
+              "legendFormat": "{{ "{{" }}action{{ "}}" }}",
               "refId": "A"
             }
           ],
@@ -1378,7 +1378,7 @@ data:
             {
               "datasource": "${DS_PROMETHEUS}",
               "expr": "sum(rate(http_server_requests_total{cluster=\"$cluster\",namespace=\"$namespace\",service=\"$service\"}[5m])) by (method, path)",
-              "legendFormat": "{{method}} {{path}}",
+              "legendFormat": "{{ "{{" }}method{{ "}}" }} {{ "{{" }}path{{ "}}" }}",
               "refId": "A"
             }
           ],
@@ -2080,7 +2080,7 @@ data:
           "targets": [
             {
               "expr": "count by (health_status) (argocd_app_info{cluster=\"$cluster\"})",
-              "legendFormat": "{{health_status}}",
+              "legendFormat": "{{ "{{" }}health_status{{ "}}" }}",
               "refId": "A"
             }
           ],
@@ -2114,7 +2114,7 @@ data:
           "targets": [
             {
               "expr": "count by (sync_status) (argocd_app_info{cluster=\"$cluster\"})",
-              "legendFormat": "{{sync_status}}",
+              "legendFormat": "{{ "{{" }}sync_status{{ "}}" }}",
               "refId": "A"
             }
           ],
@@ -2148,7 +2148,7 @@ data:
           "targets": [
             {
               "expr": "count by (dest_namespace) (argocd_app_info{cluster=\"$cluster\"})",
-              "legendFormat": "{{dest_namespace}}",
+              "legendFormat": "{{ "{{" }}dest_namespace{{ "}}" }}",
               "refId": "A"
             }
           ],
@@ -2361,7 +2361,7 @@ data:
           "targets": [
             {
               "expr": "count by (health_status) (argocd_app_info{cluster=\"$cluster\"})",
-              "legendFormat": "{{health_status}}",
+              "legendFormat": "{{ "{{" }}health_status{{ "}}" }}",
               "refId": "A"
             }
           ],
