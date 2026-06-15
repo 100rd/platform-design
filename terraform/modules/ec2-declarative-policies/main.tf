@@ -56,7 +56,10 @@ locals {
 resource "aws_organizations_policy" "ec2" {
   name        = "DeclarativeEC2-Baseline"
   description = "EC2 declarative baseline: IMDSv2 required, block public EBS-snapshot/AMI sharing, allowed-AMI providers. ADR-0017."
-  type        = "DECLARATIVE_POLICY_EC2"
+  # DECLARATIVE_POLICY_EC2 is a valid AWS Organizations policy type; the tflint AWS
+  # ruleset enum lags behind AWS and flags it as invalid. Suppress that stale check.
+  # tflint-ignore: aws_organizations_policy_invalid_type
+  type = "DECLARATIVE_POLICY_EC2"
 
   content = jsonencode({
     ec2_attributes = local.ec2_attributes
