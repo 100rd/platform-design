@@ -1,0 +1,31 @@
+apiVersion: v2
+name: baremetal-org-policy
+description: >-
+  Talos bare-metal security-policy bundle (WS-E). Delivers the UK-DC
+  tenant-isolation Kyverno ClusterPolicies (require tenant={id} label, deny
+  cross-namespace ServiceAccount refs) to the Talos cluster as the in-cluster
+  GitOps counterpart of terraform/modules/baremetal-org-policy. Observe-first
+  (Audit) by default; promote to Enforce after a clean soak window. Reuses the
+  existing apps/infra/kyverno engine — does NOT reinstall Kyverno.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+keywords:
+  - kyverno
+  - gatekeeper
+  - policy
+  - tenant-isolation
+  - soc2
+  - bare-metal
+  - talos
+  - security
+
+maintainers:
+  - name: Platform Security
+    email: platform-sec@example.com
+
+annotations:
+  category: Security & Compliance
+  platform: Kubernetes (Talos bare metal)
+  adr: "0028,0040,0049,0050"

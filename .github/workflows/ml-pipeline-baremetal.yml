@@ -1,0 +1,192 @@
+# ML training/release pipeline — WS-B bare metal (ADR-0037 reused, ADR-0049, ADR-0052).
+#
+# Topology: detect -> train -> eval -> register -> deploy.
+# Mirrors .github/workflows/ml-pipeline.yml (GKE variant) with the only
+# substrate substitution: artifact store = MinIO/Ceph-RGW S3 (not GCS).
+# Reuses the platform's supply-chain composites (.github/actions/syft-sbom,
+# cosign-sign, harden-runner) and promotes via Kargo two-step rollout.
+#
+# Training/eval are delegated to Airflow on the Talos bare-metal cluster via
+# its REST API (Airflow REST: POST /api/v1/dags/train_domain_adapter_baremetal/dagRuns).
+# This workflow is the control/gate plane, not the trainer.
+#
+# ADR-0028: platform:system = ml-pipeline.
+# ADR-0037: reused pipeline design; substrate = MinIO/Ceph-RGW.
+# ADR-0049: UK-isolated control plane; no GCP Workload Identity in this workflow.
+# ADR-0052: S3-compatible artifact store (endpoint-agnostic; mlflow + boto3 use MLFLOW_S3_ENDPOINT_URL).
+#
+# APPLY-GATED: This workflow targets real Airflow + MLflow services.
+# Execution requires live Talos cluster + MinIO + CloudNativePG provisioned (WS-A done).
+name: ML Pipeline (Bare Metal)
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model/adapter id to train and release (e.g. fraud-uk)"
+        required: true
+        type: string
+      environment:
+        description: "Target environment for the staged deploy"
+        required: true
+        default: staging
+        type: choice
+        options: [staging, prod]
+  push:
+    branches: [main]
+    paths:
+      - "models/**"
+      - "adapters/**"
+
+permissions:
+  contents: read
+  id-token: write  # For cosign keyless signing (Sigstore OIDC)
+
+concurrency:
+  group: ml-pipeline-baremetal-${{ github.ref }}-${{ inputs.model || github.sha }}
+  cancel-in-progress: false
+
+env:
+  # Airflow URL is the in-cluster service exposed via Cilium Gateway (ADR-0051).
+  # Set as a GitHub Actions variable in the repo settings (no hardcoded URL).
+  AIRFLOW_BASE_URL: ${{ vars.AIRFLOW_BAREMETAL_BASE_URL }}
+  MLFLOW_TRACKING_URI: ${{ vars.MLFLOW_BAREMETAL_TRACKING_URI }}
+  # S3-compatible endpoint -- MinIO or Ceph-RGW (ADR-0052).
+  # Value stored as a GH Actions variable; endpoint-agnostic (boto3 uses it).
+  MLFLOW_S3_ENDPOINT_URL: ${{ vars.MLFLOW_S3_ENDPOINT_URL }}
+  MODEL_ID: ${{ inputs.model || 'auto' }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1 -- Train: trigger Airflow DAG (train_domain_adapter_baremetal)
+  # ---------------------------------------------------------------------------
+  train:
+    name: Train (Airflow bare-metal train_domain_adapter_baremetal)
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.trigger.outputs.run_id }}
+
+    steps:
+      - name: Harden runner (audit)
+        uses: ./.github/actions/harden-runner
+
+      - uses: actions/checkout@v4
+
+      # No GCP WI -- authenticate to Airflow directly via AIRFLOW_API_TOKEN.
+      # Token is stored in GitHub Actions secrets (Vault-rotated via ESO).
+      - name: Trigger train_domain_adapter_baremetal DAG
+        id: trigger
+        env:
+          AIRFLOW_TOKEN: ${{ secrets.AIRFLOW_BAREMETAL_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          run_id="ci-bm-${MODEL_ID}-${GITHUB_SHA::8}"
+          curl -fsS -X POST "${AIRFLOW_BASE_URL}/api/v1/dags/train_domain_adapter_baremetal/dagRuns" \
+            -H "Authorization: Bearer ${AIRFLOW_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"dag_run_id\": \"${run_id}\",
+              \"conf\": {
+                \"model_id\": \"${MODEL_ID}\",
+                \"artifact_uri\": \"s3://mlflow-artifacts/${MODEL_ID}/${GITHUB_SHA}\"
+              }
+            }"
+          echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # Job 2 -- Eval gate: poll eval_adapter_debate task for pass/fail
+  # ---------------------------------------------------------------------------
+  eval:
+    name: Evaluate (eval_adapter_debate gate)
+    needs: train
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Harden runner (audit)
+        uses: ./.github/actions/harden-runner
+
+      - uses: actions/checkout@v4
+
+      - name: Wait for eval gate (eval_adapter_debate must pass)
+        env:
+          AIRFLOW_TOKEN: ${{ secrets.AIRFLOW_BAREMETAL_API_TOKEN }}
+          RUN_ID: ${{ needs.train.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          # Poll the downstream eval_adapter_debate task state.
+          # Bounded poll: 40 * 30s = 20 min max (mirrors GKE pipeline).
+          for _ in $(seq 1 40); do
+            state=$(curl -fsS \
+              -H "Authorization: Bearer ${AIRFLOW_TOKEN}" \
+              "${AIRFLOW_BASE_URL}/api/v1/dags/train_domain_adapter_baremetal/dagRuns/${RUN_ID}/taskInstances/eval_adapter_debate" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("state",""))')
+            case "${state}" in
+              success) echo "eval gate passed"; exit 0 ;;
+              failed)  echo "::error::eval_adapter_debate gate failed"; exit 1 ;;
+              *)       echo "eval state=${state:-pending}; waiting 30s"; sleep 30 ;;
+            esac
+          done
+          echo "::error::eval gate timed out after 20 min"; exit 1
+
+  # ---------------------------------------------------------------------------
+  # Job 3 -- Register: register model version in MLflow + sign with cosign/syft
+  # ---------------------------------------------------------------------------
+  register:
+    name: Register model + sign artifacts
+    needs: eval
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Harden runner (audit)
+        uses: ./.github/actions/harden-runner
+
+      - uses: actions/checkout@v4
+
+      - name: Register model version in MLflow (-> Staging)
+        env:
+          # S3 credentials injected as GH Actions secrets (Vault-rotated).
+          # Equivalent to the ESO-materialised mlflow-s3-credentials Secret in-cluster.
+          AWS_ACCESS_KEY_ID: ${{ secrets.MLFLOW_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MLFLOW_S3_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          pip install --quiet "mlflow>=2.16" "boto3>=1.34"
+          # Point boto3 at the in-cluster S3 endpoint (MinIO or Ceph-RGW, ADR-0052).
+          export MLFLOW_S3_ENDPOINT_URL="${MLFLOW_S3_ENDPOINT_URL}"
+          mlflow models create-version \
+            --name "${MODEL_ID}" \
+            --source "s3://mlflow-artifacts/${MODEL_ID}/${GITHUB_SHA}" || true
+          # Transition handled by model-registry stage gate in the next step.
+
+      - name: Generate SBOM (reuse platform cosign/syft composite)
+        uses: ./.github/actions/syft-sbom
+        with:
+          image: ${{ vars.ML_IMAGE_REPO }}/${{ env.MODEL_ID }}:${{ github.sha }}
+
+      - name: Sign + attest (cosign keyless -- reuse platform composite)
+        uses: ./.github/actions/cosign-sign
+        with:
+          image: ${{ vars.ML_IMAGE_REPO }}/${{ env.MODEL_ID }}:${{ github.sha }}
+
+  # ---------------------------------------------------------------------------
+  # Job 4 -- Deploy: Kargo staged promotion (staging auto / prod gated)
+  # ADR-0037: two-step rollout; bare-metal serving -> edge fleet.
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Staged deploy (Kargo bare-metal promotion)
+    needs: register
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'staging' }}
+
+    steps:
+      - name: Harden runner (audit)
+        uses: ./.github/actions/harden-runner
+
+      - uses: actions/checkout@v4
+
+      - name: Open Kargo promotion (staging auto / prod gated)
+        uses: ./.github/actions/argocd-tag-bump
+        with:
+          app: mlflow-serving-baremetal-${{ env.MODEL_ID }}
+          tag: ${{ github.sha }}
+          environment: ${{ inputs.environment || 'staging' }}

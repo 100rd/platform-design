@@ -1,0 +1,59 @@
+---
+# ArgoCD Application — baremetal-org-policy (WS-E, Talos bare metal)
+#
+# Delivers the UK-DC tenant-isolation Kyverno ClusterPolicy bundle to the Talos
+# cluster. The in-cluster GitOps counterpart of terraform/modules/baremetal-org-policy.
+#
+# APPLY-GATED: syncPolicy is MANUAL (no `automated:` block) — this app does NOT
+# auto-sync. A cluster-wide admission-policy change must be applied by a human after
+# blast-radius review (ADR-0040, plan §6 control-plane gates). Observe-first: the
+# bundle ships in Audit mode (values.enforcementMode) until promoted.
+#
+# Reuses the existing apps/infra/kyverno engine (ADR-0020) — ships ONLY ClusterPolicy
+# CRs, not the Kyverno controller. Sync wave 6: after kyverno (wave 5) is ready.
+#
+# ADR-0028 / ADR-0040 / ADR-0049 / ADR-0050.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: baremetal-org-policy
+  namespace: argocd
+  labels:
+    platform.system: security
+    platform.component: org-policy
+    platform.owner: team-sec
+    platform.managed-by: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
+    adr: ADR-0040
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/100rd/platform-design.git
+    targetRevision: HEAD
+    path: apps/infra/baremetal-org-policy
+    helm:
+      valueFiles:
+        - values.yaml
+
+  destination:
+    # Talos UK primary DC cluster registered in ArgoCD (name matches the cluster
+    # secret). Per-DC app instances point at talos-uk-primary / talos-uk-standby.
+    name: talos-uk-primary
+    # ClusterPolicy is cluster-scoped; namespace is the app's bookkeeping namespace.
+    namespace: kyverno
+
+  # MANUAL sync only — apply-gated. No `automated:` block on purpose.
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

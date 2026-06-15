@@ -1,0 +1,35 @@
+apiVersion: v2
+name: mlflow-baremetal
+description: >-
+  MLflow tracking server + Model Registry re-targeted at the bare-metal Talos
+  UK cluster. PostgreSQL backend (CloudNativePG, already in UK DC inventory) +
+  MinIO/Ceph-RGW S3 artifact store (ADR-0052). HA 2-replica deployment.
+  ADR-0037 (reused) + ADR-0052 (storage substrate). WS-B bare metal.
+type: application
+version: 1.0.0
+appVersion: "2.21.3"
+
+keywords:
+  - mlflow
+  - model-registry
+  - ml-pipeline
+  - minio
+  - ceph-rgw
+  - bare-metal
+  - talos
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+annotations:
+  category: ML Platform
+  platform: Kubernetes (Talos bare metal)
+  adr: "0037,0052"
+
+dependencies:
+  # community-charts MLflow Helm chart — same version as GKE app for parity.
+  - name: mlflow
+    version: "1.4.1"
+    repository: https://community-charts.github.io/helm-charts
+    condition: mlflow.enabled

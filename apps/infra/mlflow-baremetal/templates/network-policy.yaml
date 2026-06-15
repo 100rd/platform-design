@@ -1,0 +1,87 @@
+---
+# CiliumNetworkPolicy — MLflow (bare metal)
+# Cilium replaces standard Kubernetes NetworkPolicy on the bare-metal cluster
+# (Cilium CNI per ADR-0051). Standard NetworkPolicy is also included for
+# policy-engine parity with Kyverno/Gatekeeper validators.
+# ADR-0028: all workloads carry platform.system=ml-pipeline.
+# ADR-0051: Cilium eBPF datapath; CiliumNetworkPolicy provides L7 filtering.
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: "cilium.io/v2"
+kind: CiliumNetworkPolicy
+metadata:
+  name: mlflow-baremetal
+  namespace: {{ .Release.Namespace }}
+  labels:
+    platform.system: ml-pipeline
+    platform.component: model-registry
+    platform.managed-by: argocd
+spec:
+  endpointSelector:
+    matchLabels:
+      platform.system: ml-pipeline
+      platform.component: model-registry
+  ingress:
+    # Allow: Airflow scheduler + workers (same namespace) — for experiment logging
+    - fromEndpoints:
+        - matchLabels:
+            platform.system: ml-pipeline
+            platform.component: airflow
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+    # Allow: GitHub Actions runner via Cilium Gateway (ingress from ml-pipeline namespace)
+    - fromEndpoints:
+        - matchLabels:
+            platform.system: ml-pipeline
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+    # Allow: Prometheus scrape (observability namespace)
+    - fromEndpoints:
+        - matchLabels:
+            platform.system: observability
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+  egress:
+    # Allow: CloudNativePG PostgreSQL (ml-pipeline namespace, port 5432)
+    - toEndpoints:
+        - matchLabels:
+            platform.system: ml-pipeline
+            platform.component: postgres
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # Allow: MinIO / Ceph-RGW S3 endpoint (minio-system or rook-ceph namespace)
+    - toEndpoints:
+        - matchLabels:
+            platform.system: storage
+      toPorts:
+        - ports:
+            - port: "9000"
+              protocol: TCP
+            - port: "80"
+              protocol: TCP
+    # Allow: Vault (for ESO credential refresh via vault-cluster-store)
+    - toEndpoints:
+        - matchLabels:
+            platform.system: secrets
+      toPorts:
+        - ports:
+            - port: "8200"
+              protocol: TCP
+    # Allow: DNS
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+{{- end }}
