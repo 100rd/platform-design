@@ -82,3 +82,59 @@ run "namespace_adr0028_labels" {
     error_message = "platform.component must be gpu-dcgm."
   }
 }
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Auto-taint CronJob container hardening (CIS K8s 5.2.x / Pod Security "restricted")
+# Path: spec -> job_template -> spec -> template -> spec -> container[0]
+# ---------------------------------------------------------------------------------------------------------------------
+
+run "auto_taint_container_security_context" {
+  command = plan
+
+  variables {
+    enabled = true
+  }
+
+  assert {
+    condition     = kubernetes_cron_job_v1.taint[0].spec[0].job_template[0].spec[0].template[0].spec[0].container[0].security_context[0].run_as_non_root == true
+    error_message = "Auto-taint container must set run_as_non_root = true."
+  }
+
+  assert {
+    condition     = kubernetes_cron_job_v1.taint[0].spec[0].job_template[0].spec[0].template[0].spec[0].container[0].security_context[0].read_only_root_filesystem == true
+    error_message = "Auto-taint container must set read_only_root_filesystem = true."
+  }
+
+  assert {
+    condition     = kubernetes_cron_job_v1.taint[0].spec[0].job_template[0].spec[0].template[0].spec[0].container[0].security_context[0].allow_privilege_escalation == false
+    error_message = "Auto-taint container must set allow_privilege_escalation = false."
+  }
+
+  assert {
+    condition     = contains(kubernetes_cron_job_v1.taint[0].spec[0].job_template[0].spec[0].template[0].spec[0].container[0].security_context[0].capabilities[0].drop, "ALL")
+    error_message = "Auto-taint container must drop ALL Linux capabilities."
+  }
+}
+
+run "auto_taint_container_resources_bounded" {
+  command = plan
+
+  variables {
+    enabled = true
+  }
+
+  assert {
+    condition     = kubernetes_cron_job_v1.taint[0].spec[0].job_template[0].spec[0].template[0].spec[0].container[0].resources[0].requests["cpu"] == "50m"
+    error_message = "Auto-taint container must declare a CPU request (default 50m)."
+  }
+
+  assert {
+    condition     = kubernetes_cron_job_v1.taint[0].spec[0].job_template[0].spec[0].template[0].spec[0].container[0].resources[0].requests["memory"] == "64Mi"
+    error_message = "Auto-taint container must declare a memory request (default 64Mi)."
+  }
+
+  assert {
+    condition     = kubernetes_cron_job_v1.taint[0].spec[0].job_template[0].spec[0].template[0].spec[0].container[0].resources[0].limits["memory"] == "128Mi"
+    error_message = "Auto-taint container must declare a memory limit (default 128Mi) so a wedged probe cannot starve the node."
+  }
+}

@@ -11,7 +11,7 @@
 # ---------------------------------------------------------------------------------------------------------------------
 
 terraform {
-  source = "${get_repo_root()}/project/platform-design/terraform/modules/aws-ml-scp-parity"
+  source = "${get_repo_root()}/terraform/modules/aws-ml-scp-parity"
 }
 
 locals {

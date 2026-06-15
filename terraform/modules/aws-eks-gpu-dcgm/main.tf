@@ -176,6 +176,44 @@ resource "kubernetes_cron_job_v1" "taint" {
                 name  = "TEMP_THRESHOLD"
                 value = tostring(var.temperature_threshold)
               }
+
+              # Container hardening — the CronJob only runs kubectl patch, so it
+              # needs no root, no extra Linux capabilities, and no writable root
+              # filesystem (CIS K8s 5.2.x / Pod Security "restricted").
+              security_context {
+                run_as_non_root            = true
+                read_only_root_filesystem  = true
+                allow_privilege_escalation = false
+
+                capabilities {
+                  drop = ["ALL"]
+                }
+              }
+
+              # Bounded footprint so a wedged probe cannot starve the node; memory
+              # request == limit (no overcommit). CPU is left burstable (no CPU
+              # limit) to avoid throttling a short-lived patch job.
+              resources {
+                requests = {
+                  cpu    = var.taint_cpu_request
+                  memory = var.taint_memory_request
+                }
+                limits = {
+                  memory = var.taint_memory_limit
+                }
+              }
+            }
+
+            # Pod-level non-root + seccomp so the run_as_non_root contract is
+            # enforced even if a future container omits its own user.
+            security_context {
+              run_as_non_root = true
+              run_as_user     = 65532 # nonroot (distroless) uid
+              run_as_group    = 65532
+
+              seccomp_profile {
+                type = "RuntimeDefault"
+              }
             }
           }
         }

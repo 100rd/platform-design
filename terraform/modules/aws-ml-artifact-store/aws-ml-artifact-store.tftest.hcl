@@ -4,12 +4,12 @@
 # All runs use command = plan (no real S3 bucket or IAM role is created).
 #
 # Note on IAM policy document assertions:
-# The mlflow_s3_abac data source references aws_s3_bucket.mlflow_artifacts[0].arn
-# which is a computed value unknown at plan time. The trust_policy and s3_abac
-# content is verified structurally via the variable and locals layer instead of
-# by parsing the rendered JSON (which is only available post-apply).
-# The mock_provider provides a realistic JSON for the trust policy data source
-# (which has no computed dependencies) so that assertion CAN fire at plan time.
+# The mlflow_s3_abac and mlflow_bucket_policy data sources reference
+# aws_s3_bucket.mlflow_artifacts[0].arn — a computed value unknown at plan time —
+# so their rendered `json` (and any resource attribute fed by it) is also unknown at
+# plan time and cannot be asserted. Those are verified structurally instead: resource
+# existence via count. The trust-policy data source has no computed inputs, so its
+# mock JSON IS available and CAN be regex-asserted.
 # ---------------------------------------------------------------------------------------------------------------------
 
 mock_provider "aws" {
@@ -21,8 +21,10 @@ mock_provider "aws" {
     }
   }
 
-  # aws_iam_policy_document generates JSON. The trust policy data source
-  # has no computed dependencies so mock_provider can provide its json.
+  # aws_iam_policy_document generates JSON. Only the trust-policy data source has no
+  # computed inputs, so this mock JSON is what its `json` attribute returns at plan
+  # time. (The s3_abac and bucket_policy docs depend on the computed bucket ARN, so
+  # their json stays unknown until apply and is asserted structurally instead.)
   mock_data "aws_iam_policy_document" {
     defaults = {
       json = <<-POLICY
@@ -44,6 +46,14 @@ mock_provider "aws" {
     values = {
       arn  = "arn:aws:iam::123456789012:role/mlflow-artifact-store"
       name = "mlflow-artifact-store"
+    }
+  }
+
+  override_resource {
+    target = aws_iam_policy.mlflow_s3_abac[0]
+    values = {
+      arn  = "arn:aws:iam::123456789012:policy/mlflow-artifact-store-s3-abac"
+      name = "mlflow-artifact-store-s3-abac"
     }
   }
 }
@@ -82,6 +92,16 @@ run "no_resources_when_gate_off" {
     condition     = length(aws_iam_role.mlflow_artifact_store) == 0
     error_message = "No IAM role should be planned when create_resources = false (apply gate)."
   }
+
+  assert {
+    condition     = length(aws_s3_bucket_policy.mlflow_artifacts) == 0
+    error_message = "No bucket policy should be planned when create_resources = false (apply gate)."
+  }
+
+  assert {
+    condition     = length(aws_iam_policy.mlflow_s3_abac) == 0
+    error_message = "No standalone IAM policy should be planned when create_resources = false (apply gate)."
+  }
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -113,6 +133,29 @@ run "bucket_public_access_fully_blocked" {
   assert {
     condition     = aws_s3_bucket_public_access_block.mlflow_artifacts[0].restrict_public_buckets == true
     error_message = "restrict_public_buckets must be true."
+  }
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Bucket policy — DenyInsecureTransport (CIS AWS 2.1.1)
+# The bucket-policy document depends on the computed bucket ARN, so its rendered
+# JSON (and the policy resource's read-back attributes) is unknown at plan time.
+# Verified structurally: both the DenyInsecureTransport policy document and the
+# aws_s3_bucket_policy resource are planned exactly once. (JSON content is verified
+# post-apply.)
+# ---------------------------------------------------------------------------------------------------------------------
+
+run "bucket_policy_denies_insecure_transport" {
+  command = plan
+
+  assert {
+    condition     = length(data.aws_iam_policy_document.mlflow_bucket_policy) == 1
+    error_message = "A DenyInsecureTransport policy document must be rendered for the bucket (CIS AWS 2.1.1)."
+  }
+
+  assert {
+    condition     = length(aws_s3_bucket_policy.mlflow_artifacts) == 1
+    error_message = "A bucket policy must be created to deny insecure (non-TLS) transport (CIS AWS 2.1.1)."
   }
 }
 
@@ -273,13 +316,24 @@ run "abac_platform_system_value_is_ml_pipeline" {
   }
 }
 
-# Verify the IAM role policy resource exists (policy content verified post-apply).
-run "iam_role_policy_attached" {
+# CIS AWS 1.16: the S3/ABAC permissions live in a standalone (managed) IAM policy,
+# not an inline aws_iam_role_policy, so they are discoverable/auditable and reusable.
+run "iam_uses_standalone_managed_policy" {
   command = plan
 
   assert {
-    condition     = aws_iam_role_policy.mlflow_s3_abac[0].name == "mlflow-s3-abac"
-    error_message = "IAM role policy 'mlflow-s3-abac' must be created and attached to the MLflow role (ADR-0048 D2)."
+    condition     = length(aws_iam_policy.mlflow_s3_abac) == 1
+    error_message = "S3/ABAC permissions must be a standalone aws_iam_policy (CIS AWS 1.16), not an inline role policy."
+  }
+
+  assert {
+    condition     = aws_iam_policy.mlflow_s3_abac[0].name == "mlflow-artifact-store-s3-abac"
+    error_message = "Standalone policy name must be derived from the role name (<role>-s3-abac)."
+  }
+
+  assert {
+    condition     = length(aws_iam_role_policy_attachment.mlflow_s3_abac) == 1
+    error_message = "The standalone policy must be bound to the MLflow role via aws_iam_role_policy_attachment."
   }
 }
 
