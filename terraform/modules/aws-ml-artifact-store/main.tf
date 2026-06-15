@@ -8,16 +8,21 @@
 #   - aws_s3_bucket                              (versioning, SSE-KMS, ADR-0028 tags)
 #   - aws_s3_bucket_ownership_controls           (BucketOwnerEnforced — IAM-only, no ACLs)
 #   - aws_s3_bucket_public_access_block          (all-block)
+#   - aws_s3_bucket_policy                       (DenyInsecureTransport — CIS AWS 2.1.1)
 #   - aws_s3_bucket_server_side_encryption_configuration (SSE-KMS or AES256)
 #   - aws_s3_bucket_versioning                   (SOC2 audit chain)
 #   - aws_s3_bucket_lifecycle_configuration      (STANDARD-IA -> Glacier IR -> Expire)
 #   - aws_iam_role                               (Pod Identity trust + ADR-0028 tags)
-#   - aws_iam_role_policy                        (S3 scoped to this bucket + ABAC condition)
+#   - aws_iam_policy                             (S3 scoped to this bucket + ABAC — standalone, CIS 1.16)
+#   - aws_iam_role_policy_attachment             (binds the standalone policy to the role)
 #
 # ADR-0028: AWS resource tags use colon separator (platform:system) — AWS allows ':'.
 # ADR-0018: EKS Pod Identity; trust policy scoped per eks_cluster_name.
 # ADR-0048 D2: ABAC — only a principal tagged platform:system=ml-pipeline may
 #   access a resource tagged the same way. Enforced in the role policy condition.
+# CIS AWS 1.16: prefer managed (standalone) policies over inline role policies so
+#   permissions are discoverable/auditable and reusable.
+# CIS AWS 2.1.1: deny any S3 request not using TLS (aws:SecureTransport = false).
 # ---------------------------------------------------------------------------------------------------------------------
 
 locals {
@@ -78,6 +83,50 @@ resource "aws_s3_bucket_public_access_block" "mlflow_artifacts" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Bucket policy — DenyInsecureTransport (CIS AWS 2.1.1)
+# Deny every S3 action on the bucket and its objects when the request is not over
+# TLS (aws:SecureTransport = false). Complements the public-access block above.
+# ---------------------------------------------------------------------------------------------------------------------
+
+data "aws_iam_policy_document" "mlflow_bucket_policy" {
+  count = var.create_resources ? 1 : 0
+
+  statement {
+    sid    = "DenyInsecureTransport"
+    effect = "Deny"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions = ["s3:*"]
+
+    resources = [
+      aws_s3_bucket.mlflow_artifacts[0].arn,
+      "${aws_s3_bucket.mlflow_artifacts[0].arn}/*",
+    ]
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "mlflow_artifacts" {
+  count = var.create_resources ? 1 : 0
+
+  # Ensure the public-access block is in place before the policy is attached so a
+  # transient policy evaluation can never widen access.
+  depends_on = [aws_s3_bucket_public_access_block.mlflow_artifacts]
+
+  bucket = aws_s3_bucket.mlflow_artifacts[0].id
+  policy = data.aws_iam_policy_document.mlflow_bucket_policy[0].json
 }
 
 # SSE-KMS at rest; falls back to AES256 when no KMS key is provided (ADR-0048 D2).
@@ -271,10 +320,21 @@ data "aws_iam_policy_document" "mlflow_s3_abac" {
   }
 }
 
-resource "aws_iam_role_policy" "mlflow_s3_abac" {
+# Standalone managed policy (CIS AWS 1.16) — discoverable/auditable, reusable, and
+# decoupled from the role lifecycle (vs. an inline aws_iam_role_policy).
+resource "aws_iam_policy" "mlflow_s3_abac" {
   count = var.create_resources ? 1 : 0
 
-  name   = "mlflow-s3-abac"
-  role   = aws_iam_role.mlflow_artifact_store[0].id
-  policy = data.aws_iam_policy_document.mlflow_s3_abac[0].json
+  name        = "${var.mlflow_pod_identity_role_name}-s3-abac"
+  description = "Bucket-scoped S3 (+optional KMS) access for the MLflow artifact store, ABAC-gated on platform:system (ADR-0048 D2 / CIS AWS 1.16)."
+  policy      = data.aws_iam_policy_document.mlflow_s3_abac[0].json
+
+  tags = local.effective_tags
+}
+
+resource "aws_iam_role_policy_attachment" "mlflow_s3_abac" {
+  count = var.create_resources ? 1 : 0
+
+  role       = aws_iam_role.mlflow_artifact_store[0].name
+  policy_arn = aws_iam_policy.mlflow_s3_abac[0].arn
 }

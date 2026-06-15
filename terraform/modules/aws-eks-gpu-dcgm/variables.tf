@@ -94,6 +94,31 @@ variable "kubectl_image" {
   default     = "bitnami/kubectl:1.34"
 }
 
+# -------------------------------------------------------------------------
+# Auto-taint CronJob container resources (hardening)
+# The CronJob only runs `kubectl patch` on nodes, so the footprint is tiny.
+# memory request == limit (no overcommit); CPU stays burstable (no CPU limit)
+# so a short-lived patch is not throttled. Override per-env if needed.
+# -------------------------------------------------------------------------
+
+variable "taint_cpu_request" {
+  description = "CPU request for the auto-taint CronJob container (Kubernetes quantity, e.g. '50m'). Small by design — the job only runs kubectl patch."
+  type        = string
+  default     = "50m"
+}
+
+variable "taint_memory_request" {
+  description = "Memory request for the auto-taint CronJob container (Kubernetes quantity, e.g. '64Mi')."
+  type        = string
+  default     = "64Mi"
+}
+
+variable "taint_memory_limit" {
+  description = "Memory limit for the auto-taint CronJob container (Kubernetes quantity, e.g. '128Mi'). Caps the container so a wedged probe cannot starve the node."
+  type        = string
+  default     = "128Mi"
+}
+
 variable "gpu_node_selector" {
   description = "Node selector identifying GPU nodes the exporter DaemonSet runs on."
   type        = map(string)
