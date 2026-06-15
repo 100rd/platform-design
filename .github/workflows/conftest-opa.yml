@@ -40,6 +40,7 @@ env:
   TF_VERSION: "1.14.8"
   TG_VERSION: "1.0.8"
   CONFTEST_VERSION: "0.57.0"
+  OPA_VERSION: "1.17.1"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -73,6 +74,37 @@ jobs:
           else
             echo "has_changes=true" >> "$GITHUB_OUTPUT"
           fi
+
+  # ---------------------------------------------------------------------------
+  # OPA UNIT TESTS — compile + run every tests/opa/*_test.rego on every PR.
+  #
+  # This is dependency-free (no AWS creds, no terragrunt plan) so it ALWAYS runs,
+  # unlike the conftest gate below which is skipped when OIDC is not wired. It is
+  # what actually exercises the rego unit tests (platform_tags_ml_test.rego,
+  # platform_tags_baremetal_test.rego, ...) — `conftest test` only evaluates the
+  # deny rules against a plan and never runs `opa test`, so before this job the
+  # *_test.rego files were never executed in CI (dead tests). `opa check` also
+  # catches rego parse/type errors that would otherwise only surface at conftest
+  # runtime (e.g. a malformed policy silently loading zero rules).
+  # ---------------------------------------------------------------------------
+  opa-unit:
+    name: OPA Unit Tests (opa check + opa test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OPA
+        run: |
+          curl -sSL "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static" \
+            -o /usr/local/bin/opa
+          chmod +x /usr/local/bin/opa
+          opa version
+
+      - name: opa check (compile all policies + tests, strict)
+        run: opa check --strict tests/opa/
+
+      - name: opa test (run all rego unit tests)
+        run: opa test tests/opa/ -v
 
   # ---------------------------------------------------------------------------
   # OPA policy evaluation — one job per changed Terragrunt unit
@@ -264,12 +296,16 @@ jobs:
   # ---------------------------------------------------------------------------
   opa-status:
     name: OPA Policy Status
-    needs: [detect-changes, opa-check]
+    needs: [detect-changes, opa-unit, opa-check]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check OPA results
         run: |
+          if [ "${{ needs.opa-unit.result }}" = "failure" ]; then
+            echo "OPA unit tests (opa check / opa test) failed"
+            exit 1
+          fi
           if [ "${{ needs.opa-check.result }}" = "failure" ]; then
             echo "OPA policy violations found in one or more modules"
             exit 1
