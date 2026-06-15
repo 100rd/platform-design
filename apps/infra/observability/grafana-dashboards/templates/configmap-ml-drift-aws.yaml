@@ -1,0 +1,391 @@
+---
+# Grafana Dashboard ConfigMap: ML Drift & Accuracy Monitoring — AWS (ADR-0048 D4)
+# AWS-specific variant of configmap-ml-drift.yaml (ADR-0038 D2).
+# Differences from the GCP variant (configmap-ml-drift.yaml):
+#   - dashboard uid: ml-drift-accuracy-aws-v1 (avoids UID conflict in federated Grafana)
+#   - title prefix: [AWS] for Grafana UI disambiguation
+#   - tags include "aws" for filtered dashboard search
+# PromQL expressions are identical (ml_monitoring_* metrics are cluster-agnostic).
+# Label grafana_dashboard=1 causes the Grafana sidecar to auto-import.
+# Note: Grafana template expressions like {{ "{{" }}model_name{{ "}}" }} are
+# escaped to prevent Helm from interpreting them.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-ml-drift-aws
+  namespace: {{ .Values.grafanaNamespace }}
+  labels:
+    {{- range $key, $val := .Values.dashboardLabels }}
+    {{ $key }}: {{ $val | quote }}
+    {{- end }}
+    platform.system: "ml-monitoring"
+    platform.component: "grafana-dashboard"
+    platform.managed-by: "argocd"
+data:
+  ml-drift-accuracy-aws.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": "-- Grafana --",
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "description": "[AWS EKS GPU] ML model drift detection, feature distribution shift, and accuracy degradation. Per-tenant/domain view. ADR-0048 D4 / ADR-0038.",
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [
+        {
+          "asDropdown": true,
+          "icon": "external link",
+          "includeVars": true,
+          "keepTime": true,
+          "tags": ["ml-monitoring", "aws"],
+          "title": "ML Monitoring Dashboards",
+          "type": "dashboards"
+        }
+      ],
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+          "id": 100,
+          "title": "Overview — AWS EKS GPU Cluster",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.datasources.prometheus.uid }}"
+          },
+          "description": "Number of models currently in critical drift state on the aws-eks-gpu-* cluster",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 1},
+                  {"color": "red", "value": 3}
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 4, "x": 0, "y": 1},
+          "id": 1,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {"calcs": ["lastNotNull"]}
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "{{ .Values.datasources.prometheus.uid }}"},
+              "expr": "ml_monitoring:models_in_critical_drift:count",
+              "legendFormat": "Models in critical drift",
+              "refId": "A"
+            }
+          ],
+          "title": "Models in Critical Drift",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.datasources.prometheus.uid }}"
+          },
+          "description": "Total successful retrain triggers in last 24 hours",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "blue", "value": null}
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 4, "x": 4, "y": 1},
+          "id": 2,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {"calcs": ["lastNotNull"]}
+          },
+          "pluginVersion": "10.0.0",
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "{{ .Values.datasources.prometheus.uid }}"},
+              "expr": "ml_monitoring:retrain_triggers:total_24h",
+              "legendFormat": "Retrain triggers (24h)",
+              "refId": "A"
+            }
+          ],
+          "title": "Retrain Triggers (24h)",
+          "type": "stat"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 5},
+          "id": 101,
+          "title": "Dataset Drift",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.datasources.prometheus.uid }}"
+          },
+          "description": "Evidently dataset drift score (0 = no drift, 1 = full drift). Warning 0.20, Critical 0.40.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {
+                "lineWidth": 2,
+                "pointSize": 5,
+                "showPoints": "auto"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 0.2},
+                  {"color": "red", "value": 0.4}
+                ]
+              },
+              "unit": "short",
+              "min": 0,
+              "max": 1
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+          "id": 10,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "{{ .Values.datasources.prometheus.uid }}"},
+              "expr": "ml_monitoring_dataset_drift_score{platform_system=\"ml-monitoring\", tenant=~\"$tenant\", domain=~\"$domain\"}",
+              "legendFormat": "{{ "{{" }}model_name{{ "}}" }} drift score",
+              "refId": "A"
+            }
+          ],
+          "title": "Dataset Drift Score",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.datasources.prometheus.uid }}"
+          },
+          "description": "PSI (Population Stability Index) per feature. Warning >0.10, Critical >0.25.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 1},
+              "unit": "short",
+              "min": 0
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6},
+          "id": 11,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "right"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "{{ .Values.datasources.prometheus.uid }}"},
+              "expr": "ml_monitoring_feature_psi_score{platform_system=\"ml-monitoring\", tenant=~\"$tenant\", domain=~\"$domain\"}",
+              "legendFormat": "{{ "{{" }}feature{{ "}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "Feature PSI by Feature",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 14},
+          "id": 102,
+          "title": "Model Accuracy & Quality",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.datasources.prometheus.uid }}"
+          },
+          "description": "Model accuracy from Evidently test suite. Warning <0.85, Critical <0.75.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 2},
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 15},
+          "id": 20,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "{{ .Values.datasources.prometheus.uid }}"},
+              "expr": "ml_monitoring_model_accuracy{platform_system=\"ml-monitoring\", tenant=~\"$tenant\", domain=~\"$domain\"}",
+              "legendFormat": "{{ "{{" }}model_name{{ "}}" }} accuracy",
+              "refId": "A"
+            }
+          ],
+          "title": "Model Accuracy",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.datasources.prometheus.uid }}"
+          },
+          "description": "Model F1 score from Evidently test suite. Warning <0.80, Critical <0.65.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 2},
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 15},
+          "id": 21,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "{{ .Values.datasources.prometheus.uid }}"},
+              "expr": "ml_monitoring_model_f1_score{platform_system=\"ml-monitoring\", tenant=~\"$tenant\", domain=~\"$domain\"}",
+              "legendFormat": "{{ "{{" }}model_name{{ "}}" }} F1",
+              "refId": "A"
+            }
+          ],
+          "title": "Model F1 Score",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 23},
+          "id": 103,
+          "title": "Retrain Trigger Activity",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "{{ .Values.datasources.prometheus.uid }}"
+          },
+          "description": "Rate of retrain triggers by outcome (success / airflow_error / k8s_fallback / deduped). Retrain trigger: Alertmanager webhook → Airflow REST POST /api/v1/dags/train_domain_adapter/dagRuns.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 2},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+          "id": 30,
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"},
+            "tooltip": {"mode": "multi"}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "{{ .Values.datasources.prometheus.uid }}"},
+              "expr": "sum by (outcome, tenant, domain) (rate(ml_monitoring_retrain_triggers_total{platform_system=\"ml-monitoring\", tenant=~\"$tenant\", domain=~\"$domain\"}[5m]))",
+              "legendFormat": "{{ "{{" }}outcome{{ "}}" }} - {{ "{{" }}tenant{{ "}}" }}/{{ "{{" }}domain{{ "}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "Retrain Trigger Rate by Outcome",
+          "type": "timeseries"
+        }
+      ],
+      "refresh": "1m",
+      "schemaVersion": 36,
+      "style": "dark",
+      "tags": ["ml-monitoring", "drift", "accuracy", "aws"],
+      "templating": {
+        "list": [
+          {
+            "current": {},
+            "datasource": {
+              "type": "prometheus",
+              "uid": "{{ .Values.datasources.prometheus.uid }}"
+            },
+            "definition": "label_values(ml_monitoring_dataset_drift_score{platform_system=\"ml-monitoring\"}, tenant)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Tenant",
+            "multi": true,
+            "name": "tenant",
+            "query": {
+              "query": "label_values(ml_monitoring_dataset_drift_score{platform_system=\"ml-monitoring\"}, tenant)",
+              "refId": "StandardVariableQuery"
+            },
+            "refresh": 2,
+            "sort": 1,
+            "type": "query"
+          },
+          {
+            "current": {},
+            "datasource": {
+              "type": "prometheus",
+              "uid": "{{ .Values.datasources.prometheus.uid }}"
+            },
+            "definition": "label_values(ml_monitoring_dataset_drift_score{platform_system=\"ml-monitoring\", tenant=~\"$tenant\"}, domain)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Domain",
+            "multi": true,
+            "name": "domain",
+            "query": {
+              "query": "label_values(ml_monitoring_dataset_drift_score{platform_system=\"ml-monitoring\", tenant=~\"$tenant\"}, domain)",
+              "refId": "StandardVariableQuery"
+            },
+            "refresh": 2,
+            "sort": 1,
+            "type": "query"
+          }
+        ]
+      },
+      "time": {"from": "now-6h", "to": "now"},
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "[AWS] ML Drift & Accuracy Monitoring",
+      "uid": "ml-drift-accuracy-aws-v1",
+      "version": 1
+    }
