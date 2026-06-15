@@ -28,6 +28,10 @@ spec:
         app: {{ .Values.inferencePool.name }}-epp
         {{- include "aws-eks-inference-gateway.labels" . | nindent 8 }}
     spec:
+      # Pod-level hardening (ADR-0047): run as the unprivileged nobody user, never root.
+      securityContext:
+        runAsNonRoot: {{ .Values.endpointPicker.podSecurityContext.runAsNonRoot }}
+        runAsUser: {{ .Values.endpointPicker.podSecurityContext.runAsUser }}
       containers:
         - name: epp
           image: {{ .Values.endpointPicker.image }}
@@ -40,6 +44,18 @@ spec:
           env:
             - name: INFERENCE_CRD_VERSION
               value: {{ .Values.inferenceExtension.crdVersion | quote }}
+          # Bound the ext-proc (no unbounded Deployment): requests so the scheduler can
+          # place it, a hard memory cap so it cannot OOM-pressure the node.
+          resources:
+            {{- toYaml .Values.endpointPicker.resources | nindent 12 }}
+          # Container-level hardening: no privilege escalation, read-only rootfs,
+          # drop every Linux capability.
+          securityContext:
+            allowPrivilegeEscalation: {{ .Values.endpointPicker.containerSecurityContext.allowPrivilegeEscalation }}
+            readOnlyRootFilesystem: {{ .Values.endpointPicker.containerSecurityContext.readOnlyRootFilesystem }}
+            capabilities:
+              drop:
+                {{- toYaml .Values.endpointPicker.containerSecurityContext.capabilities.drop | nindent 16 }}
 ---
 apiVersion: v1
 kind: Service

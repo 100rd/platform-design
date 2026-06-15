@@ -18,6 +18,9 @@ gateway:
   className: envoy-gateway
   name: vllm-inference-gateway
   listenerPort: 80
+  # TLS terminates at the WAF/ALB in front of Envoy (ADR-0047 D4) — the listener above
+  # stays HTTP on the trusted in-cluster hop. Mirrors the module's var.tls_mode.
+  tlsMode: terminate-at-lb
 
 # ---------------------------------------------------------------------------
 # Gateway API Inference Extension (v1 GA CRDs — pinned, ADR-0047 D1)
@@ -49,6 +52,26 @@ endpointPicker:
   config:
     kvCacheWeight: "1.0"
     queueDepthWeight: "1.0"
+  # Bound the ext-proc: requests so the scheduler can place it, a hard memory cap so it
+  # cannot OOM-pressure the node. CPU is request-only (no limit) to avoid throttling
+  # latency-sensitive routing.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+  # Pod-level hardening: run as the unprivileged nobody user, never root.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+  # Container-level hardening: no privilege escalation, read-only rootfs, drop all caps.
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
 
 # ---------------------------------------------------------------------------
 # AWS WAF (ADR-0047 D4) — the reused `waf` module's WebACL, bound to the upstream LB.
