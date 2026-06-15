@@ -52,9 +52,9 @@ dependency "talos_cluster" {
   config_path = "../talos-cluster"
 
   mock_outputs = {
-    kubeconfig_path  = "/dev/null"
+    # Keys MUST match the real talos-cluster outputs.tf (kubeconfig, cluster_endpoint).
+    kubeconfig       = "mock-kubeconfig"
     cluster_endpoint = "https://mock-talos-endpoint.internal:6443"
-    cluster_ca_cert  = "mock-ca-cert-base64"
   }
 
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
@@ -68,7 +68,8 @@ dependency "baremetal_rook_ceph" {
   config_path = "../baremetal-rook-ceph"
 
   mock_outputs = {
-    rgw_s3_endpoint = "http://mock-rook-rgw.rook-ceph.svc.cluster.local:80"
+    # Keys MUST match the real baremetal-rook-ceph outputs.tf (s3_endpoint, rgw_bucket_name).
+    s3_endpoint     = "http://mock-rook-rgw.rook-ceph.svc.cluster.local:80"
     rgw_bucket_name = "ml-reference-data"
   }
 

@@ -30,6 +30,11 @@ run "disabled_creates_nothing" {
     condition     = length(kubernetes_manifest.ceph_cluster) == 0
     error_message = "No CephCluster when enabled = false."
   }
+
+  assert {
+    condition     = output.rgw_bucket_name == null
+    error_message = "rgw_bucket_name must be null when the object store is not deployed."
+  }
 }
 
 run "deploys_ceph_block_and_object" {
@@ -54,6 +59,12 @@ run "deploys_ceph_block_and_object" {
   assert {
     condition     = output.s3_endpoint != null
     error_message = "An S3 endpoint must be surfaced when the object store is enabled."
+  }
+
+  # rgw_bucket_name is consumed by baremetal-ml-monitoring (driftExporter.referenceBucketUri, ADR-0038).
+  assert {
+    condition     = output.rgw_bucket_name == var.object_store_name
+    error_message = "rgw_bucket_name must surface the object-store name when the object store is enabled (consumed by ml-monitoring)."
   }
 }
 
