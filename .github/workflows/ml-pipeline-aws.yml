@@ -1,0 +1,184 @@
+# ML training/release pipeline — WS-B (ADR-0048 D1/D4/D5), AWS backend.
+#
+# AWS delta from .github/workflows/ml-pipeline.yml (GCP):
+#   - Authentication: aws-actions/configure-aws-credentials (OIDC, ADR-0018)
+#     instead of google-github-actions/auth (GCP WIF)
+#   - Container registry: ECR (ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com)
+#     via pull-through cache (ADR-0029 / ADR-0048 D5)
+#   - ML logic (train->eval->gate->register->deploy topology, DAG names, gate
+#     polling, MLflow register call, cosign/syft signing, Kargo promotion) is
+#     IDENTICAL to ml-pipeline.yml — ADR-0048 D6 scope guard (cluster-agnostic).
+#
+# platform:system = ml-pipeline (ADR-0028).
+name: ML Pipeline (AWS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model/adapter id to train and release (e.g. fraud-uk)"
+        required: true
+        type: string
+      environment:
+        description: "Target environment for the staged deploy"
+        required: true
+        default: dev
+        type: choice
+        options: [dev, staging, prod]
+  push:
+    branches: [main]
+    paths:
+      - "models/**"
+      - "adapters/**"
+
+permissions:
+  contents: read
+  id-token: write  # AWS OIDC token + cosign keyless signing
+
+concurrency:
+  group: ml-pipeline-aws-${{ github.ref }}-${{ inputs.model || github.sha }}
+  cancel-in-progress: false
+
+env:
+  AIRFLOW_BASE_URL: ${{ vars.AIRFLOW_BASE_URL }}
+  MLFLOW_TRACKING_URI: ${{ vars.MLFLOW_TRACKING_URI }}
+  MODEL_ID: ${{ inputs.model || 'auto' }}
+  # ECR registry endpoint — pull-through cache (ADR-0029 / ADR-0048 D5).
+  ECR_REGISTRY: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com
+  ML_IMAGE_REPO: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/ml
+
+jobs:
+  train:
+    name: Train (Airflow train_domain_adapter)
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.trigger.outputs.run_id }}
+    steps:
+      - name: Harden runner (audit)
+        uses: ./.github/actions/harden-runner
+
+      - uses: actions/checkout@v4
+
+      # AWS OIDC authentication replaces GCP Workload Identity Federation.
+      # IAM role scoped to this repo via GitHub OIDC conditions (ADR-0018).
+      - name: Authenticate to AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Airflow REST call is cluster-agnostic — identical to ml-pipeline.yml.
+      - name: Trigger train_domain_adapter DAG
+        id: trigger
+        env:
+          AIRFLOW_TOKEN: ${{ secrets.AIRFLOW_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          run_id="ci-${MODEL_ID}-${GITHUB_SHA::8}"
+          curl -fsS -X POST "${AIRFLOW_BASE_URL}/api/v1/dags/train_domain_adapter/dagRuns" \
+            -H "Authorization: Bearer ${AIRFLOW_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"dag_run_id\":\"${run_id}\",\"conf\":{\"model_id\":\"${MODEL_ID}\"}}"
+          echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
+
+  eval:
+    name: Evaluate (eval_adapter_debate gate)
+    needs: train
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner (audit)
+        uses: ./.github/actions/harden-runner
+
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # eval gate logic is cluster-agnostic — identical to ml-pipeline.yml.
+      - name: Wait for eval gate (eval_adapter_debate must pass)
+        env:
+          AIRFLOW_TOKEN: ${{ secrets.AIRFLOW_API_TOKEN }}
+          RUN_ID: ${{ needs.train.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 40); do
+            state=$(curl -fsS \
+              -H "Authorization: Bearer ${AIRFLOW_TOKEN}" \
+              "${AIRFLOW_BASE_URL}/api/v1/dags/eval_adapter_debate/dagRuns/${RUN_ID}" \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin).get("state",""))')
+            case "${state}" in
+              success) echo "eval gate passed"; exit 0 ;;
+              failed)  echo "::error::eval_adapter_debate gate failed"; exit 1 ;;
+              *)       echo "eval state=${state:-pending}; waiting"; sleep 30 ;;
+            esac
+          done
+          echo "::error::eval gate timed out"; exit 1
+
+  register:
+    name: Register model + sign artifacts (ECR)
+    needs: eval
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner (audit)
+        uses: ./.github/actions/harden-runner
+
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Log in to ECR pull-through cache registry (ADR-0029 / ADR-0048 D5).
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # MLflow register call is cluster-agnostic — identical to ml-pipeline.yml.
+      - name: Register model version in MLflow (-> Staging)
+        run: |
+          set -euo pipefail
+          pip install --quiet "mlflow>=2.16"
+          mlflow models create-version \
+            --name "${MODEL_ID}" \
+            --source "${MLFLOW_TRACKING_URI}/artifacts/${MODEL_ID}/${GITHUB_SHA}" || true
+
+      # Reuse the repo's supply-chain composites (ADR-0037 D4 / ADR-0048 D5).
+      - name: Generate SBOM
+        uses: ./.github/actions/syft-sbom
+        with:
+          image: ${{ env.ML_IMAGE_REPO }}/${{ env.MODEL_ID }}:${{ github.sha }}
+
+      - name: Sign + attest (cosign keyless)
+        uses: ./.github/actions/cosign-sign
+        with:
+          image: ${{ env.ML_IMAGE_REPO }}/${{ env.MODEL_ID }}:${{ github.sha }}
+
+  deploy:
+    name: Staged deploy (Kargo promotion)
+    needs: register
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+    steps:
+      - name: Harden runner (audit)
+        uses: ./.github/actions/harden-runner
+
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Kargo promotion is cluster-agnostic — identical to ml-pipeline.yml.
+      - name: Open Kargo promotion (dev auto / staging+prod gated)
+        uses: ./.github/actions/argocd-tag-bump
+        with:
+          app: mlflow-serving-${{ env.MODEL_ID }}
+          tag: ${{ github.sha }}
+          environment: ${{ inputs.environment || 'dev' }}

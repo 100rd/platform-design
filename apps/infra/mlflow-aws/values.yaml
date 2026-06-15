@@ -1,0 +1,153 @@
+# MLflow Tracking Server + Model Registry on EKS (ADR-0048 D2/D3)
+# platform:system = ml-pipeline, component = model-registry
+#
+# AWS deltas from apps/infra/mlflow/ (GCP):
+#   - artifactRoot: s3://... (not gs://...)
+#   - serviceAccount annotation: eks.amazonaws.com/role-arn (Pod Identity, ADR-0018)
+#     instead of iam.gke.io/gcp-service-account
+#   - ESO ClusterSecretStore: aws-secrets-manager (not gcp-secrets-manager)
+#   - nodeSelector: kubernetes.io/arch=arm64 + karpenter.sh/nodepool=ml-graviton
+#     (non-GPU Graviton pool, plan §7 OD-7 / ADR-0046 D3)
+#
+# Backend store: dedicated RDS PostgreSQL (DBA-owned, ADR-0048 D3).
+# Artifact store: S3 bucket managed by aws-ml-artifact-store unit (ADR-0048 D2).
+
+networkPolicy:
+  enabled: true
+
+mlflow:
+  enabled: true
+
+  # HA: 2 replicas (risk R5 mitigation, ADR-0048 / ADR-0037).
+  replicaCount: 2
+
+  image:
+    repository: ghcr.io/mlflow/mlflow
+    tag: "v2.21.3"
+    pullPolicy: IfNotPresent
+
+  # -------------------------------------------------------------------------
+  # Backend store — RDS PostgreSQL (ADR-0048 D3)
+  # Connection string injected from ExternalSecret mlflow-db-connection.
+  # Shape: postgresql+psycopg2://mlflow:<password>@<rds-host>:5432/mlflow
+  # RDS provisioned out-of-band by DBA team; no credentials in code (ADR-0008).
+  # -------------------------------------------------------------------------
+  backendStore:
+    existing_secret: mlflow-db-connection
+    existing_secret_key: connection
+
+  # -------------------------------------------------------------------------
+  # Artifact store — S3 bucket (ADR-0048 D2)
+  # Bucket name set per-env via ArgoCD Application parameter override.
+  # Pod Identity provides AWS credentials — no static access key needed.
+  # -------------------------------------------------------------------------
+  artifactRoot: "s3://mlflow-artifacts-staging-ACCOUNT_ID"
+
+  # -------------------------------------------------------------------------
+  # ServiceAccount — EKS Pod Identity (ADR-0018).
+  # IAM role ARN from aws-ml-artifact-store unit (mlflow_pod_identity_role_arn).
+  # Annotation set per-cluster via ArgoCD Application parameter override.
+  # -------------------------------------------------------------------------
+  serviceAccount:
+    create: true
+    name: mlflow
+    annotations:
+      eks.amazonaws.com/role-arn: ""
+
+  # -------------------------------------------------------------------------
+  # Service
+  # -------------------------------------------------------------------------
+  service:
+    type: ClusterIP
+    port: 5000
+
+  # -------------------------------------------------------------------------
+  # Resources
+  # -------------------------------------------------------------------------
+  resources:
+    requests:
+      cpu: 300m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+  # -------------------------------------------------------------------------
+  # Node selector — non-GPU Graviton Karpenter pool (ADR-0046 D3 / plan §7 OD-7).
+  # -------------------------------------------------------------------------
+  nodeSelector:
+    kubernetes.io/arch: arm64
+    karpenter.sh/nodepool: ml-graviton
+
+  # -------------------------------------------------------------------------
+  # Pod Disruption Budget — risk R5 mitigation (ADR-0048 / ADR-0037).
+  # -------------------------------------------------------------------------
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  # -------------------------------------------------------------------------
+  # Probes
+  # -------------------------------------------------------------------------
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 5000
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    failureThreshold: 5
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 5000
+    initialDelaySeconds: 20
+    periodSeconds: 20
+
+  # -------------------------------------------------------------------------
+  # ADR-0028 labels
+  # -------------------------------------------------------------------------
+  podLabels:
+    platform.system: ml-pipeline
+    platform.component: model-registry
+    platform.managed-by: argocd
+
+  commonLabels:
+    platform.system: ml-pipeline
+    platform.component: model-registry
+    platform.managed-by: argocd
+
+  # -------------------------------------------------------------------------
+  # Security context
+  # -------------------------------------------------------------------------
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    readOnlyRootFilesystem: false
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+
+  podSecurityContext:
+    fsGroup: 1000
+
+  # -------------------------------------------------------------------------
+  # PostgreSQL / MySQL sub-charts — disabled; use dedicated RDS (ADR-0048 D3).
+  # -------------------------------------------------------------------------
+  postgresql:
+    enabled: false
+
+  mysql:
+    enabled: false
+
+  # -------------------------------------------------------------------------
+  # Extra env — S3 artifact root (must match artifactRoot above).
+  # -------------------------------------------------------------------------
+  extraEnvVars:
+    - name: MLFLOW_DEFAULT_ARTIFACT_ROOT
+      value: "s3://mlflow-artifacts-staging-ACCOUNT_ID"
+    # AWS_DEFAULT_REGION is inferred from Pod Identity metadata endpoint;
+    # set explicitly here for clarity.
+    - name: AWS_DEFAULT_REGION
+      value: "us-east-1"
