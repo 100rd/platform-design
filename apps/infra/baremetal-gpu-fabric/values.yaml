@@ -1,0 +1,38 @@
+---
+# SR-IOV / DRA fabric CRs for the bare-metal GPU cluster (ADR-0053). The SR-IOV operator is
+# installed by the baremetal-gpu-fabric Terraform module; this app carries the
+# SriovNetworkNodePolicy / SriovNetwork (day-0 primary) and the gated DRANET CRs.
+#
+# APPLY-GATED / default-OFF: ArgoCD will not sync these until a human enables the app.
+# The NCCL all-reduce bandwidth test (nccl-troubleshooting.md) is the acceptance gate.
+
+enabled: false
+
+platformLabels:
+  platform.system: ml-infra
+  platform.component: gpu-fabric
+  platform.managed-by: argocd
+
+# Physical fabric: infiniband (the UK doc's 400 Gbps IB + NVSwitch) or roce (Ethernet).
+fabricMode: infiniband
+mtu: 9000                            # jumbo frames (nic-tuning)
+
+# DAY-0 PRIMARY — SR-IOV / RDMA device plugin (ADR-0053).
+sriov:
+  enabled: true
+  resourceName: rdma_vf
+  numVfs: 8
+  nicVendor: "15b3"                  # Mellanox/NVIDIA
+  isRdma: true
+
+# GATED TARGET — Cilium netdev DRA (mirror of DRANET, ADR-0053 D3). OFF until DRA-netdev is
+# GA on our Talos/k8s + a dranet release is validated + it meets the SR-IOV NCCL baseline.
+dranet:
+  enabled: false
+  deviceClassName: rdma-netdev
+  nicCount: 1
+
+# Acceptance gate.
+acceptance:
+  ncclAllReduceBandwidthTest: required
+  runbook: ai-sre/knowledge/nccl-troubleshooting.md

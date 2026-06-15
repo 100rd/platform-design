@@ -1,0 +1,40 @@
+---
+# Rook-Ceph cluster CRs for the bare-metal GPU cluster (ADR-0052). The operator + CSI are
+# installed by the baremetal-rook-ceph Terraform module; this GitOps app carries the
+# CephCluster / pools / object-store CRs that the operator reconciles.
+#
+# APPLY-GATED / default-OFF: `enabled: false` so ArgoCD will not sync these CRs until a
+# human explicitly enables the app behind a reviewed plan + blast-radius review.
+#
+# HARD PREREQUISITE (ADR-0052): RBD PVCs will not mount until the Talos MachineConfig
+# declares the rbd + ceph kernel modules (talos-machineconfig / talos-system-extensions).
+# Without them csi-rbdplugin crash-loops.
+
+enabled: false
+
+platformLabels:
+  platform.system: ml-infra
+  platform.component: storage
+  platform.managed-by: argocd
+
+cephCluster:
+  cephImage: quay.io/ceph/ceph:v18.2.4
+  dataDirHostPath: /var/lib/rook   # must match the Talos kubelet extraMount
+  monCount: 3                      # odd, for quorum
+
+# Replication ≥3 to survive a node loss (storage-SPOF mitigation, risk R5).
+pools:
+  replicas: 3
+
+filesystem:
+  enabled: true                    # RWX shared datasets
+
+objectStore:
+  enabled: true                    # Ceph-RGW S3 — the WS-B artifact-store backend
+  name: ml-artifacts
+  rgwInstances: 2
+  port: 80
+
+# Cross-DC DR: MinIO site-replication / Ceph multisite is wired by WS-B/ops, not here.
+disasterRecovery:
+  note: cross-DC object replication is owned by WS-B (MinIO site-replication / Ceph multisite)

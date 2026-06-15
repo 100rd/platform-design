@@ -1,0 +1,45 @@
+---
+# Bare-metal model-/KV-cache-aware serving front (ADR-0053 D4 mirror). Gateway API inference
+# extension on Cilium / Envoy Gateway — there is NO cloud LB on owned hardware. Sits behind
+# the baremetal-ingress-waf WAF/rate-limit front.
+#
+# APPLY-GATED / default-OFF: ArgoCD will not sync these CRs until a human enables the app.
+#
+# NOTE (Gateway API inference v1 GA): InferenceModel was renamed InferenceObjective;
+# InferencePool / HTTPRoute are unchanged.
+
+enabled: false
+
+platformLabels:
+  platform.system: ml-inference
+  platform.component: inference-gateway
+  platform.managed-by: argocd
+
+# Gateway backend — cilium (one networking stack) or envoy (reuse apps/infra/envoy-gateway).
+gatewayBackend: cilium
+gatewayClass:
+  cilium: cilium
+  envoy: envoy-gateway
+
+gateway:
+  name: ml-serving
+  tlsSecretName: ml-serving-tls      # from cert-manager/ESO — never committed
+
+# The set of vLLM replicas requests route across, by KV-cache utilisation + queue depth.
+inferencePool:
+  name: vllm-pool
+  targetPort: 8000
+  selector:
+    app: vllm
+
+# Per-model routing + criticality (multi-LoRA → multiple objectives).
+inferenceObjectives:
+  - name: fraud-scorer
+    modelName: fraud-scorer-v3
+    criticality: Critical
+  - name: judge-debate
+    modelName: llm-judge
+    criticality: Standard
+
+httpRoute:
+  name: ml-serving-route

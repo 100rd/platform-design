@@ -1,0 +1,29 @@
+apiVersion: v2
+name: baremetal-gpu-fabric
+description: >-
+  GitOps SR-IOV / DRA custom resources for the bare-metal GPU fabric (RoCEv2 / InfiniBand
+  GPUDirect RDMA). The SR-IOV operator is installed by the baremetal-gpu-fabric Terraform
+  module; this app holds the SriovNetworkNodePolicy / SriovNetwork (day-0) and the gated
+  DRANET DeviceClass/ResourceClaimTemplate. WS-A, ADR-0053.
+version: 1.0.0
+appVersion: "1.0.0"
+type: application
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - sriov
+  - rdma
+  - roce
+  - infiniband
+  - dranet
+  - gpudirect
+  - gpu-fabric
+
+annotations:
+  category: Networking
+  platform: Kubernetes
+  platform.system: ml-infra
+  adr: "0053"
