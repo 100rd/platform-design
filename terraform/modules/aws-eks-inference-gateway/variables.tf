@@ -38,6 +38,17 @@ variable "gateway_name" {
   default     = "vllm-inference-gateway"
 }
 
+variable "tls_mode" {
+  description = "Where TLS terminates for the serving front (ADR-0047 D4). 'terminate-at-lb' (default) means TLS is terminated at the AWS WAF/ALB in front of Envoy — the Gateway listener stays HTTP on the trusted in-cluster hop, and the Gateway does not re-terminate. 'passthrough' carries TLS to the data plane."
+  type        = string
+  default     = "terminate-at-lb"
+
+  validation {
+    condition     = contains(["terminate-at-lb", "passthrough"], var.tls_mode)
+    error_message = "tls_mode must be 'terminate-at-lb' (TLS terminates at the WAF/ALB before Envoy, ADR-0047 D4) or 'passthrough'."
+  }
+}
+
 variable "hostnames" {
   description = "HTTPRoute hostnames. Empty matches all."
   type        = list(string)
@@ -99,6 +110,27 @@ variable "epp_replicas" {
   default     = 2
 }
 
+variable "epp_cpu_request" {
+  description = "EPP container CPU request. The EPP ext-proc must be bound (no unbounded Deployment) so the scheduler can place it and it cannot starve co-tenants."
+  type        = string
+  default     = "100m"
+  nullable    = false
+}
+
+variable "epp_memory_request" {
+  description = "EPP container memory request — the scheduling floor for the bound ext-proc."
+  type        = string
+  default     = "128Mi"
+  nullable    = false
+}
+
+variable "epp_memory_limit" {
+  description = "EPP container memory limit. A hard memory cap prevents the ext-proc from OOM-pressuring the node; CPU is left request-only (no CPU limit) to avoid throttling latency-sensitive routing."
+  type        = string
+  default     = "256Mi"
+  nullable    = false
+}
+
 variable "epp_config" {
   description = "EPP routing weights (KV-cache utilisation, queue depth) — turns model-server metrics into routing decisions (ADR-0047 D1)."
   type        = map(string)
@@ -110,9 +142,14 @@ variable "epp_config" {
 }
 
 variable "waf_web_acl_arn" {
-  description = "AWS WAF WebACL ARN (from the reused `waf` module, ADR-0047 D4) associated with the serving LB. Empty leaves the gateway without WAF (surface a warning in review)."
+  description = "AWS WAF WebACL ARN (from the reused `waf` module, ADR-0047 D4) associated with the serving LB. When the module is enabled this must be non-empty — the serving front is not exposed without a WebACL."
   type        = string
   default     = ""
+
+  validation {
+    condition     = !var.enabled || var.waf_web_acl_arn != ""
+    error_message = "waf_web_acl_arn must be set when enabled = true — the inference-gateway serving front must sit behind a WAF WebACL (ADR-0047 D4)."
+  }
 }
 
 variable "platform_labels" {

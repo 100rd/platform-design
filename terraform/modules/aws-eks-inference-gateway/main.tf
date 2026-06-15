@@ -10,6 +10,9 @@
 #   * EPP (Deployment+Service) — the Endpoint Picker ext-proc, deployed EXPLICITLY
 #     (the gateway does NOT install it — ADR-0047 D2, named deliverable).
 #
+# TLS terminates at the WAF/ALB in front of Envoy (var.tls_mode = terminate-at-lb,
+# ADR-0047 D4); the Gateway listener stays HTTP on the trusted in-cluster hop.
+#
 # AWS WAF (ADR-0047 D4) is the reused `waf` module's WebACL; its ARN is wired here and
 # associated with the serving LB by the catalog unit. Default-OFF (var.enabled) keeps
 # the vLLM ClusterIP path until the gateway is canary-proven (ADR-0047 D5, revertible).
@@ -31,9 +34,11 @@ locals {
   )
 
   # AWS WAF binds to the upstream LB fronting Envoy (D4); surfaced as a Gateway
-  # annotation so the LBC/association layer can pick it up.
+  # annotation so the LBC/association layer can pick it up. The same LB terminates
+  # TLS (var.tls_mode = terminate-at-lb), so the Gateway listener below stays HTTP.
   gateway_annotations = var.waf_web_acl_arn != "" ? {
     "platform.aws/waf-web-acl-arn" = var.waf_web_acl_arn
+    "platform.aws/tls-mode"        = var.tls_mode
   } : {}
 
   deploy_epp = var.enabled && var.deploy_epp
@@ -206,6 +211,12 @@ resource "kubernetes_deployment" "epp" {
         })
       }
       spec {
+        # Pod-level hardening (MED): run as the unprivileged nobody user, never root.
+        security_context {
+          run_as_non_root = true
+          run_as_user     = 65534
+        }
+
         container {
           name  = "epp"
           image = var.epp_image
@@ -223,6 +234,30 @@ resource "kubernetes_deployment" "epp" {
           env {
             name  = "INFERENCE_CRD_VERSION"
             value = var.inference_crd_version
+          }
+
+          # Bound the ext-proc (HIGH): requests so the scheduler can place it, a hard
+          # memory cap so it cannot OOM-pressure the node. CPU is request-only to
+          # avoid throttling latency-sensitive routing.
+          resources {
+            requests = {
+              cpu    = var.epp_cpu_request
+              memory = var.epp_memory_request
+            }
+            limits = {
+              memory = var.epp_memory_limit
+            }
+          }
+
+          # Container-level hardening (MED): no privilege escalation, read-only rootfs,
+          # drop every Linux capability.
+          security_context {
+            allow_privilege_escalation = false
+            read_only_root_filesystem  = true
+
+            capabilities {
+              drop = ["ALL"]
+            }
           }
         }
       }
