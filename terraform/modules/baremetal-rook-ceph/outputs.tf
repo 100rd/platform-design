@@ -23,6 +23,11 @@ output "s3_endpoint" {
   value       = local.deploy_object_store ? "http://rook-ceph-rgw-${var.object_store_name}.${var.namespace}.svc:${var.rgw_port}" : null
 }
 
+output "rgw_bucket_name" {
+  description = "Name of the Ceph-RGW object store / bucket (null when the object store is disabled). Consumed by baremetal-ml-monitoring (driftExporter.referenceBucketUri, ADR-0038) and other WS-B/WS-C units."
+  value       = local.deploy_object_store ? var.object_store_name : null
+}
+
 output "block_pool_replicas" {
   description = "Replication factor of the Ceph pools."
   value       = var.block_pool_replicas

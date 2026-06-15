@@ -89,6 +89,11 @@ variable "bgp_hold_time_seconds" {
   description = "BGP hold timer. Raised (180s) per cilium-bgp-issues.md so sessions survive CPU pressure on GPU nodes."
   type        = number
   default     = 180
+
+  validation {
+    condition     = var.bgp_hold_time_seconds >= 90
+    error_message = "BGP hold timer must be >= 90s to avoid session drops under GPU load (see cilium-bgp-issues runbook)."
+  }
 }
 
 variable "bgp_keepalive_time_seconds" {

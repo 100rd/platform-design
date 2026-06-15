@@ -94,3 +94,14 @@ run "bgp_off_falls_back_to_lb_only" {
     error_message = "LB-IPAM pool must still exist in the BGP-off fallback path."
   }
 }
+
+run "bgp_hold_timer_floor_enforced" {
+  command = plan
+
+  variables {
+    # Below the 90s floor → must fail (sessions drop under GPU load, cilium-bgp-issues runbook).
+    bgp_hold_time_seconds = 60
+  }
+
+  expect_failures = [var.bgp_hold_time_seconds]
+}
