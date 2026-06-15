@@ -1,0 +1,188 @@
+---
+# Golden Path: bm-new-model-service -- VolcanoJob training scaffold
+# WS-A (ADR-0049) + WS-B (ADR-0037): submitted by Airflow train_domain_adapter DAG
+# Substrate: bare-metal Talos UK DC, H100 GPU pool (ADR-0050 driver-less GPU Operator)
+#
+# USAGE: substitute all {{PLACEHOLDER}} values via envsubst (see README.md Step 1).
+# This file is rendered at runtime by the Airflow DAG task `submit_volcano_job`
+# and submitted via the Kubernetes API. It is NOT applied directly.
+#
+# ADR-0028 platform taxonomy labels (K8s plane -- dotted form):
+#   platform.system     = ml-pipeline
+#   platform.component  = volcano-training
+#   platform.env        = {{PLATFORM_ENV}}
+#   platform.owner      = {{TEAM_OWNER}}
+#   platform.managed-by = airflow
+#
+# ADR-0053 one-DRA-model: GPU + IB NIC scheduled as a single ResourceClaimTemplate.
+# ResourceClaimTemplate "h100-ib-claim" is provisioned by the
+# baremetal-gpu-scheduling module (WS-A) and is available in every GPU namespace.
+#
+# ADR-0054 elasticity: there is no cloud autoscaler. minAvailable must not exceed
+# the fixed H100 pool capacity. training-urgent queue cap is 2 concurrent jobs --
+# use only for drift/incident-response retrains.
+apiVersion: batch.volcano.sh/v1alpha1
+kind: Job
+metadata:
+  # Substitute: train-{{MODEL_NAME}}-<git-sha> (unique per pipeline run)
+  name: "train-{{MODEL_NAME}}"
+  # Substitute: tenant-{{TENANT_ID}}
+  namespace: "tenant-{{TENANT_ID}}"
+  labels:
+    # ADR-0028 platform taxonomy (dotted form for K8s resources).
+    platform.system: "ml-pipeline"
+    platform.component: "volcano-training"
+    # Substitute: {{PLATFORM_ENV}}
+    platform.env: "{{PLATFORM_ENV}}"
+    # Substitute: {{TEAM_OWNER}}
+    platform.owner: "{{TEAM_OWNER}}"
+    platform.managed-by: "airflow"
+    # Model and tenant scope for PromQL multi-tenant filtering (ADR-0038).
+    # Substitute: {{MODEL_NAME}}
+    ml.model-name: "{{MODEL_NAME}}"
+    # Substitute: {{TENANT_ID}}
+    tenant: "{{TENANT_ID}}"
+    # BM cluster identifier (distinguishes from GCP/AWS metrics in shared Thanos).
+    cluster-substrate: "baremetal-uk"
+spec:
+  # UK DC Volcano queue (H100 pool -- ADR-0054 queue taxonomy from 06-uk-datacenters.md).
+  # Valid values:
+  #   training-default   (weight 100  -- regular tenant retrains)
+  #   training-bootstrap (weight 30   -- new-tenant initial fine-tunes)
+  #   training-urgent    (weight 200, cap 2 -- drift-triggered / incident-response)
+  # Substitute: {{VOLCANO_QUEUE}}
+  queue: "{{VOLCANO_QUEUE}}"
+
+  # Gang scheduling: all replicas must be co-scheduled before any starts.
+  # H100 SXM5 nodes have 8 GPUs per node. Set minAvailable = replicas for strict gang.
+  minAvailable: 8
+
+  # Maximum retries before the job is marked failed.
+  maxRetry: 3
+
+  # Restart all tasks if any task fails (NCCL all-reduce requires the full gang).
+  policies:
+    - event: PodFailed
+      action: RestartJob
+
+  tasks:
+    - name: worker
+      replicas: 8
+
+      policies:
+        - event: TaskCompleted
+          action: CompleteJob
+
+      template:
+        metadata:
+          labels:
+            # ADR-0028 labels propagated to pods.
+            platform.system: "ml-pipeline"
+            platform.component: "volcano-training"
+            # Substitute: {{PLATFORM_ENV}}
+            platform.env: "{{PLATFORM_ENV}}"
+            # Substitute: {{TEAM_OWNER}}
+            platform.owner: "{{TEAM_OWNER}}"
+            platform.managed-by: "airflow"
+            # Substitute: {{MODEL_NAME}}
+            ml.model-name: "{{MODEL_NAME}}"
+            # Substitute: {{TENANT_ID}}
+            tenant: "{{TENANT_ID}}"
+        spec:
+          # GPU node pool taint (ADR-0049/0050 -- Talos system extension driver).
+          tolerations:
+            - key: "nvidia.com/gpu.present"
+              operator: "Exists"
+              effect: "NoSchedule"
+            - key: "dedicated"
+              value: "gpu-training"
+              effect: "NoSchedule"
+
+          # Pin to H100 GPU worker pool (ADR-0049 node labels set by talos-machineconfig).
+          nodeSelector:
+            platform_system: "gpu-worker"
+            nvidia.com/gpu.product: "NVIDIA-H100-SXM5-80GB"
+
+          # Credentials and endpoints from Vault / ESO ExternalSecrets.
+          # ExternalSecret provisioned by charts/tenant-bootstrap/ (bm-new-tenant golden path).
+          envFrom:
+            - secretRef:
+                # Substitute: minio-creds-{{TENANT_ID}}
+                name: "minio-creds-{{TENANT_ID}}"
+            - secretRef:
+                name: "mlflow-tracking-credentials"
+
+          containers:
+            - name: training
+              # Substitute: your training image (cosign-signed per .github/actions/sign-image/).
+              # Pin by digest in production.
+              image: "ghcr.io/your-org/ml-training-{{MODEL_NAME}}:{{GIT_SHA}}"
+              imagePullPolicy: Always
+
+              resources:
+                requests:
+                  # One GPU per pod (gang of 8 = full H100 node, 8 x GPU).
+                  nvidia.com/gpu: "1"
+                  cpu: "8"
+                  memory: "64Gi"
+                limits:
+                  nvidia.com/gpu: "1"
+                  cpu: "16"
+                  memory: "128Gi"
+
+              # ADR-0053 one-DRA-model: GPU + IB NIC as a single DRA claim.
+              # ResourceClaimTemplate "h100-ib-claim" is cluster-scoped, provisioned
+              # by baremetal-gpu-scheduling (WS-A). This schedules the GPU via the
+              # NVIDIA DRA driver AND the IB NIC via SR-IOV device plugin (day-0) or
+              # Cilium netdev-DRA (gated target, ADR-0053 D3 maturity gate).
+              resourceClaims:
+                - name: gpu-ib
+                  resourceClaimTemplateName: h100-ib-claim
+
+              env:
+                # In-DC MinIO/Ceph-RGW endpoint (UK data residency, ADR-0052).
+                # Do NOT use external AWS S3 for UK-resident training data.
+                # Substitute: {{MINIO_ENDPOINT}}
+                - name: MINIO_ENDPOINT
+                  value: "{{MINIO_ENDPOINT}}"
+                # Substitute: s3://{{MINIO_BUCKET}}/{{MODEL_NAME}}/{{TENANT_ID}}/{{DOMAIN}}
+                - name: ARTIFACT_URI
+                  value: "s3://{{MINIO_BUCKET}}/{{MODEL_NAME}}/{{TENANT_ID}}/{{DOMAIN}}"
+                # Airflow-injected run ID for MLflow lineage tracking.
+                - name: MLFLOW_RUN_ID
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.labels['airflow/run-id']
+                # NCCL InfiniBand config (ADR-0053 IB fabric -- 400 Gbps target).
+                # IB_SOCKET_IFNAME must match the IB interface confirmed by the
+                # NCCL pre-flight in ai-sre/knowledge/nccl-troubleshooting.md.
+                - name: NCCL_IB_DISABLE
+                  value: "0"
+                - name: NCCL_IB_SOCKET_IFNAME
+                  value: "ib0"
+                - name: NCCL_DEBUG
+                  value: "INFO"
+                # Volcano rank injection for PyTorch / NCCL distributed init.
+                - name: WORLD_SIZE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.annotations['volcano.sh/task-spec-index']
+
+              securityContext:
+                runAsNonRoot: true
+                # IPC_LOCK required for RDMA / GPUDirect RDMA (ADR-0053).
+                capabilities:
+                  add:
+                    - IPC_LOCK
+                readOnlyRootFilesystem: false
+
+          volumes:
+            # Shared memory for NCCL inter-process communication.
+            - name: shm
+              emptyDir:
+                medium: Memory
+                # Sized for NCCL_SHM_DISABLE=0 local transfer on an 8-GPU node.
+                sizeLimit: 16Gi
+
+          # Allow NCCL all-reduce to finish current step before eviction.
+          terminationGracePeriodSeconds: 120

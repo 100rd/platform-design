@@ -1,0 +1,92 @@
+# Golden Path: bm-new-tenant -- charts/tenant-bootstrap/ Helm values
+# Substrate: bare-metal Talos UK DC cluster (ADR-0049)
+#
+# USAGE: substitute all {{PLACEHOLDER}} values, then install via:
+#   helm upgrade --install "tenant-{{TENANT_ID}}" charts/tenant-bootstrap/ \
+#     --namespace argocd \
+#     --values out/helm-values.yaml \
+#     --atomic --timeout 10m
+#
+# CRITICAL: first install is apply-gated (creates Vault KMS key, Kafka ACLs,
+# production namespace). Requires platform lead approval per
+# .claude/rules/critical-decisions.md.
+#
+# ADR-0028 platform labels applied to all K8s resources created by this chart.
+# ADR-0040: Vault per-tenant KMS key for UK-resident data.
+# ADR-0049: namespace-per-tenant multi-tenancy model.
+
+# Tenant identity
+tenant:
+  # Short identifier -- used in namespace, labels, bucket names.
+  # Substitute: {{TENANT_ID}}
+  id: "{{TENANT_ID}}"
+
+  # Full Kubernetes namespace name.
+  # Substitute: {{TENANT}}
+  namespace: "{{TENANT}}"
+
+  # Human-readable display name.
+  # Substitute: {{TENANT_DISPLAY_NAME}}
+  displayName: "{{TENANT_DISPLAY_NAME}}"
+
+# Contract tier controls ResourceQuota and LimitRange sizes.
+# starter  : dev/small tenants; minimal quotas
+# standard : production default; balanced quotas
+# gpu      : tenants owning GPU workloads; elevated limits + GPU quota
+# Substitute: {{CONTRACT_TIER}}
+contractTier: "{{CONTRACT_TIER}}"
+
+# GPU queue access (subset of the UK DC Volcano queue taxonomy).
+# Leave empty for CPU-only tenants.
+# Substitute: {{GPU_QUEUES}}  (comma-separated)
+# Valid values: training-default, training-bootstrap, training-urgent,
+#               serving-vllm, eval-judge, engine-build, batch-rescore
+gpuQueues: "{{GPU_QUEUES}}"
+
+# MinIO / Ceph-RGW artifact store (ADR-0052).
+# Bucket provisioned by terraform/modules/baremetal-ml-artifact-store (WS-B).
+# Credentials sourced via ESO ExternalSecret from Vault -- never hardcoded here.
+artifactStore:
+  # Substitute: {{MINIO_BUCKET}}
+  bucket: "{{MINIO_BUCKET}}"
+  # In-DC S3 endpoint (UK data residency -- NOT external AWS S3, ADR-0052).
+  endpointRef:
+    secretName: "minio-endpoint-global"
+    key: "endpoint"
+  credentialsSecretRef:
+    # Substitute: minio-creds-{{TENANT_ID}}
+    name: "minio-creds-{{TENANT_ID}}"
+    accessKeyKey: "access_key"
+    secretKeyKey: "secret_key"
+
+# Vault KMS configuration (ADR-0040, UK-resident data).
+# All data-at-rest encryption for this tenant uses this key.
+vault:
+  # KMS key path in Vault.
+  # Substitute: tenants/{{TENANT_ID}}/kms
+  kmsPath: "tenants/{{TENANT_ID}}/kms"
+  # ESO SecretStore for the tenant namespace (provisioned by platform bootstrap).
+  secretStoreName: "vault-backend"
+
+# Kafka ACL scope. Tenant gets access to topics: tenant-{{TENANT_ID}}.*
+kafkaTopicPrefix: "tenant-{{TENANT_ID}}"
+
+# Gatekeeper constraints (ADR-0049 + WS-E):
+#   requireTenantLabel: reject pods without tenant={{TENANT_ID}} label
+#   blockCrossNamespaceSARef: reject pods referencing SAs from other namespaces
+gatekeeperConstraints:
+  requireTenantLabel: true
+  blockCrossNamespaceSARef: true
+
+# ADR-0028 platform taxonomy labels applied to ALL K8s resources by this chart.
+platformLabels:
+  "platform.system": "tenant-bootstrap"
+  "platform.component": "namespace"
+  # Substitute: {{PLATFORM_ENV}}
+  "platform.env": "{{PLATFORM_ENV}}"
+  # Substitute: {{TEAM_OWNER}}
+  "platform.owner": "{{TEAM_OWNER}}"
+  "platform.managed-by": "helm"
+  # Tenant label for Gatekeeper enforcement and PromQL multi-tenant filtering.
+  # Substitute: {{TENANT_ID}}
+  "tenant": "{{TENANT_ID}}"
