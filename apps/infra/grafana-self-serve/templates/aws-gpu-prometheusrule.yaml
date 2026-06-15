@@ -1,0 +1,223 @@
+---
+# Grafana self-serve: AWS GPU + EFA + ML-pipeline alert-rules-as-code
+#
+# Gated by .Values.aws.gpuPanels.enabled (absent/false = produces nothing).
+# Non-AWS and non-GPU teams are entirely unaffected.
+#
+# Produces ONE additional PrometheusRule per qualifying team, deployed into
+# team.namespace alongside the base PrometheusRule from prometheusrule.yaml.
+#
+# Alert groups added:
+#   <team-slug>-gpu-compute    — GPU utilisation low, GPU memory saturation, XID error
+#   <team-slug>-efa-fabric     — EFA interface receive saturation (aws.efaPanels.enabled)
+#   <team-slug>-ml-pipeline    — Airflow task failure rate (aws.mlPipelinePanels.enabled)
+#
+# Alert naming: all names carry the team slug prefix in UPPER_CASE (same convention
+# as prometheusrule.yaml) to prevent alertname collisions across teams.
+#
+# ADR-0039: Self-Serve Observability — alert-rules-as-code extension.
+# ADR-0028: platform.system = observability (mandatory on every resource).
+# ADR-0044: AWS EKS GPU ML foundation (DCGM-sourced GPU alerts).
+# ADR-0045: AWS EFA fabric (EFA throughput saturation alert).
+# ADR-0048: AWS ML CI/CD (Airflow task failure alert).
+{{- include "grafana-self-serve.validate" . }}
+{{- if and .Values.aws .Values.aws.gpuPanels .Values.aws.gpuPanels.enabled }}
+{{- $alertPrefix       := include "grafana-self-serve.alertPrefix" . }}
+{{- $dcgmPrefix        := .Values.aws.gpuPanels.dcgmMetricPrefix | default "DCGM_FI_DEV" }}
+{{- $nodePool          := .Values.aws.gpuPanels.nodePoolLabel | default "aws-eks-gpu" }}
+{{- $efaEnabled        := and .Values.aws.efaPanels .Values.aws.efaPanels.enabled }}
+{{- $efaIface          := "" }}
+{{- if and .Values.aws.efaPanels .Values.aws.efaPanels.efaInterface }}
+{{- $efaIface = .Values.aws.efaPanels.efaInterface }}
+{{- else }}
+{{- $efaIface = "eth0" }}
+{{- end }}
+{{- $mlPipelineEnabled := and .Values.aws.mlPipelinePanels .Values.aws.mlPipelinePanels.enabled }}
+{{- $airflowNs         := "" }}
+{{- if and .Values.aws.mlPipelinePanels .Values.aws.mlPipelinePanels.airflowNamespace }}
+{{- $airflowNs = .Values.aws.mlPipelinePanels.airflowNamespace }}
+{{- else }}
+{{- $airflowNs = "ml-pipeline" }}
+{{- end }}
+{{- $gpuUtilLow    := .Values.alerts.gpuUtilLowThreshold      | default "0.10" }}
+{{- $gpuMemSat     := .Values.alerts.gpuMemSaturationThreshold | default "0.90" }}
+{{- $gpuXidThresh  := .Values.alerts.gpuXidErrorThreshold      | default "0" }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Values.team.slug }}-aws-gpu-alerts
+  namespace: {{ .Values.team.namespace }}
+  labels:
+    {{- include "grafana-self-serve.labels" (dict "root" . "component" "aws-gpu-alert-rules") | nindent 4 }}
+    prometheus: kube-prometheus
+spec:
+  groups:
+    # ---------------------------------------------------------------------------
+    # GPU compute — low utilisation, memory saturation, XID hardware errors.
+    # Sources: DCGM Exporter (apps/infra/dcgm-exporter, ADR-0044 D2).
+    # ---------------------------------------------------------------------------
+    - name: {{ .Values.team.slug }}-gpu-compute
+      interval: 60s
+      rules:
+        - alert: {{ $alertPrefix }}_GPULowUtilisation
+          expr: |
+            avg by (gpu, kubernetes_node) (
+              {{ $dcgmPrefix }}_GPU_UTIL{
+                kubernetes_node=~".*{{ $nodePool }}.*"
+              }
+            ) / 100 < {{ $gpuUtilLow }}
+          for: 30m
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            alert_type: gpu-efficiency
+          annotations:
+            summary: >-
+              GPU under-utilised — {{ .Values.team.name }}
+              node {{ "{{ $labels.kubernetes_node }}" }} GPU {{ "{{ $labels.gpu }}" }}
+            description: >-
+              GPU utilisation {{ "{{ $value | humanizePercentage }}" }} is below
+              threshold {{ $gpuUtilLow }} for 30 minutes.
+              Check for idle training jobs or Karpenter scale-down opportunities.
+            runbook_url: "https://runbooks.internal.example.com/teams/{{ .Values.team.slug }}/gpu-low-utilisation"
+
+        - alert: {{ $alertPrefix }}_GPUMemorySaturation
+          expr: |
+            (
+              {{ $dcgmPrefix }}_FB_USED{
+                kubernetes_node=~".*{{ $nodePool }}.*"
+              }
+              /
+              (
+                {{ $dcgmPrefix }}_FB_USED{
+                  kubernetes_node=~".*{{ $nodePool }}.*"
+                }
+                + {{ $dcgmPrefix }}_FB_FREE{
+                  kubernetes_node=~".*{{ $nodePool }}.*"
+                }
+              )
+            ) > {{ $gpuMemSat }}
+          for: 10m
+          labels:
+            severity: critical
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            alert_type: gpu-memory
+          annotations:
+            summary: >-
+              GPU framebuffer memory saturated — {{ .Values.team.name }}
+              node {{ "{{ $labels.kubernetes_node }}" }} GPU {{ "{{ $labels.gpu }}" }}
+            description: >-
+              GPU memory fill ratio {{ "{{ $value | humanizePercentage }}" }} exceeds
+              {{ $gpuMemSat }}. OOM kill or training crash imminent.
+              Check for model code memory leaks or oversized batch sizes.
+            runbook_url: "https://runbooks.internal.example.com/teams/{{ .Values.team.slug }}/gpu-memory-saturation"
+
+        - alert: {{ $alertPrefix }}_GPUXIDError
+          expr: |
+            {{ $dcgmPrefix }}_XID_ERRORS{
+              kubernetes_node=~".*{{ $nodePool }}.*"
+            } > {{ $gpuXidThresh }}
+          for: 0m
+          labels:
+            severity: critical
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            alert_type: gpu-hardware
+          annotations:
+            summary: >-
+              GPU XID error — {{ .Values.team.name }}
+              node {{ "{{ $labels.kubernetes_node }}" }} GPU {{ "{{ $labels.gpu }}" }}
+            description: >-
+              XID error count {{ "{{ $value }}" }} on GPU {{ "{{ $labels.gpu }}" }}.
+              XID errors indicate hardware faults. Cordon the node immediately
+              and open an AWS Support case for the affected EC2 instance.
+            runbook_url: "https://runbooks.internal.example.com/teams/{{ .Values.team.slug }}/gpu-xid-error"
+
+    {{- if $efaEnabled }}
+    # ---------------------------------------------------------------------------
+    # EFA fabric — interface receive throughput saturation (ADR-0045).
+    # Sources: node_exporter network counters on EFA interface.
+    # 100 Gbps = 12.5 GBps = 1.25e10 Bps. Alert at ~80% = 1e10 Bps.
+    # ---------------------------------------------------------------------------
+    - name: {{ .Values.team.slug }}-efa-fabric
+      interval: 60s
+      rules:
+        - alert: {{ $alertPrefix }}_EFAReceiveSaturation
+          expr: |
+            rate(node_network_receive_bytes_total{
+              device="{{ $efaIface }}",
+              instance=~".*{{ $nodePool }}.*"
+            }[5m]) > 1e10
+          for: 5m
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            alert_type: efa-saturation
+          annotations:
+            summary: >-
+              EFA receive saturation — {{ .Values.team.name }}
+              instance {{ "{{ $labels.instance }}" }}
+            description: >-
+              EFA receive throughput {{ "{{ $value | humanize }}" }}Bps exceeds
+              ~80% of 100 Gbps line rate on interface {{ $efaIface }}
+              sustained for 5 minutes. Check for NCCL all-reduce congestion
+              or runaway data-parallel jobs (ADR-0045).
+            runbook_url: "https://runbooks.internal.example.com/teams/{{ .Values.team.slug }}/efa-saturation"
+    {{- end }}
+
+    {{- if $mlPipelineEnabled }}
+    # ---------------------------------------------------------------------------
+    # ML pipeline — Airflow task failure rate (ADR-0048).
+    # Sources: Airflow StatsD / OpenMetrics exporter in airflowNs.
+    # ---------------------------------------------------------------------------
+    - name: {{ .Values.team.slug }}-ml-pipeline
+      interval: 60s
+      rules:
+        - alert: {{ $alertPrefix }}_AirflowHighTaskFailureRate
+          expr: |
+            (
+              rate(airflow_task_instance_failed_count{
+                namespace="{{ $airflowNs }}"
+              }[15m])
+              /
+              (
+                rate(airflow_task_instance_failed_count{
+                  namespace="{{ $airflowNs }}"
+                }[15m])
+                + rate(airflow_task_instance_created_count{
+                  namespace="{{ $airflowNs }}"
+                }[15m])
+              )
+            ) > 0.10
+          for: 5m
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            alert_type: ml-pipeline
+          annotations:
+            summary: >-
+              High Airflow task failure rate — {{ .Values.team.name }}
+              (namespace: {{ $airflowNs }})
+            description: >-
+              Airflow task failure rate {{ "{{ $value | humanizePercentage }}" }}
+              exceeds 10% over 15 minutes in namespace {{ $airflowNs }}.
+              Check train/eval/gate DAG logs and the ml-monitoring drift stack
+              (ADR-0048/ADR-0038).
+            runbook_url: "https://runbooks.internal.example.com/teams/{{ .Values.team.slug }}/airflow-task-failures"
+    {{- end }}
+{{- end }}
