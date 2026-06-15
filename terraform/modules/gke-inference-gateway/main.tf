@@ -8,7 +8,7 @@
 # Objects (all kubernetes_manifest; providers mocked in tftest):
 #   * Gateway          — the GKE inference GatewayClass entrypoint.
 #   * InferencePool    — the set of vLLM replicas (selector + target port + EPP ref).
-#   * InferenceModel   — per-model routing + criticality (multi-LoRA → multiple models).
+#   * InferenceObjective   — per-model routing + criticality (multi-LoRA → multiple models).
 #   * HTTPRoute        — binds the Gateway to the InferencePool.
 #   * GCPBackendPolicy — attaches the Cloud Armor policy (ADR-0042 D5) when provided.
 #
@@ -89,7 +89,7 @@ resource "kubernetes_manifest" "inference_pool" {
 }
 
 # ---------------------------------------------------------------------------------------------------------------------
-# InferenceModel — per-model routing + criticality (multi-LoRA → multiple models).
+# InferenceObjective — per-model routing + criticality (multi-LoRA → multiple models).
 # ---------------------------------------------------------------------------------------------------------------------
 
 resource "kubernetes_manifest" "inference_model" {
@@ -97,7 +97,7 @@ resource "kubernetes_manifest" "inference_model" {
 
   manifest = {
     apiVersion = "inference.networking.x-k8s.io/v1alpha2"
-    kind       = "InferenceModel"
+    kind       = "InferenceObjective"
     metadata = {
       name      = each.value.name
       namespace = var.namespace

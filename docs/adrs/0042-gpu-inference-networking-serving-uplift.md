@@ -42,7 +42,7 @@ Two forces make this the right next step:
    with **no awareness of model identity, KV-cache locality, or per-replica load**,
    and the inference endpoint has **no WAF/DDoS layer**. The Google "Networking for
    AI inference" architecture's answer to exactly this is the **GKE Inference
-   Gateway** (Gateway API + `InferencePool`/`InferenceModel` + Body-Based Router),
+   Gateway** (Gateway API + `InferencePool`/`InferenceObjective` (v1 GA renamed InferenceModel->InferenceObjective) + Body-Based Router),
    fronted by **Cloud Armor**.
 
 The target accelerator fleet (confirmed by the platform owner) is **mixed: A100,
@@ -143,7 +143,7 @@ Replace the vLLM **`ClusterIP`** front with the **GKE Inference Gateway** (Gatew
 inference extension):
 
 - A new `gke-inference-gateway` module wiring a **`Gateway`** (GKE inference
-  `GatewayClass`) → **`InferencePool`** (the set of vLLM replicas) → **`InferenceModel`**
+  `GatewayClass`) → **`InferencePool`** (the set of vLLM replicas) → **`InferenceObjective`**
   (per-model routing + criticality), with the **Body-Based Router** Service Extension
   that reads the model name from the OpenAI-style request body into
   `X-Gateway-Model-Name` for header-based routing.
@@ -152,7 +152,7 @@ inference extension):
   the core throughput/latency win from the "Networking for AI inference" architecture.
 - vLLM (`gpu-inference-vllm`) changes from `Service{type=ClusterIP}` to an
   `InferencePool` member; its existing VictoriaMetrics scrape and DRA GPU claim are
-  unchanged. Multi-LoRA (already supported) maps onto multiple `InferenceModel` objects.
+  unchanged. Multi-LoRA (already supported) maps onto multiple `InferenceObjective` objects.
 
 ### D5 — Cloud Armor (and optional Model Armor) on the inference frontend
 
@@ -182,7 +182,7 @@ A reviewer checks conformance by confirming: (a) every GPU VPC sets `mtu = 8896`
 every GPU pool enables gVNIC (D1); (b) A3 High/Mega pools carry the data-plane networks
 + `GKENetworkParamSet` + NCCL plugin (D2); (c) A3 Ultra/A4 pools run on GKE
 `1.35.2-gke.1842000+` with managed DRANET + a RoCE VPC + a `netdev` `ResourceClaimTemplate`
-(D3); (d) vLLM is served via `InferencePool`/`InferenceModel` behind an Inference
+(D3); (d) vLLM is served via `InferencePool`/`InferenceObjective` behind an Inference
 Gateway, not `ClusterIP` (D4); (e) a Cloud Armor policy is bound to the inference LB
 (D5); (f) every new resource carries the five ADR-0028 labels.
 
@@ -218,7 +218,7 @@ mechanism that turns GPU metrics into routing decisions.
 ### A5 — Service-mesh (Istio/Envoy) model routing instead of Inference Gateway
 Implement model-aware routing in a mesh.
 *Rejected as the primary path because:* the **GKE Inference Gateway** is purpose-built
-for LLM serving (InferencePool/InferenceModel + KV-cache-aware endpoint picking + Body-
+for LLM serving (InferencePool/InferenceObjective + KV-cache-aware endpoint picking + Body-
 Based Router) and is the Google-supported pattern; a mesh would re-implement this with
 more moving parts. A mesh remains viable for east-west policy but is not the serving
 front.
@@ -247,7 +247,7 @@ substrate is out of scope.
   networking paradigm for the newest hardware.
 - **Model-/cache-aware serving:** the Inference Gateway routes on KV-cache and load, not
   round-robin, improving TTFT/throughput and enabling clean multi-model (multi-LoRA →
-  multi-`InferenceModel`) routing.
+  multi-`InferenceObjective`) routing.
 - **Perimeter for inference:** Cloud Armor brings WAF/DDoS/rate-limiting to an endpoint
   that has none today.
 - **D1 is near-free and fleet-wide:** jumbo frames + gVNIC benefit every family at
@@ -335,7 +335,7 @@ mirror the existing `gke-gpu-operator` / `gke-gpu-dcgm` / `gke-gpu-scheduling` m
 **`gke-inference-gateway` (new)** — model-/cache-aware serving front (D4).
 - Inputs: `gateway_class` (GKE inference class), `inference_pool_selector` (vLLM replica
   selector / port `8000`), `inference_models` (list: `{ name, criticality, target_model }`
-  → `InferenceModel` objects, incl. LoRA adapters), `enable_body_based_router` (bool,
+  → `InferenceObjective` objects, incl. LoRA adapters), `enable_body_based_router` (bool,
   default `true`), `cloud_armor_policy_id` (from `gcp-cloud-armor`, D5), `labels`.
 - Outputs: `gateway_name`, `inference_pool_name`, `gateway_address`.
 - **vLLM coupling (D4):** `gpu-inference-vllm` flips from `Service{type=ClusterIP}` to an
@@ -397,7 +397,7 @@ Re-open this decision if any of the following hold:
   Google OSS blog: <https://opensource.googleblog.com/2025/07/unlocking-high-performance-aiml-in-kubernetes-with-dranet-and-rdma.html>
 - GKE managed DRANET + Inference Gateway (Google Cloud blog):
   <https://cloud.google.com/blog/topics/developers-practitioners/experimenting-with-gpus-gke-managed-dranet-and-inference-gateway-ai-deployment>
-- GKE Inference Gateway (Gateway API inference extension; InferencePool/InferenceModel):
+- GKE Inference Gateway (Gateway API inference extension; InferencePool/InferenceObjective):
   <https://cloud.google.com/kubernetes-engine/docs/concepts/about-gke-inference-gateway>
 - Cloud Armor (`google_compute_security_policy`):
   <https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_security_policy>

@@ -9,7 +9,7 @@ output "inference_pool_name" {
 }
 
 output "inference_model_names" {
-  description = "Names of the InferenceModel objects created."
+  description = "Names of the InferenceObjective objects created."
   value       = var.enabled ? [for m in var.inference_models : m.name] : []
 }
 

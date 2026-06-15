@@ -37,7 +37,7 @@ run "one_inference_model_per_entry" {
 
   assert {
     condition     = length(kubernetes_manifest.inference_model) == 2
-    error_message = "Each inference_models entry must produce one InferenceModel."
+    error_message = "Each inference_models entry must produce one InferenceObjective."
   }
 
   assert {
