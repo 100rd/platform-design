@@ -1,0 +1,48 @@
+# baremetal-org-policy — values (WS-E)
+#
+# The in-cluster Kyverno tenant-isolation policy bundle for the Talos bare-metal
+# estate. Observe-first: enforcementMode defaults to Audit. Reuses the existing
+# apps/infra/kyverno engine (ADR-0020) — this chart ships ONLY ClusterPolicy CRs,
+# not the Kyverno controller.
+#
+# ADR-0028 / ADR-0040 / ADR-0049 / ADR-0050.
+
+# ADR-0028 platform taxonomy (dotted form on the K8s plane). Applied to every CR.
+platform:
+  system: security
+  component: org-policy
+  owner: team-sec
+  env: prod
+  managedBy: argocd
+
+# Admission mode for the bundle: Audit (record only) or Enforce (block).
+# Promote to Enforce only after a clean Audit soak window (see README enforcement
+# history). Mirrors the terraform module's policy_enforcement_mode default.
+enforcementMode: Audit
+
+# Per-DC scoping — used only in CR names/annotations for attribution.
+dc: uk-primary
+clusterName: talos-uk-primary
+
+policies:
+  # Reject pods without a tenant={id} label (the UK-DC Gatekeeper tenant constraint,
+  # ported to Kyverno). SOC2 CC6.1.
+  requireTenantLabel:
+    enabled: true
+  # Reject pods referencing a ServiceAccount in another namespace. SOC2 CC6.3.
+  denyCrossNamespaceSA:
+    enabled: true
+
+# Namespaces excluded from the tenant-label requirement (system/infra namespaces
+# that legitimately have no tenant). Mirrors apps/infra/kyverno's exclusion set.
+excludedNamespaces:
+  - kube-system
+  - kube-public
+  - kube-node-lease
+  - kyverno
+  - gatekeeper-system
+  - external-secrets
+  - argocd
+  - monitoring
+  - rook-ceph
+  - cilium
