@@ -1,0 +1,175 @@
+---
+# MLflow Tracking Server + Model Registry — Bare Metal (ADR-0037 reused, ADR-0052)
+# platform:system = ml-pipeline, component = model-registry
+#
+# Backend store: CloudNativePG PostgreSQL 16 (already in UK DC inventory per
+#   docs/transaction-analytics/06-uk-datacenters.md).
+# Artifact store: MinIO (default, UK DC pools) or Ceph-RGW S3-compatible endpoint.
+#   Credentials materialised via ESO ExternalSecret from Vault KV v2.
+#   See: terraform/modules/baremetal-ml-artifact-store.
+#
+# Key differences vs apps/infra/mlflow (GKE):
+#   - nodeSelector: uses Talos/bare-metal label pool:cpu-general (not GKE nodepool)
+#   - artifactRoot: s3:// URI pointing at MinIO/Ceph-RGW (not gs://)
+#   - SA annotation: no GKE WI — S3 credentials come from the ESO secret
+#   - NetworkPolicy: CiliumNetworkPolicy (bare metal, Cilium CNI per ADR-0051)
+#
+# ADR-0028: platform.system = ml-pipeline, component = model-registry.
+# ADR-0037: orchestrator/registry design unchanged; only substrate changes.
+# ADR-0049: UK-resident data; no external S3 (data-residency requirement).
+# ADR-0051: Cilium CNI with networkPolicy enforced.
+# ADR-0052: S3 artifact store = MinIO (default) or Ceph-RGW.
+
+# ---------------------------------------------------------------------------
+# Wrapper-chart-level values
+# ---------------------------------------------------------------------------
+
+networkPolicy:
+  enabled: true
+
+# ---------------------------------------------------------------------------
+# MLflow sub-chart values
+# ---------------------------------------------------------------------------
+
+mlflow:
+  enabled: true
+
+  # HA: 2 replicas for availability (risk R5 mitigation, ADR-0037)
+  replicaCount: 2
+
+  image:
+    repository: ghcr.io/mlflow/mlflow
+    tag: "v2.21.3"
+    pullPolicy: IfNotPresent
+
+  # -------------------------------------------------------------------------
+  # Backend store — CloudNativePG PostgreSQL 16 (UK DC inventory)
+  # Connection string injected from ExternalSecret mlflow-db-connection.
+  # Shape: postgresql+psycopg2://mlflow:<password>@mlflow-pg-rw.ml-pipeline.svc:5432/mlflow
+  # (CloudNativePG service: mlflow-pg-rw — read-write endpoint)
+  # -------------------------------------------------------------------------
+  backendStore:
+    existing_secret: mlflow-db-connection
+    existing_secret_key: connection
+
+  # -------------------------------------------------------------------------
+  # Artifact store — MinIO/Ceph-RGW S3 endpoint (ADR-0052)
+  # Bucket path set per-env by ArgoCD Application parameter override.
+  # S3 credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
+  # MLFLOW_S3_ENDPOINT_URL) injected from ExternalSecret mlflow-s3-credentials
+  # (materialised by baremetal-ml-artifact-store Terraform module via ESO/Vault).
+  # -------------------------------------------------------------------------
+  artifactRoot: "s3://mlflow-artifacts"
+
+  # -------------------------------------------------------------------------
+  # Service account — bare metal (no GKE WI; credentials from ESO Secret)
+  # -------------------------------------------------------------------------
+  serviceAccount:
+    create: true
+    name: mlflow
+    annotations:
+      # No cloud WI annotation — S3 credentials arrive via envFrom (ESO Secret).
+      platform.credential-source: vault-eso
+
+  # -------------------------------------------------------------------------
+  # Extra env — S3 endpoint + credentials from the ESO-managed Secret.
+  # The ESO ExternalSecret (baremetal-ml-artifact-store module) creates
+  # mlflow-s3-credentials with keys: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
+  # MLFLOW_S3_ENDPOINT_URL. envFrom injects all three.
+  # -------------------------------------------------------------------------
+  extraEnvVarsSecret: mlflow-s3-credentials
+
+  extraEnvVars:
+    - name: MLFLOW_DEFAULT_ARTIFACT_ROOT
+      value: "s3://mlflow-artifacts"
+    # Force-path-style so MinIO / Ceph-RGW work without virtual-hosted-style DNS.
+    - name: MLFLOW_S3_IGNORE_TLS
+      value: "false"
+    - name: AWS_DEFAULT_REGION
+      value: "us-east-1"   # MinIO ignores region; Ceph-RGW accepts any value.
+
+  # -------------------------------------------------------------------------
+  # Service
+  # -------------------------------------------------------------------------
+  service:
+    type: ClusterIP
+    port: 5000
+
+  # -------------------------------------------------------------------------
+  # Resources
+  # -------------------------------------------------------------------------
+  resources:
+    requests:
+      cpu: 300m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+  # -------------------------------------------------------------------------
+  # Node selector — CPU general pool (Talos bare-metal label, not GKE nodepool)
+  # pool:cpu-general is set in machine.nodeLabels by talos-machineconfig (ADR-0028).
+  # -------------------------------------------------------------------------
+  nodeSelector:
+    pool: cpu-general
+
+  tolerations: []
+
+  # -------------------------------------------------------------------------
+  # Pod Disruption Budget — risk R5 mitigation (ADR-0037)
+  # -------------------------------------------------------------------------
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  # -------------------------------------------------------------------------
+  # Probes
+  # -------------------------------------------------------------------------
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 5000
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    failureThreshold: 5
+
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 5000
+    initialDelaySeconds: 20
+    periodSeconds: 20
+
+  # -------------------------------------------------------------------------
+  # ADR-0028 labels (K8s-plane: dotted keys)
+  # -------------------------------------------------------------------------
+  podLabels:
+    platform.system: ml-pipeline
+    platform.component: model-registry
+    platform.managed-by: argocd
+
+  commonLabels:
+    platform.system: ml-pipeline
+    platform.component: model-registry
+    platform.managed-by: argocd
+
+  # -------------------------------------------------------------------------
+  # Security context
+  # -------------------------------------------------------------------------
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    readOnlyRootFilesystem: false   # MLflow writes tmp files during artifact ops
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+
+  podSecurityContext:
+    fsGroup: 1000
+
+  # -------------------------------------------------------------------------
+  # PostgreSQL sub-chart — disabled; use CloudNativePG (UK DC inventory)
+  # -------------------------------------------------------------------------
+  postgresql:
+    enabled: false
