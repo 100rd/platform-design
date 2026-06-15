@@ -1,0 +1,215 @@
+# ML Monitoring Bare-Metal — CI Validation Gate (WS-C)
+#
+# ADR citations: ADR-0038 (drift monitoring), ADR-0049 (bare-metal; UK DC)
+# platform:system = ml-monitoring (ADR-0028)
+#
+# PURPOSE:
+#   Validate all WS-C deliverables on every PR that touches ml-monitoring or
+#   baremetal-ml-monitoring files. Gates:
+#     1. helm lint (base values + baremetal overlay)
+#     2. yamllint on ArgoCD application + alertmanager overlay
+#     3. terragrunt validate (catalog unit)
+#     4. ADR-0028 label check in rendered helm output
+#
+# NO APPLY: this workflow never runs helm install, kubectl apply, or
+# terraform apply. plan/validate-only per the repo's apply-gate posture.
+name: "ML Monitoring Bare-Metal — Validate (WS-C)"
+
+on:
+  pull_request:
+    branches:
+      - main
+      - "feature/**"
+    paths:
+      - "apps/infra/ml-monitoring/values-baremetal.yaml"
+      - "apps/infra/ml-monitoring/argocd-application-baremetal.yaml"
+      - "apps/infra/ml-monitoring/alertmanager-routes-overlay-baremetal.yaml"
+      - "apps/infra/ml-monitoring/values.yaml"
+      - "apps/infra/ml-monitoring/Chart.yaml"
+      - "apps/infra/ml-monitoring/templates/**"
+      - "apps/infra/observability/grafana-dashboards/templates/configmap-ml-drift-baremetal.yaml"
+      - "catalog/units/baremetal-ml-monitoring/**"
+      - "terragrunt/uk/**"
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: "Enable debug logging"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: "ml-monitoring-baremetal-validate-${{ github.ref }}"
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  HELM_VERSION: "3.17.0"
+  TF_VERSION: "1.14.8"
+  TG_VERSION: "1.0.8"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Helm lint + template render + ADR-0028 label check
+  # ---------------------------------------------------------------------------
+  helm-lint:
+    name: "Helm lint — ml-monitoring (base + baremetal overlay)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@v4
+
+      - name: Install Helm ${{ env.HELM_VERSION }}
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Helm lint (base values only)
+        working-directory: apps/infra/ml-monitoring
+        run: helm lint . --values values.yaml
+
+      - name: Helm lint (base + baremetal overlay)
+        working-directory: apps/infra/ml-monitoring
+        run: |
+          helm lint . \
+            --values values.yaml \
+            --values values-baremetal.yaml
+
+      - name: Helm template (base + baremetal overlay) — render all resources
+        working-directory: apps/infra/ml-monitoring
+        run: |
+          helm template ml-monitoring-baremetal . \
+            --values values.yaml \
+            --values values-baremetal.yaml \
+            --set "modelNamespaces[0].namespace=ml-tenant-test" \
+            --set "modelNamespaces[0].modelName=domain-adapter-test" \
+            --set "modelNamespaces[0].tenant=tenant-test" \
+            --set "modelNamespaces[0].domain=hft" \
+            > /tmp/rendered-baremetal.yaml
+          echo "Rendered resource count:"
+          grep "^kind:" /tmp/rendered-baremetal.yaml | sort | uniq -c
+
+      - name: Verify ADR-0028 labels in rendered output
+        run: |
+          set -euo pipefail
+          MISSING=$(grep -c "platform.system" /tmp/rendered-baremetal.yaml || true)
+          if [ "${MISSING}" -eq 0 ]; then
+            echo "ERROR: No platform.system labels found in rendered output"
+            exit 1
+          fi
+          echo "ADR-0028 platform.system labels found: ${MISSING} occurrences"
+
+  # ---------------------------------------------------------------------------
+  # Job 2: yamllint
+  # ---------------------------------------------------------------------------
+  yamllint:
+    name: "yamllint — ArgoCD app + Alertmanager overlay"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@v4
+
+      - name: Install yamllint
+        run: pip install yamllint==1.35.1
+
+      - name: yamllint — ArgoCD Application
+        run: |
+          yamllint -d relaxed \
+            apps/infra/ml-monitoring/argocd-application-baremetal.yaml
+
+      - name: yamllint — Alertmanager overlay
+        run: |
+          yamllint -d "{extends: relaxed, rules: {line-length: {max: 200}}}" \
+            apps/infra/ml-monitoring/alertmanager-routes-overlay-baremetal.yaml
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Terragrunt validate — catalog unit
+  # ---------------------------------------------------------------------------
+  terragrunt-validate:
+    name: "Terragrunt validate — catalog/units/baremetal-ml-monitoring"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@v4
+
+      - name: Install Terraform ${{ env.TF_VERSION }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Install Terragrunt ${{ env.TG_VERSION }}
+        run: |
+          curl -sL \
+            "https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TG_VERSION }}/terragrunt_linux_amd64" \
+            -o /usr/local/bin/terragrunt
+          chmod +x /usr/local/bin/terragrunt
+          terragrunt --version
+
+      - name: Terragrunt hcl fmt check
+        working-directory: catalog/units/baremetal-ml-monitoring
+        run: terragrunt hcl fmt --check --diff
+
+      - name: Terragrunt init (backend=false)
+        working-directory: catalog/units/baremetal-ml-monitoring
+        env:
+          TG_NON_INTERACTIVE: "true"
+        run: terragrunt init -backend=false
+
+      - name: Terragrunt validate
+        working-directory: catalog/units/baremetal-ml-monitoring
+        env:
+          TG_NON_INTERACTIVE: "true"
+        run: terragrunt validate
+
+  # ---------------------------------------------------------------------------
+  # Job 4: PR summary comment
+  # ---------------------------------------------------------------------------
+  summary:
+    name: "Validation summary"
+    runs-on: ubuntu-latest
+    needs: [helm-lint, yamllint, terragrunt-validate]
+    if: always() && github.event_name == 'pull_request'
+    steps:
+      - name: Post PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const results = {
+              'helm-lint':           '${{ needs.helm-lint.result }}',
+              'yamllint':            '${{ needs.yamllint.result }}',
+              'terragrunt-validate': '${{ needs.terragrunt-validate.result }}',
+            };
+            const icon = (r) => r === 'success' ? ':white_check_mark:' : r === 'skipped' ? ':white_circle:' : ':x:';
+            const rows = Object.entries(results)
+              .map(([name, result]) => `| ${icon(result)} | \`${name}\` | ${result} |`)
+              .join('\n');
+            const body = [
+              '## WS-C Bare-Metal ML Monitoring — Validation Results',
+              '',
+              '| | Gate | Result |',
+              '|---|---|---|',
+              rows,
+              '',
+              '> ADR-0038 / ADR-0049 / ADR-0028 | plan/validate-only | apply-gated',
+            ].join('\n');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });
