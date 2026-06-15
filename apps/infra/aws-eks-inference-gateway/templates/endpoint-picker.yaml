@@ -1,0 +1,57 @@
+{{- if and .Values.enabled .Values.endpointPicker.enabled }}
+# Endpoint Picker (EPP) — ext-proc Deployment + Service. Deployed EXPLICITLY (ADR-0047 D2);
+# the gateway does NOT install it. Routes on KV-cache utilisation + queue depth.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.inferencePool.name }}-epp-config
+  labels:
+    {{- include "aws-eks-inference-gateway.labels" . | nindent 4 }}
+data:
+  kv-cache-weight: {{ .Values.endpointPicker.config.kvCacheWeight | quote }}
+  queue-depth-weight: {{ .Values.endpointPicker.config.queueDepthWeight | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.inferencePool.name }}-epp
+  labels:
+    {{- include "aws-eks-inference-gateway.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.endpointPicker.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.inferencePool.name }}-epp
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.inferencePool.name }}-epp
+        {{- include "aws-eks-inference-gateway.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: epp
+          image: {{ .Values.endpointPicker.image }}
+          args:
+            - --pool-name
+            - {{ .Values.inferencePool.name }}
+          ports:
+            - name: grpc-ext-proc
+              containerPort: 9002
+          env:
+            - name: INFERENCE_CRD_VERSION
+              value: {{ .Values.inferenceExtension.crdVersion | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.inferencePool.name }}-epp
+  labels:
+    {{- include "aws-eks-inference-gateway.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: {{ .Values.inferencePool.name }}-epp
+  ports:
+    - name: grpc-ext-proc
+      port: 9002
+      targetPort: 9002
+{{- end }}

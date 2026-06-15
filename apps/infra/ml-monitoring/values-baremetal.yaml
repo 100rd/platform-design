@@ -1,0 +1,157 @@
+# ML Monitoring Helm values — Bare-Metal (Talos) overlay
+# WS-C — ADR-0038 (decision of record), ADR-0049, ADR-0052
+#
+# PURPOSE:
+#   Bare-metal-specific overrides layered on top of values.yaml.
+#   Key substitutions vs the base values:
+#     - referenceBucketUri: GCS  ->  MinIO / Ceph-RGW S3 endpoint  (ADR-0052)
+#     - workloadIdentityAnnotation: GKE-WIF  ->  none (Vault/ESO-issued S3 creds)
+#     - Airflow baseUrl: GKE-Airflow  ->  in-DC Airflow  (WS-B bare-metal)
+#     - ESO secretStoreRef  ->  Vault-backed ClusterSecretStore (in-DC Vault)
+#     - platform.cluster label added for multi-cluster Grafana federation
+#
+# APPLY GATE:
+#   This file is plan/validate-only. No helm install without explicit human
+#   approval. Apply is CI-only from main after merge.
+#
+# ADR-0028 platform taxonomy labels — dot-notation keys in K8s resource metadata.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# ADR-0028 platform labels (merged with base values.yaml labels at render time)
+# ---------------------------------------------------------------------------
+platformLabels:
+  "platform.system": "ml-monitoring"
+  "platform.component": "drift-exporter"
+  "platform.env": "production"
+  "platform.owner": "team-ml-platform"
+  "platform.managed-by": "argocd"
+  "platform.cluster": "talos-uk-primary"   # override per DC via ArgoCD Application
+
+# ---------------------------------------------------------------------------
+# Namespace (same as base; kept for explicitness)
+# ---------------------------------------------------------------------------
+namespace: ml-monitoring
+
+# ---------------------------------------------------------------------------
+# Evidently drift-exporter — bare-metal substrate overrides
+# ---------------------------------------------------------------------------
+driftExporter:
+  # Reference dataset bucket: MinIO or Ceph-RGW S3 endpoint (ADR-0052).
+  # NOT a GCS URI. S3-compatible API — Evidently uses boto3 endpoint_url.
+  # The actual endpoint hostname is injected via ESO-managed Secret:
+  #   Vault path: secret/ml-monitoring/minio-s3-credentials
+  # Rendered as: s3://<bucket-name>/<path> with env var S3_ENDPOINT_URL
+  # pointing at the MinIO/Ceph-RGW in-cluster service.
+  #
+  # Default: Ceph-RGW in-cluster endpoint (ADR-0052 Rook-Ceph RGW).
+  # Override to MinIO if ADR-0052 sub-decision lands on MinIO-as-primary.
+  referenceBucketUri: "s3://ml-reference-data"
+
+  # Evaluation interval unchanged from base (300s).
+  evaluationIntervalSeconds: 300
+
+  # Thresholds inherited from base values.yaml (ADR-0038 D2).
+  # Do not re-declare here unless overriding specific values.
+
+# ---------------------------------------------------------------------------
+# whylogs distribution profiler — pushgateway URL for in-cluster Prometheus
+# Same hostname as base; bare-metal Prometheus is in the same cluster.
+# ---------------------------------------------------------------------------
+whylogsProfiler:
+  pushgatewayUrl: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091"
+
+# ---------------------------------------------------------------------------
+# Retrain-trigger webhook proxy
+# Re-pointed at the in-DC Airflow (WS-B bare-metal ArgoCD app).
+# ---------------------------------------------------------------------------
+retrainTrigger:
+  airflow:
+    # In-DC Airflow webserver (WS-B: apps/infra/airflow, bare-metal deploy)
+    baseUrl: "http://airflow-webserver.airflow.svc.cluster.local:8080"
+    dagId: "train_domain_adapter"
+    credentialsSecretName: "airflow-api-credentials"
+
+  # Deduplication: 15 min window per (tenant, domain); unchanged from base.
+  deduplicationWindowSeconds: 900
+
+# ---------------------------------------------------------------------------
+# ExternalSecret — Vault-backed (in-DC Vault, not AWS Secrets Manager)
+# ADR-0049 D4: UK-resident data; Vault KMS in-DC per 06-uk-datacenters.md.
+# The secretStoreRef name must match the ClusterSecretStore deployed by WS-E.
+# ---------------------------------------------------------------------------
+externalSecrets:
+  enabled: true
+  refreshInterval: "1h"
+  secretStoreRef:
+    # In-DC Vault-backed ClusterSecretStore (deployed by WS-E)
+    name: vault-cluster-secret-store
+    kind: ClusterSecretStore
+
+  airflowCredentials:
+    secretName: airflow-api-credentials
+    remoteRef:
+      # Vault KV path: secret/ml-monitoring/airflow-api-credentials
+      key: secret/ml-monitoring/airflow-api-credentials
+
+  alertmanagerRetrainToken:
+    secretName: alertmanager-retrain-token
+    remoteRef:
+      key: secret/ml-monitoring/alertmanager-retrain-token
+
+  # Additional secret: MinIO / Ceph-RGW S3 endpoint + credentials
+  # Injected as env vars into the drift-exporter Deployment.
+  minioS3Credentials:
+    secretName: minio-s3-credentials
+    remoteRef:
+      # Secret keys expected by drift-exporter container:
+      #   S3_ENDPOINT_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+      key: secret/ml-monitoring/minio-s3-credentials
+
+# ---------------------------------------------------------------------------
+# RBAC — no cloud Workload Identity on bare metal.
+# S3 access via ESO-issued Secret (minio-s3-credentials), not a GSA/IRSA.
+# ---------------------------------------------------------------------------
+rbac:
+  create: true
+  serviceAccountName: ml-retrain-trigger
+  # GKE Workload Identity annotation: NOT used on bare metal.
+  workloadIdentityAnnotation: ""
+
+# ---------------------------------------------------------------------------
+# ServiceMonitor — matches in-cluster Prometheus (kube-prometheus-stack)
+# ---------------------------------------------------------------------------
+serviceMonitor:
+  enabled: true
+  prometheusSelector:
+    prometheus: kube-prometheus
+  scrapeInterval: "30s"
+  scrapeTimeout: "10s"
+
+# ---------------------------------------------------------------------------
+# PrometheusRule — unchanged from base (ADR-0038 thresholds)
+# ---------------------------------------------------------------------------
+prometheusRule:
+  enabled: true
+  additionalLabels:
+    prometheus: kube-prometheus
+
+# ---------------------------------------------------------------------------
+# NetworkPolicy — enabled on bare metal (Cilium enforced; ADR-0051).
+# Set to true when WS-A baremetal-cilium-lb is deployed and NetworkPolicy
+# enforcement is active. Start false until Cilium enforce mode confirmed.
+# ---------------------------------------------------------------------------
+networkPolicy:
+  enabled: false   # Flip to true post Cilium enforce gate (WS-A acceptance)
+
+# ---------------------------------------------------------------------------
+# Model namespaces — populated at deploy time per tenant.
+# Namespace-per-tenant matches 06-uk-datacenters.md tenancy model.
+# ---------------------------------------------------------------------------
+modelNamespaces: []
+# Example (uncomment when tenants are onboarded via WS-F golden path):
+# - namespace: ml-tenant-acme-hft
+#   modelName: domain-adapter-hft
+#   tenant: tenant-acme
+#   domain: hft
+#   thresholds: {}

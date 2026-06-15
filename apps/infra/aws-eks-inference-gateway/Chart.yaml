@@ -1,0 +1,33 @@
+apiVersion: v2
+name: aws-eks-inference-gateway
+description: >-
+  Model-/KV-cache-aware serving front for the AWS EKS GPU ML platform — Gateway API
+  Inference Extension (InferencePool / InferenceObjective / Endpoint Picker) on Envoy
+  Gateway, fronted by AWS WAF (ADR-0047). WS-A. Default-OFF; apply-gated.
+version: 1.0.0
+# appVersion tracks the Gateway API Inference Extension v1 GA release.
+# Pin explicitly — no "latest"/"main" (ADR-0047 D1/Risks: CRD version skew).
+appVersion: "v1.0.0"
+type: application
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - inference
+  - gateway-api
+  - inference-extension
+  - inferencepool
+  - inferenceobjective
+  - endpoint-picker
+  - epp
+  - envoy
+  - vllm
+  - waf
+  - ml-platform
+
+annotations:
+  category: Serving
+  platform: Kubernetes
+  adr: "0047"

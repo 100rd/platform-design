@@ -35,10 +35,17 @@ graph LR
     prod__global_clustermesh_connect["prod/_global/clustermesh-connect<br/>(clustermesh-connect)"]
     prod__global_iam["prod/_global/iam<br/>(iam)"]
   end
+  subgraph shared["shared"]
+    shared_eu_west_1_ecr_pull_through_cache["shared/eu-west-1/ecr-pull-through-cache<br/>(ecr-pull-through-cache)"]
+  end
   subgraph staging["staging"]
     staging__global_clustermesh_connect["staging/_global/clustermesh-connect<br/>(clustermesh-connect)"]
     staging__global_global_accelerator["staging/_global/global-accelerator<br/>(global-accelerator)"]
     staging__global_iam["staging/_global/iam<br/>(iam)"]
+    staging_eu_west_1_platform_secret_rotation["staging/eu-west-1/platform/secret-rotation<br/>(secret-rotation)"]
+  end
+  subgraph uk["uk"]
+    uk_primary_platform_baremetal_ml_monitoring["uk/primary/platform/baremetal-ml-monitoring<br/>(unknown)"]
   end
   _org__global_aws_config -->|depends on| _org__global_aws_config__dep__kms(kms)
   _org__global_break_glass_user -->|depends on| _org__global_break_glass_user__dep__cloudtrail(cloudtrail)
@@ -56,8 +63,11 @@ graph LR
   prod__global_clustermesh_connect -->|depends on| prod__global_clustermesh_connect__dep__cilium_euc1_platform(cilium_euc1_platform)
   prod__global_clustermesh_connect -->|depends on| prod__global_clustermesh_connect__dep__cilium_euw1_gpu_inference(cilium_euw1_gpu_inference)
   prod__global_clustermesh_connect -->|depends on| prod__global_clustermesh_connect__dep__cilium_euw1_platform(cilium_euw1_platform)
+  shared_eu_west_1_ecr_pull_through_cache -->|depends on| shared_eu_west_1_ecr_pull_through_cache__dep__kms(kms)
   staging__global_clustermesh_connect -->|depends on| staging__global_clustermesh_connect__dep__cilium_euc1(cilium_euc1)
   staging__global_clustermesh_connect -->|depends on| staging__global_clustermesh_connect__dep__cilium_euw1(cilium_euw1)
   staging__global_global_accelerator -->|depends on| staging__global_global_accelerator__dep__nlb_euc1(nlb_euc1)
   staging__global_global_accelerator -->|depends on| staging__global_global_accelerator__dep__nlb_euw1(nlb_euw1)
+  staging_eu_west_1_platform_secret_rotation -->|depends on| staging_eu_west_1_platform_secret_rotation__dep__kms(kms)
+  staging_eu_west_1_platform_secret_rotation -->|depends on| staging_eu_west_1_platform_secret_rotation__dep__network(network)
 ```

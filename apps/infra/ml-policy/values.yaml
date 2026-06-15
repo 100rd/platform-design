@@ -1,0 +1,55 @@
+# ml-policy — WS-E in-cluster ML/GPU policy enforcement (ADR-0020/0028/0044/0048)
+#
+# Phased rollout (mirrors apps/infra/kyverno ADR-0020 posture): ship in Audit/observe
+# so existing GPU workloads are not blocked, then promote to Enforce after a clean soak.
+# Default-OFF for hard-block rules so nothing is enforced until a human flips it.
+
+# Engine availability toggles — the cluster must already run these engines
+# (apps/infra/kyverno, apps/infra/gatekeeper). When false, that engine's manifests
+# are not rendered, keeping this chart inert if an engine is absent.
+kyverno:
+  enabled: true
+gatekeeper:
+  enabled: true
+
+# Enforcement phase for the platform-taxonomy ClusterPolicy.
+#   Audit   — record violations in PolicyReports / Grafana, do NOT block (DEFAULT).
+#   Enforce — block admission of non-compliant ML/GPU workloads.
+# Promote to Enforce only after a clean Audit window (ADR-0020 soak pattern).
+enforcement:
+  platformLabels: Audit
+  # Forbidding privileged GPU pods is security-critical; still ships Audit-first so a
+  # legitimate privileged DaemonSet (e.g. the NVIDIA driver) can be allow-listed before
+  # promotion. Flip to Enforce after the allow-list is confirmed.
+  noPrivilegedGpu: Audit
+
+# Namespaces the ML/GPU workloads live in (label requirement applies here). System and
+# infra namespaces are excluded — they do not carry workload taxonomy labels.
+mlNamespaces:
+  - ml-platform
+  - ml-pipeline
+  - ml-monitoring
+  - gpu-serving
+
+excludedNamespaces:
+  - kube-system
+  - kube-public
+  - kube-node-lease
+  - kyverno
+  - cert-manager
+  - gatekeeper-system
+  - external-secrets
+  - argocd
+  - monitoring
+  # GPU operator / device-plugin namespaces run vendor DaemonSets that legitimately
+  # need privileged/hostPath access and are taxonomy-labelled by their own charts.
+  - gpu-operator
+  - nvidia-device-plugin
+
+# ADR-0028 taxonomy stamped on the policy objects themselves.
+platformLabels:
+  system: security
+  component: ml-policy
+  owner: team-sec
+  env: production
+  managedBy: argocd

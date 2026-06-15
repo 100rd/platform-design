@@ -1,0 +1,183 @@
+---
+# ArgoCD Application — Apache Airflow on EKS (ADR-0048 D1)
+# Delivers the Airflow Helm chart to the AWS EKS GPU ML cluster.
+# Inherits the ADR-0037 shape; AWS deltas: cluster destination + SA annotation.
+# ADR-0028: namespace carries platform.system=ml-pipeline labels.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: airflow-aws
+  namespace: argocd
+  labels:
+    platform.system: ml-pipeline
+    platform.component: airflow
+    platform.managed-by: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "15"
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: ml-pipeline-alerts
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: ml-pipeline-alerts
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/100rd/platform-design.git
+    targetRevision: HEAD
+    path: apps/infra/airflow-aws
+
+    helm:
+      values: |
+        airflow:
+          serviceAccount:
+            annotations:
+              # IAM role ARN from aws-ml-artifact-store unit output.
+              # Populated via ArgoCD Application parameter override at deploy time.
+              eks.amazonaws.com/role-arn: ""
+
+  destination:
+    # AWS EKS GPU ML cluster registered in ArgoCD as "eks-ml-primary" (ADR-0044).
+    name: eks-ml-primary
+    namespace: ml-pipeline
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+    managedNamespaceMetadata:
+      labels:
+        platform.system: ml-pipeline
+        platform.component: airflow
+        platform.env: staging
+        platform.owner: team-ml
+        platform.managed-by: argocd
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+---
+# ExternalSecret — Airflow DB connection (RDS PostgreSQL via AWS Secrets Manager)
+# ESO v1 / ClusterSecretStore aws-secrets-manager (ADR-0008 / ADR-0048 D3).
+# Shape: postgresql+psycopg2://airflow:<password>@<rds-host>:5432/airflow
+# RDS provisioned out-of-band by DBA team (ADR-0048 D3); no credentials in code.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: airflow-metadata-connection
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: airflow
+    app.kubernetes.io/component: metadata-db
+    app.kubernetes.io/managed-by: helm
+    platform.system: ml-pipeline
+    platform.component: airflow
+spec:
+  refreshInterval: 1h
+
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+
+  target:
+    name: airflow-metadata-connection
+    creationPolicy: Owner
+
+  data:
+    - secretKey: connection
+      remoteRef:
+        key: /ml-pipeline/airflow-db-connection
+        property: connection
+---
+# ExternalSecret — Airflow Fernet key
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: airflow-fernet-key
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: airflow
+    app.kubernetes.io/component: fernet-key
+    app.kubernetes.io/managed-by: helm
+    platform.system: ml-pipeline
+    platform.component: airflow
+spec:
+  refreshInterval: 24h
+
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+
+  target:
+    name: airflow-fernet-key
+    creationPolicy: Owner
+
+  data:
+    - secretKey: fernet-key
+      remoteRef:
+        key: /ml-pipeline/airflow-fernet-key
+        property: fernet-key
+---
+# ExternalSecret — git-sync SSH key
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: airflow-git-sync-ssh
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: airflow
+    app.kubernetes.io/component: git-sync
+    app.kubernetes.io/managed-by: helm
+    platform.system: ml-pipeline
+    platform.component: airflow
+spec:
+  refreshInterval: 24h
+
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+
+  target:
+    name: airflow-git-sync-ssh
+    creationPolicy: Owner
+
+  data:
+    - secretKey: gitSshKey
+      remoteRef:
+        key: /ml-pipeline/airflow-git-sync-ssh
+        property: gitSshKey
+---
+# ExternalSecret — MLflow tracking URI (so Airflow task pods can call mlflow.log_metric)
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: mlflow-tracking-uri
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: airflow
+    app.kubernetes.io/component: mlflow-ref
+    app.kubernetes.io/managed-by: helm
+    platform.system: ml-pipeline
+    platform.component: airflow
+spec:
+  refreshInterval: 1h
+
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+
+  target:
+    name: mlflow-tracking-uri
+    creationPolicy: Owner
+
+  data:
+    - secretKey: uri
+      remoteRef:
+        key: /ml-pipeline/mlflow-tracking-uri
+        property: uri
+---
+# NetworkPolicy stub — Airflow on EKS (ADR-0048 D1)
+# Full CiliumNetworkPolicy tracked in network-policies/ml-pipeline/
+# per network-policies/gpu-inference/00-default-deny.yaml pattern.

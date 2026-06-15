@@ -1,0 +1,18 @@
+{{- if .Values.enabled }}
+{{- range .Values.inferenceObjectives }}
+---
+# InferenceObjective (v1 GA; was InferenceModel) — per-workload routing/criticality (ADR-0047 D1).
+apiVersion: inference.networking.k8s.io/v1
+kind: InferenceObjective
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "aws-eks-inference-gateway.labels" $ | nindent 4 }}
+spec:
+  criticality: {{ .criticality | default "Standard" }}
+  poolRef:
+    name: {{ $.Values.inferencePool.name }}
+  targetModels:
+    - name: {{ .targetModel }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,596 @@
+---
+# Grafana self-serve: bare-metal supplemental dashboard ConfigMap
+#
+# Gated by baremetal.enabled: true. When disabled this template produces no output,
+# so existing cloud-only teams are unaffected.
+#
+# Adds bare-metal-specific panels the cloud plan did not need:
+#   1. Talos node health    — talos-log-shipper (already specified in 06-uk-datacenters.md)
+#   2. IB / RoCE fabric     — NCCL / NVLink RDMA counters (ADR-0053)
+#   3. Cilium BGP sessions  — session-state per peer (per cilium-bgp-issues.md)
+#   4. Ceph cluster health  — Rook-Ceph PG + OSD + RGW S3 throughput (ADR-0052)
+#   5. etcd / control-plane — self-operated control plane health (ADR-0049)
+#
+# ADR-0039: Self-Serve Observability
+# ADR-0049: Talos foundation (multi-DC, self-operated control plane)
+# ADR-0051: Cilium BGP / LB-IPAM
+# ADR-0052: Rook-Ceph storage
+# ADR-0053: RoCE / InfiniBand GPU fabric
+# ADR-0028: platform.system = observability (mandatory on every resource)
+{{- include "grafana-self-serve.validate" . }}
+{{- if .Values.baremetal.enabled }}
+{{- $alertPrefix := include "grafana-self-serve.alertPrefix" . }}
+{{- $folderUid   := include "grafana-self-serve.folderUid"   . }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.team.slug }}-grafana-baremetal-dashboard
+  namespace: {{ .Values.grafanaNamespace }}
+  labels:
+    {{- include "grafana-self-serve.dashboardLabels" . | nindent 4 }}
+  annotations:
+    grafana_folder: {{ printf "team-%s" .Values.team.slug | quote }}
+data:
+  {{ printf "%s-baremetal.json" .Values.team.slug }}: |
+    {
+      "annotations": {"list": []},
+      "description": "Bare-metal supplemental panels for {{ .Values.team.name }}. Talos node / IB fabric / Cilium BGP / Ceph / etcd. ADR-0039 + 0049-0053.",
+      "editable": true,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+          "id": 300,
+          "title": "Talos Node Health (ADR-0049 / talos-log-shipper)",
+          "type": "row"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [
+                {"options": {"0": {"color": "red",   "text": "Down"}}, "type": "value"},
+                {"options": {"1": {"color": "green", "text": "Up"}},   "type": "value"}
+              ],
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "red",   "value": null},
+                {"color": "green", "value": 1}
+              ]},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 12, "x": 0, "y": 1},
+          "id": 301,
+          "options": {
+            "colorMode": "background", "graphMode": "none",
+            "justifyMode": "auto", "orientation": "auto",
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "expr": "count(up{job=\"talos-nodes\", node=~\"{{ .Values.baremetal.nodeSelectorRegex }}\"} == 1)",
+              "legendFormat": "Nodes Up",
+              "refId": "A"
+            }
+          ],
+          "title": "Talos Nodes Up",
+          "type": "stat"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 1},
+          "id": 302,
+          "options": {
+            "legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "count by (version) (talos_version{node=~\"{{ .Values.baremetal.nodeSelectorRegex }}\"})",
+              "legendFormat": "Talos {{ "{{version}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "Talos Version Distribution",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+          "id": 303,
+          "options": {
+            "legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "increase(talos_apid_request_total{code!=\"OK\", node=~\"{{ .Values.baremetal.nodeSelectorRegex }}\"}[5m])",
+              "legendFormat": "machined errors {{ "{{node}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "Talos machined API Errors (5m rate)",
+          "type": "timeseries"
+        },
+
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 13},
+          "id": 310,
+          "title": "IB / RoCE GPU Fabric (ADR-0053 / NCCL / NVLink)",
+          "type": "row"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "Bps"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+          "id": 311,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "sum by (device, node) (rate(node_infiniband_port_data_transmitted_bytes_total{node=~\"{{ .Values.baremetal.nodeSelectorRegex }}\"}[5m]))",
+              "legendFormat": "IB TX {{ "{{node}}/{{device}}" }}",
+              "refId": "A"
+            },
+            {
+              "expr": "sum by (device, node) (rate(node_infiniband_port_data_received_bytes_total{node=~\"{{ .Values.baremetal.nodeSelectorRegex }}\"}[5m]))",
+              "legendFormat": "IB RX {{ "{{node}}/{{device}}" }}",
+              "refId": "B"
+            }
+          ],
+          "title": "InfiniBand Port Throughput",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+          "id": 312,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "sum by (gpu) (DCGM_FI_DEV_NVLINK_BANDWIDTH_TOTAL{namespace=~\"{{ .Values.team.namespace }}\"})",
+              "legendFormat": "NVLink BW {{ "{{gpu}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "NVLink Bandwidth per GPU",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "green",  "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "red",    "value": 10}
+              ]},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 12, "x": 0, "y": 22},
+          "id": 313,
+          "options": {
+            "colorMode": "background", "graphMode": "none",
+            "justifyMode": "auto", "orientation": "auto",
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(node_infiniband_port_error_receive_constraint_errors_total{node=~\"{{ .Values.baremetal.nodeSelectorRegex }}\"}[5m]))",
+              "legendFormat": "IB constraint errors/s",
+              "refId": "A"
+            }
+          ],
+          "title": "IB Constraint Errors (5m rate)",
+          "type": "stat"
+        },
+
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 26},
+          "id": 320,
+          "title": "Cilium BGP Sessions (ADR-0051 / cilium-bgp-issues.md)",
+          "type": "row"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}]},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 6, "w": 24, "x": 0, "y": 27},
+          "id": 321,
+          "options": {"cellHeight": "sm", "showHeader": true},
+          "targets": [
+            {
+              "expr": "cilium_bgp_peer_state",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Cilium BGP Peer State Table",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {"Time": true, "Value": true},
+                "renameByName": {
+                  "local_asn": "Local ASN",
+                  "peer_address": "Peer",
+                  "peer_asn": "Peer ASN",
+                  "session_state": "Session State"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 33},
+          "id": 322,
+          "options": {
+            "legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "cilium_bgp_announced_prefixes{peer_address=~\"{{ .Values.baremetal.bgpPeerFilter }}\"}",
+              "legendFormat": "prefixes {{ "{{peer_address}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "BGP Announced Prefixes per Peer",
+          "type": "timeseries"
+        },
+
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 41},
+          "id": 330,
+          "title": "Ceph Cluster Health (ADR-0052 / Rook-Ceph)",
+          "type": "row"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "mappings": [
+                {"options": {"0": {"color": "green",  "text": "HEALTH_OK"}},   "type": "value"},
+                {"options": {"1": {"color": "yellow", "text": "HEALTH_WARN"}}, "type": "value"},
+                {"options": {"2": {"color": "red",    "text": "HEALTH_ERR"}},  "type": "value"}
+              ],
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "green",  "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "red",    "value": 2}
+              ]},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 42},
+          "id": 331,
+          "options": {
+            "colorMode": "background", "graphMode": "none",
+            "justifyMode": "auto", "orientation": "auto",
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "expr": "ceph_health_status",
+              "legendFormat": "Ceph Health",
+              "refId": "A"
+            }
+          ],
+          "title": "Ceph Health Status",
+          "type": "stat"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 42},
+          "id": 332,
+          "options": {
+            "legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "ceph_osd_up",
+              "legendFormat": "OSD {{ "{{ceph_daemon}}" }} up",
+              "refId": "A"
+            },
+            {
+              "expr": "ceph_osd_in",
+              "legendFormat": "OSD {{ "{{ceph_daemon}}" }} in",
+              "refId": "B"
+            }
+          ],
+          "title": "Ceph OSD up / in",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 42},
+          "id": 333,
+          "options": {
+            "legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "ceph_pg_active",
+              "legendFormat": "PGs active",
+              "refId": "A"
+            },
+            {
+              "expr": "ceph_pg_degraded",
+              "legendFormat": "PGs degraded",
+              "refId": "B"
+            },
+            {
+              "expr": "ceph_pg_undersized",
+              "legendFormat": "PGs undersized",
+              "refId": "C"
+            }
+          ],
+          "title": "Ceph Placement Groups",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "Bps"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 50},
+          "id": 334,
+          "options": {
+            "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(ceph_osd_op_r_out_bytes[5m]))",
+              "legendFormat": "RGW Read",
+              "refId": "A"
+            },
+            {
+              "expr": "sum(rate(ceph_osd_op_w_in_bytes[5m]))",
+              "legendFormat": "RGW Write",
+              "refId": "B"
+            }
+          ],
+          "title": "Ceph RGW S3 Throughput",
+          "type": "timeseries"
+        },
+
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 58},
+          "id": 340,
+          "title": "etcd + Control Plane (ADR-0049 / self-operated)",
+          "type": "row"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [
+                {"color": "red",    "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "green",  "value": 2}
+              ]},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 59},
+          "id": 341,
+          "options": {
+            "colorMode": "background", "graphMode": "none",
+            "justifyMode": "auto", "orientation": "auto",
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "expr": "count(etcd_server_has_leader == 1)",
+              "legendFormat": "Leaders with quorum",
+              "refId": "A"
+            }
+          ],
+          "title": "etcd Quorum (leaders)",
+          "type": "stat"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "s"
+            }
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 59},
+          "id": 342,
+          "options": {
+            "legend": {"calcs": ["mean", "p95"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.99, sum by (le, instance) (rate(etcd_disk_wal_fsync_duration_seconds_bucket[5m])))",
+              "legendFormat": "WAL fsync P99 {{ "{{instance}}" }}",
+              "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum by (le, instance) (rate(etcd_disk_backend_commit_duration_seconds_bucket[5m])))",
+              "legendFormat": "DB commit P99 {{ "{{instance}}" }}",
+              "refId": "B"
+            }
+          ],
+          "title": "etcd Disk Latency (P99)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 59},
+          "id": 343,
+          "options": {
+            "legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "sum by (instance) (rate(etcd_server_proposals_failed_total[5m]))",
+              "legendFormat": "proposals failed {{ "{{instance}}" }}",
+              "refId": "A"
+            },
+            {
+              "expr": "sum by (instance) (rate(etcd_server_leader_changes_seen_total[5m]))",
+              "legendFormat": "leader changes {{ "{{instance}}" }}",
+              "refId": "B"
+            }
+          ],
+          "title": "etcd Proposals Failed + Leader Changes",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "${DS_PROMETHEUS}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never"},
+              "unit": "s"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 67},
+          "id": 344,
+          "options": {
+            "legend": {"calcs": ["mean", "p95", "p99"], "displayMode": "table", "placement": "bottom"},
+            "tooltip": {"mode": "multi", "sort": "desc"}
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.99, sum by (le, verb) (rate(apiserver_request_duration_seconds_bucket{verb!~\"WATCH|LIST\"}[5m])))",
+              "legendFormat": "apiserver P99 {{ "{{verb}}" }}",
+              "refId": "A"
+            }
+          ],
+          "title": "Kubernetes API Server Latency (P99)",
+          "type": "timeseries"
+        }
+
+      ],
+      "refresh": "{{ .Values.defaultRefresh }}",
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["self-serve", "baremetal", "{{ .Values.team.slug }}", "talos", "ceph", "cilium-bgp", "etcd"],
+      "templating": {
+        "list": [
+          {
+            "current": {"selected": false, "text": "{{ .Values.datasource.name }}", "value": "{{ .Values.datasource.name }}"},
+            "hide": 0,
+            "includeAll": false,
+            "label": "Datasource",
+            "multi": false,
+            "name": "DS_PROMETHEUS",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "skipUrlSync": false,
+            "type": "datasource"
+          }
+        ]
+      },
+      "time": {
+        "from": "{{ .Values.defaultTimeRange.from }}",
+        "to": "{{ .Values.defaultTimeRange.to }}"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "{{ .Values.team.name }} — Bare-Metal Infrastructure",
+      "uid": "{{ printf "bm-%s" .Values.team.slug | trunc 40 }}",
+      "version": 1,
+      "weekStart": ""
+    }
+{{- end }}

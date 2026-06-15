@@ -1,0 +1,51 @@
+{{- if .Values.policies.requireTenantLabel.enabled }}
+---
+# Kyverno ClusterPolicy — require tenant={id} label on workload pods.
+#
+# The UK-DC Gatekeeper tenant constraint ("reject pods without tenant={id}",
+# 06-uk-datacenters.md), ported to Kyverno to run on the existing apps/infra/kyverno
+# engine. WS-E (bare metal). SOC2 CC6.1 — tenant isolation. ADR-0028 / ADR-0040 /
+# ADR-0049 / ADR-0050.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: bm-require-tenant-label
+  labels:
+    {{- include "baremetal-org-policy.labels" . | nindent 4 }}
+  annotations:
+    {{- include "baremetal-org-policy.annotations" . | nindent 4 }}
+    policies.kyverno.io/title: Require tenant label (bare-metal)
+    policies.kyverno.io/category: Multi-Tenancy
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+spec:
+  # Observe-first; promote to Enforce after a clean Audit soak window.
+  validationFailureAction: {{ .Values.enforcementMode }}
+  # Fail-open in Audit; tighten to Fail when promoting to Enforce.
+  failurePolicy: {{ if eq .Values.enforcementMode "Enforce" }}Fail{{ else }}Ignore{{ end }}
+  background: true
+  rules:
+    - name: require-tenant-on-pods
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                {{- range .Values.excludedNamespaces }}
+                - {{ . }}
+                {{- end }}
+      validate:
+        message: >-
+          Pod is missing the required tenant={id} label (bare-metal tenant
+          isolation; UK-DC Gatekeeper constraint ported to Kyverno; SOC2 CC6.1).
+        pattern:
+          metadata:
+            labels:
+              tenant: "?*"
+{{- end }}

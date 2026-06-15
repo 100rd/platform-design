@@ -1,0 +1,430 @@
+---
+# Grafana self-serve: bare-metal alert groups (PrometheusRule)
+#
+# Gated by baremetal.enabled: true. When disabled this template produces no output.
+#
+# Alert groups:
+#   baremetal-talos     — Talos node health (self-operated; ADR-0049)
+#   baremetal-fabric    — IB / RoCE fabric + NVLink errors (ADR-0053)
+#   baremetal-bgp       — Cilium BGP session flap (ADR-0051, cilium-bgp-issues.md)
+#   baremetal-ceph      — Rook-Ceph health + OSD + PG (ADR-0052)
+#   baremetal-etcd      — etcd quorum + disk latency + leader changes (ADR-0049)
+#
+# Alert names carry the team slug prefix in UPPER_CASE to prevent alertname
+# collisions when aggregating across teams in Alertmanager (same rule as the
+# cloud prometheusrule.yaml).
+#
+# ADR-0039: Self-Serve Observability
+# ADR-0028: platform.system = observability (mandatory on every resource)
+{{- include "grafana-self-serve.validate" . }}
+{{- if .Values.baremetal.enabled }}
+{{- $alertPrefix := include "grafana-self-serve.alertPrefix" . }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Values.team.slug }}-baremetal-alerts
+  namespace: {{ .Values.team.namespace }}
+  labels:
+    {{- include "grafana-self-serve.labels" (dict "root" . "component" "baremetal-alert-rules") | nindent 4 }}
+    prometheus: kube-prometheus
+spec:
+  groups:
+
+    # ---------------------------------------------------------------------------
+    # Talos node health — ADR-0049, self-operated control plane
+    # ---------------------------------------------------------------------------
+    - name: {{ .Values.team.slug }}-baremetal-talos
+      interval: 30s
+      rules:
+        - alert: {{ $alertPrefix }}_TalosNodeDown
+          expr: |
+            up{job="talos-nodes", node=~"{{ .Values.baremetal.nodeSelectorRegex }}"} == 0
+          for: {{ .Values.alerts.availabilityFor }}
+          labels:
+            severity: critical
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            substrate: baremetal
+            adr: "0049"
+          annotations:
+            summary: >-
+              Talos node {{ "{{ $labels.node }}" }} is down ({{ .Values.team.name }})
+            description: >-
+              The talos-nodes scrape target for node {{ "{{ $labels.node }}" }} has been
+              unreachable for {{ .Values.alerts.availabilityFor }}. Check talosctl health
+              and machine API reachability. This is a self-operated control plane — no
+              managed fallback exists. See ADR-0049 and the uk-dc-failover.md runbook.
+            runbook_url: "https://runbooks.internal.example.com/baremetal/talos-node-down"
+
+        - alert: {{ $alertPrefix }}_TalosVersionSkew
+          expr: |
+            count(
+              count by (version) (
+                talos_version{node=~"{{ .Values.baremetal.nodeSelectorRegex }}"}
+              )
+            ) > 1
+          for: "30m"
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            substrate: baremetal
+            adr: "0049"
+          annotations:
+            summary: >-
+              Talos version skew detected across nodes ({{ .Values.team.name }})
+            description: >-
+              More than one Talos version is present across nodes matching
+              {{ .Values.baremetal.nodeSelectorRegex }}. A/B partition upgrades
+              should complete atomically — a lingering skew suggests a stuck upgrade
+              or a failed rollback. Investigate with talosctl upgrade-status.
+            runbook_url: "https://runbooks.internal.example.com/baremetal/talos-version-skew"
+
+        - alert: {{ $alertPrefix }}_TalosAPIdErrors
+          expr: |
+            sum by (node) (
+              increase(talos_apid_request_total{
+                code!="OK",
+                node=~"{{ .Values.baremetal.nodeSelectorRegex }}"
+              }[5m])
+            ) > {{ .Values.baremetal.alerts.talosMachinedErrorThreshold }}
+          for: "5m"
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            substrate: baremetal
+            adr: "0049"
+          annotations:
+            summary: >-
+              Talos machine API errors on node {{ "{{ $labels.node }}" }}
+            description: >-
+              The Talos machine API (machined) on {{ "{{ $labels.node }}" }} returned
+              {{ "{{ $value }}" }} non-OK responses in the last 5 minutes
+              (threshold: {{ .Values.baremetal.alerts.talosMachinedErrorThreshold }}).
+              This is the only configuration path on an immutable OS — errors here
+              block all config changes and upgrades.
+            runbook_url: "https://runbooks.internal.example.com/baremetal/talos-apid-errors"
+
+    # ---------------------------------------------------------------------------
+    # IB / RoCE GPU fabric — ADR-0053, nccl-troubleshooting.md
+    # ---------------------------------------------------------------------------
+    - name: {{ .Values.team.slug }}-baremetal-fabric
+      interval: 30s
+      rules:
+        - alert: {{ $alertPrefix }}_IBConstraintErrors
+          expr: |
+            sum(
+              rate(node_infiniband_port_error_receive_constraint_errors_total{
+                node=~"{{ .Values.baremetal.nodeSelectorRegex }}"
+              }[5m])
+            ) > {{ .Values.baremetal.alerts.ibConstraintErrorRate }}
+          for: "5m"
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            substrate: baremetal
+            adr: "0053"
+          annotations:
+            summary: >-
+              InfiniBand constraint errors elevated ({{ .Values.team.name }})
+            description: >-
+              IB port constraint-error rate is {{ "{{ $value }}" }}/s
+              (threshold: {{ .Values.baremetal.alerts.ibConstraintErrorRate }}/s).
+              This often indicates MTU mismatch or credit starvation — jumbo frames
+              (MTU 9000 per nic-tuning Ansible role) must be confirmed on all fabric
+              ports. NCCL collectives degrade silently to TCP under persistent IB
+              errors. See nccl-troubleshooting.md and ADR-0053.
+            runbook_url: "https://runbooks.internal.example.com/baremetal/ib-constraint-errors"
+
+        - alert: {{ $alertPrefix }}_NVLinkBandwidthLow
+          expr: |
+            sum by (gpu) (
+              DCGM_FI_DEV_NVLINK_BANDWIDTH_TOTAL{
+                namespace="{{ .Values.team.namespace }}"
+              }
+            ) < {{ .Values.baremetal.alerts.nvlinkBandwidthFloorGbps }}
+          for: "10m"
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            substrate: baremetal
+            adr: "0053"
+          annotations:
+            summary: >-
+              NVLink bandwidth below floor on {{ "{{ $labels.gpu }}" }} ({{ .Values.team.name }})
+            description: >-
+              NVLink aggregate bandwidth on GPU {{ "{{ $labels.gpu }}" }} is
+              {{ "{{ $value }}" }} GB/s, below the
+              {{ .Values.baremetal.alerts.nvlinkBandwidthFloorGbps }} GB/s floor.
+              NCCL all-reduce may be degraded. Run the acceptance NCCL all-reduce
+              bandwidth test (nccl-troubleshooting.md) to confirm.
+            runbook_url: "https://runbooks.internal.example.com/baremetal/nvlink-bandwidth-low"
+
+    # ---------------------------------------------------------------------------
+    # Cilium BGP sessions — ADR-0051, cilium-bgp-issues.md
+    # ---------------------------------------------------------------------------
+    - name: {{ .Values.team.slug }}-baremetal-bgp
+      interval: 30s
+      rules:
+        - alert: {{ $alertPrefix }}_CiliumBGPSessionDown
+          expr: |
+            cilium_bgp_peer_state != 3
+          for: {{ .Values.alerts.availabilityFor }}
+          labels:
+            severity: critical
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            substrate: baremetal
+            adr: "0051"
+          annotations:
+            summary: >-
+              Cilium BGP session to {{ "{{ $labels.peer_address }}" }} not established
+            description: >-
+              BGP peer {{ "{{ $labels.peer_address }}" }} (ASN {{ "{{ $labels.peer_asn }}" }})
+              is not in Established state (cilium_bgp_peer_state != 3).
+              Service VIPs advertised via LB-IPAM may be unreachable outside the cluster.
+              Check hold-timer (180s under CPU pressure), max-prefix limits on the ToR,
+              and the BGP policy — see cilium-bgp-issues.md.
+              Fallback: MetalLB L2 (ADR-0051).
+            runbook_url: "https://runbooks.internal.example.com/baremetal/cilium-bgp-session-down"
+
+        - alert: {{ $alertPrefix }}_CiliumBGPPrefixCountHigh
+          expr: |
+            cilium_bgp_announced_prefixes{
+              peer_address=~"{{ .Values.baremetal.bgpPeerFilter }}"
+            } > {{ .Values.baremetal.alerts.bgpMaxPrefixes }}
+          for: "5m"
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            substrate: baremetal
+            adr: "0051"
+          annotations:
+            summary: >-
+              BGP prefix count approaching ToR max-prefix limit ({{ .Values.team.name }})
+            description: >-
+              Cilium is announcing {{ "{{ $value }}" }} prefixes to peer
+              {{ "{{ $labels.peer_address }}" }}, approaching the configured
+              max-prefix limit of {{ .Values.baremetal.alerts.bgpMaxPrefixes }}.
+              A prefix-limit teardown will drop the BGP session and all VIPs.
+              Review LB-IPAM pool sizes and consider prefix aggregation.
+            runbook_url: "https://runbooks.internal.example.com/baremetal/bgp-prefix-count-high"
+
+    # ---------------------------------------------------------------------------
+    # Ceph cluster health — ADR-0052, Rook-Ceph
+    # ---------------------------------------------------------------------------
+    - name: {{ .Values.team.slug }}-baremetal-ceph
+      interval: 60s
+      rules:
+        - alert: {{ $alertPrefix }}_CephHealthError
+          expr: |
+            ceph_health_status == 2
+          for: "5m"
+          labels:
+            severity: critical
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            substrate: baremetal
+            adr: "0052"
+          annotations:
+            summary: >-
+              Ceph cluster is in HEALTH_ERR state ({{ .Values.team.name }})
+            description: >-
+              Ceph reports HEALTH_ERR (ceph_health_status == 2). This is the
+              storage substrate for Rook-Ceph block/FS/RGW — WS-B artifact store
+              and MLflow Postgres PVCs will be affected. Check OSD status and PG
+              state. See ADR-0052 and the Rook-Ceph DR drill runbook.
+            runbook_url: "https://runbooks.internal.example.com/baremetal/ceph-health-error"
+
+        - alert: {{ $alertPrefix }}_CephHealthWarn
+          expr: |
+            ceph_health_status == 1
+          for: "30m"
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            substrate: baremetal
+            adr: "0052"
+          annotations:
+            summary: >-
+              Ceph cluster is in HEALTH_WARN state for 30m ({{ .Values.team.name }})
+            description: >-
+              Ceph has been in HEALTH_WARN for 30+ minutes. A sustained WARN often
+              precedes OSD loss or PG undersizing. Investigate before the next
+              daily maintenance window.
+            runbook_url: "https://runbooks.internal.example.com/baremetal/ceph-health-warn"
+
+        - alert: {{ $alertPrefix }}_CephOSDDown
+          expr: |
+            ceph_osd_up == 0
+          for: "5m"
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            substrate: baremetal
+            adr: "0052"
+          annotations:
+            summary: >-
+              Ceph OSD {{ "{{ $labels.ceph_daemon }}" }} is down ({{ .Values.team.name }})
+            description: >-
+              OSD {{ "{{ $labels.ceph_daemon }}" }} reports ceph_osd_up == 0.
+              Replication falls to N-1 replicas. If a second OSD goes down before
+              recovery, data availability may be compromised.
+            runbook_url: "https://runbooks.internal.example.com/baremetal/ceph-osd-down"
+
+        - alert: {{ $alertPrefix }}_CephPGsDegraded
+          expr: |
+            ceph_pg_degraded > {{ .Values.baremetal.alerts.cephPGDegradedThreshold }}
+          for: "15m"
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            substrate: baremetal
+            adr: "0052"
+          annotations:
+            summary: >-
+              Ceph degraded PG count is high ({{ .Values.team.name }})
+            description: >-
+              {{ "{{ $value }}" }} placement groups are degraded
+              (threshold: {{ .Values.baremetal.alerts.cephPGDegradedThreshold }}).
+              Data replicas are below the target replication factor. Monitor OSD
+              recovery progress.
+            runbook_url: "https://runbooks.internal.example.com/baremetal/ceph-pgs-degraded"
+
+    # ---------------------------------------------------------------------------
+    # etcd + Kubernetes control plane — ADR-0049
+    # ---------------------------------------------------------------------------
+    - name: {{ .Values.team.slug }}-baremetal-etcd
+      interval: 30s
+      rules:
+        - alert: {{ $alertPrefix }}_EtcdNoLeader
+          expr: |
+            etcd_server_has_leader == 0
+          for: "1m"
+          labels:
+            severity: critical
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            substrate: baremetal
+            adr: "0049"
+          annotations:
+            summary: >-
+              etcd member {{ "{{ $labels.instance }}" }} has no leader
+            description: >-
+              etcd instance {{ "{{ $labels.instance }}" }} reports no leader for 1m.
+              The Kubernetes API will stop accepting write requests. This is a
+              self-operated control plane — no managed recovery path exists.
+              IMMEDIATE ACTION: verify quorum, check etcd snapshot, follow the
+              ADR-0049 control-plane runbook. An etcd snapshot must be taken
+              before any recovery action.
+            runbook_url: "https://runbooks.internal.example.com/baremetal/etcd-no-leader"
+
+        - alert: {{ $alertPrefix }}_EtcdHighWALFsyncLatency
+          expr: |
+            histogram_quantile(0.99, sum by (le, instance) (
+              rate(etcd_disk_wal_fsync_duration_seconds_bucket[5m])
+            )) > {{ .Values.baremetal.alerts.etcdWALFsyncLatencySeconds }}
+          for: "10m"
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            substrate: baremetal
+            adr: "0049"
+          annotations:
+            summary: >-
+              etcd WAL fsync P99 latency is high on {{ "{{ $labels.instance }}" }}
+            description: >-
+              etcd WAL fsync P99 latency on {{ "{{ $labels.instance }}" }} is
+              {{ "{{ $value }}" }}s
+              (threshold: {{ .Values.baremetal.alerts.etcdWALFsyncLatencySeconds }}s).
+              High fsync latency degrades Raft throughput and can trigger leader
+              elections. The etcd disk should be isolated from Ceph/Rook OSD disks
+              per ADR-0049.
+            runbook_url: "https://runbooks.internal.example.com/baremetal/etcd-wal-fsync-latency"
+
+        - alert: {{ $alertPrefix }}_EtcdLeaderChanges
+          expr: |
+            sum by (instance) (
+              increase(etcd_server_leader_changes_seen_total[1h])
+            ) > {{ .Values.baremetal.alerts.etcdLeaderChangesPerHour }}
+          for: "5m"
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            substrate: baremetal
+            adr: "0049"
+          annotations:
+            summary: >-
+              etcd is experiencing frequent leader changes ({{ .Values.team.name }})
+            description: >-
+              etcd on {{ "{{ $labels.instance }}" }} has seen {{ "{{ $value }}" }}
+              leader changes in the past hour
+              (threshold: {{ .Values.baremetal.alerts.etcdLeaderChangesPerHour }}).
+              Frequent leader changes indicate network instability, disk latency, or
+              CPU starvation of the etcd process. Avoid control-plane changes until
+              the cluster stabilizes.
+            runbook_url: "https://runbooks.internal.example.com/baremetal/etcd-leader-changes"
+
+        - alert: {{ $alertPrefix }}_KubeAPIServerLatencyHigh
+          expr: |
+            histogram_quantile(0.99, sum by (le, verb) (
+              rate(apiserver_request_duration_seconds_bucket{verb!~"WATCH|LIST"}[5m])
+            )) > {{ .Values.baremetal.alerts.kubeAPILatencySeconds }}
+          for: "10m"
+          labels:
+            severity: warning
+            team: {{ .Values.team.slug | quote }}
+            namespace: {{ .Values.team.namespace | quote }}
+            platform_system: "observability"
+            platform_owner: {{ .Values.team.slug | quote }}
+            substrate: baremetal
+            adr: "0049"
+          annotations:
+            summary: >-
+              Kubernetes API server P99 latency is high for {{ "{{ $labels.verb }}" }}
+            description: >-
+              API server P99 latency for {{ "{{ $labels.verb }}" }} is {{ "{{ $value }}" }}s
+              (threshold: {{ .Values.baremetal.alerts.kubeAPILatencySeconds }}s).
+              On a self-operated control plane this may indicate etcd load, certificate
+              issues, or KubePrism forwarding delays.
+            runbook_url: "https://runbooks.internal.example.com/baremetal/kube-api-latency"
+
+{{- end }}

@@ -1,0 +1,61 @@
+---
+# Kargo Stage -- ml-pipeline-baremetal staging (WS-B, ADR-0037 reused)
+# Two-step rollout: staging (auto) -> prod (gated).
+# Mirrors kargo/stages/chains/staging.yaml pattern.
+# ADR-0028: platform.system=ml-pipeline, platform.managed-by=kargo.
+# ADR-0037: two-step promotion; signed artifacts only (cosign/syft gate in GH Actions).
+# ADR-0049: UK-isolated; model artifacts stay in UK DC.
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: staging
+  namespace: ml-pipeline-baremetal
+  labels:
+    platform.system: ml-pipeline
+    platform.component: model-registry
+    platform.managed-by: kargo
+spec:
+  requestedFreight:
+    - origin:
+        kind: Warehouse
+        name: ml-pipeline-baremetal
+      sources:
+        direct: true  # staging promotes directly from Warehouse (auto-advance)
+
+  promotionTemplate:
+    spec:
+      steps:
+        - uses: git-clone
+          config:
+            repoURL: git@github.com:100rd/platform-design.git
+            checkout:
+              - branch: main
+                path: ./src
+
+        # Update the MLflow serving ArgoCD app values with the new model image tag.
+        - uses: yaml-update
+          as: update-mlflow-baremetal-tag
+          config:
+            path: ./src/apps/infra/mlflow-baremetal/values.yaml
+            updates:
+              - key: mlflow.image.tag
+                value: ${{ imageFrom("ghcr.io/100rd/ml-models").Tag }}
+
+        - uses: git-commit
+          config:
+            path: ./src
+            message: "chore(ml-pipeline): promote baremetal-staging model"
+
+        - uses: git-push
+          config:
+            path: ./src
+
+        - uses: argocd-update
+          config:
+            apps:
+              - name: mlflow-baremetal
+
+  verification:
+    analysisTemplates:
+      - name: health-check
+      - name: prometheus-5xx-error-rate

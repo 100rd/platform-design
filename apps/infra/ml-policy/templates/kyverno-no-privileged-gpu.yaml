@@ -1,0 +1,68 @@
+{{- if .Values.kyverno.enabled }}
+---
+# ClusterPolicy — forbid privileged containers on GPU/ML serving & batch pods.
+#
+# GPU workloads have no legitimate need for privileged: true (the NVIDIA driver /
+# device-plugin DaemonSets that DO are excluded by namespace). A privileged GPU pod is
+# a node-takeover primitive on an expensive, internet-adjacent serving node — WS-E
+# closes that with an admission deny. SOC2 CC6.1/CC6.8 (logical access / change mgmt).
+#
+# Phase: {{ .Values.enforcement.noPrivilegedGpu }} (values.enforcement.noPrivilegedGpu).
+# Audit-first so any legitimately-privileged DaemonSet is allow-listed (by namespace)
+# before promotion to Enforce.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: no-privileged-gpu-pods
+  labels:
+    platform.system: {{ .Values.platformLabels.system | quote }}
+    platform.component: {{ .Values.platformLabels.component | quote }}
+    platform.owner: {{ .Values.platformLabels.owner | quote }}
+    platform.env: {{ .Values.platformLabels.env | quote }}
+    platform.managed-by: {{ .Values.platformLabels.managedBy | quote }}
+  annotations:
+    policies.kyverno.io/title: Forbid privileged GPU/ML pods
+    policies.kyverno.io/category: Pod Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Denies privileged containers (and privilege escalation) on Pods in the ML/GPU
+      namespaces. Vendor driver/device-plugin namespaces are excluded. SOC2 CC6.1.
+    adr: ADR-0020,ADR-0028,ADR-0044
+spec:
+  validationFailureAction: {{ .Values.enforcement.noPrivilegedGpu }}
+  failurePolicy: Ignore
+  background: true
+  rules:
+    - name: forbid-privileged-gpu-containers
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                {{- range .Values.mlNamespaces }}
+                - {{ . }}
+                {{- end }}
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                {{- range .Values.excludedNamespaces }}
+                - {{ . }}
+                {{- end }}
+      validate:
+        message: >-
+          Privileged containers are not permitted on GPU/ML pods (ADR-0044 / SOC2 CC6.1).
+          Set securityContext.privileged=false and allowPrivilegeEscalation=false. If a
+          driver DaemonSet legitimately needs privilege, run it in an excluded namespace.
+        pattern:
+          spec:
+            =(initContainers):
+              - =(securityContext):
+                  =(privileged): "false"
+            containers:
+              - =(securityContext):
+                  =(privileged): "false"
+                  =(allowPrivilegeEscalation): "false"
+{{- end }}

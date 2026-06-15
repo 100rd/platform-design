@@ -1,0 +1,250 @@
+---
+# Apache Airflow — ML pipeline orchestrator, bare metal (ADR-0037 reused)
+# platform:system = ml-pipeline, component = airflow
+#
+# Key differences vs apps/infra/airflow (GKE):
+#   - nodeSelector: Talos pool:cpu-general (not GKE nodepool)
+#   - SA annotation: no GKE WI — credentials from Vault/ESO (vault-eso)
+#   - GPU training tasks override schedulerName to "volcano" + queue to
+#     "training-default" (UK DC Volcano queue taxonomy, 06-uk-datacenters.md)
+#   - Metadata DB: CloudNativePG (not Cloud SQL Auth Proxy)
+#   - NetworkPolicy: CiliumNetworkPolicy (Cilium CNI, ADR-0051)
+#   - S3 env vars injected from mlflow-s3-credentials Secret (ESO/Vault)
+#
+# ADR-0028: platform.system = ml-pipeline, component = airflow.
+# ADR-0037: orchestrator/registry design reused; substrate = bare metal.
+# ADR-0049: UK-isolated control plane.
+# ADR-0051: Cilium CNI.
+# ADR-0052: S3-compatible artifact store (MinIO/Ceph-RGW).
+
+# ---------------------------------------------------------------------------
+# Wrapper-chart-level values
+# ---------------------------------------------------------------------------
+
+networkPolicy:
+  enabled: true
+
+# ---------------------------------------------------------------------------
+# Airflow sub-chart values
+# ---------------------------------------------------------------------------
+
+airflow:
+  enabled: true
+
+  # -------------------------------------------------------------------------
+  # Executor — KubernetesExecutor: each task is an ephemeral pod.
+  # GPU training tasks override schedulerName to "volcano" via executor_config
+  # in the DAG definition (training-default queue).
+  # -------------------------------------------------------------------------
+  executor: KubernetesExecutor
+
+  # -------------------------------------------------------------------------
+  # Images
+  # -------------------------------------------------------------------------
+  images:
+    airflow:
+      repository: apache/airflow
+      tag: "2.9.3-python3.11"
+      pullPolicy: IfNotPresent
+
+  # -------------------------------------------------------------------------
+  # DAG delivery via gitSync sidecar (same repo; same DAG path as GKE)
+  # -------------------------------------------------------------------------
+  dags:
+    persistence:
+      enabled: false
+    gitSync:
+      enabled: true
+      repo: https://github.com/100rd/platform-design.git
+      branch: main
+      rev: HEAD
+      subPath: apps/infra/airflow-baremetal/dags
+      sshKeySecret: airflow-git-sync-ssh
+
+  # -------------------------------------------------------------------------
+  # Kubernetes executor config
+  # GPU training tasks: set schedulerName=volcano + add GPU tolerations via
+  # executor_config in the DAG (train_domain_adapter, mine_templates).
+  # -------------------------------------------------------------------------
+  config:
+    kubernetes:
+      namespace: ml-pipeline
+      delete_worker_pods: "True"
+      delete_worker_pods_on_failure: "False"
+
+  # -------------------------------------------------------------------------
+  # Scheduler
+  # -------------------------------------------------------------------------
+  scheduler:
+    replicas: 1
+
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+
+    # Talos bare-metal node selector (CPU general pool)
+    nodeSelector:
+      pool: cpu-general
+
+    livenessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 30
+      failureThreshold: 5
+
+    readinessProbe:
+      initialDelaySeconds: 20
+      periodSeconds: 20
+
+    podDisruptionBudget:
+      enabled: true
+      config:
+        minAvailable: 1
+
+    labels:
+      platform.system: ml-pipeline
+      platform.component: airflow
+      platform.managed-by: argocd
+
+  # -------------------------------------------------------------------------
+  # Webserver
+  # -------------------------------------------------------------------------
+  webserver:
+    replicas: 1
+
+    resources:
+      requests:
+        cpu: 300m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+    nodeSelector:
+      pool: cpu-general
+
+    labels:
+      platform.system: ml-pipeline
+      platform.component: airflow
+      platform.managed-by: argocd
+
+  # -------------------------------------------------------------------------
+  # Workers (KubernetesExecutor task pod template)
+  # GPU training tasks get schedulerName=volcano + nvidia.com/gpu tolerations
+  # via executor_config in the DAG — not set here globally.
+  # -------------------------------------------------------------------------
+  workers:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "4"
+        memory: 8Gi
+
+    labels:
+      platform.system: ml-pipeline
+      platform.component: airflow
+      platform.managed-by: argocd
+
+  # -------------------------------------------------------------------------
+  # Triggerer
+  # -------------------------------------------------------------------------
+  triggerer:
+    enabled: true
+    replicas: 1
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    nodeSelector:
+      pool: cpu-general
+
+  # -------------------------------------------------------------------------
+  # Database — CloudNativePG PostgreSQL (UK DC inventory)
+  # metadataConnection injected from ExternalSecret airflow-metadata-connection
+  # Shape: postgresql+psycopg2://airflow:<password>@airflow-pg-rw.ml-pipeline.svc:5432/airflow
+  # -------------------------------------------------------------------------
+  data:
+    metadataSecretName: airflow-metadata-connection
+
+  # -------------------------------------------------------------------------
+  # Fernet key (encrypts DAG variables and connections in the metadata DB)
+  # -------------------------------------------------------------------------
+  fernetKeySecretName: airflow-fernet-key
+
+  # -------------------------------------------------------------------------
+  # ServiceAccount — bare metal (no GKE WI; credentials from Vault/ESO)
+  # -------------------------------------------------------------------------
+  serviceAccount:
+    create: true
+    name: airflow
+    annotations:
+      # No cloud WI annotation — secrets arrive via ESO-materialised Secrets.
+      platform.credential-source: vault-eso
+
+  # -------------------------------------------------------------------------
+  # PostgreSQL sub-chart — disabled; use CloudNativePG (UK DC)
+  # -------------------------------------------------------------------------
+  postgresql:
+    enabled: false
+
+  # -------------------------------------------------------------------------
+  # Redis — not needed with KubernetesExecutor
+  # -------------------------------------------------------------------------
+  redis:
+    enabled: false
+
+  # -------------------------------------------------------------------------
+  # Prometheus StatsD exporter for Airflow metrics
+  # -------------------------------------------------------------------------
+  statsd:
+    enabled: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+  # -------------------------------------------------------------------------
+  # Extra environment variables — S3 + MLflow tracking
+  # S3 credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
+  # MLFLOW_S3_ENDPOINT_URL) from ESO Secret mlflow-s3-credentials.
+  # -------------------------------------------------------------------------
+  extraEnv:
+    - name: AIRFLOW__CORE__LOAD_EXAMPLES
+      value: "False"
+    - name: AIRFLOW__WEBSERVER__EXPOSE_CONFIG
+      value: "False"
+    # MLflow tracking URI — task pods call mlflow.log_metric() directly.
+    - name: MLFLOW_TRACKING_URI
+      valueFrom:
+        secretKeyRef:
+          name: mlflow-tracking-uri
+          key: uri
+    # S3 credentials for artifact store access (MinIO/Ceph-RGW)
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: mlflow-s3-credentials
+          key: AWS_ACCESS_KEY_ID
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: mlflow-s3-credentials
+          key: AWS_SECRET_ACCESS_KEY
+    - name: MLFLOW_S3_ENDPOINT_URL
+      valueFrom:
+        secretKeyRef:
+          name: mlflow-s3-credentials
+          key: MLFLOW_S3_ENDPOINT_URL

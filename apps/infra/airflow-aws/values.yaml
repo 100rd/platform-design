@@ -1,0 +1,209 @@
+# Apache Airflow on EKS — ML pipeline orchestrator (ADR-0048 D1, inheriting ADR-0037)
+# platform:system = ml-pipeline, component = airflow
+#
+# AWS deltas from apps/infra/airflow/ (GCP):
+#   - nodeSelector: kubernetes.io/arch=arm64 + karpenter.sh/nodepool=ml-graviton
+#     (non-GPU Graviton pool, plan §7 OD-7 / ADR-0046 D3 / R2 mitigation)
+#   - serviceAccount annotation: eks.amazonaws.com/role-arn (Pod Identity, ADR-0018)
+#     instead of iam.gke.io/gcp-service-account
+#   - ESO ClusterSecretStore: aws-secrets-manager (not gcp-secrets-manager)
+#   - Task pods use schedulerName: volcano via executor_config in DAG definition
+#
+# ML logic (DAGs, executors, gate thresholds) is IDENTICAL to apps/infra/airflow/
+# — ADR-0048 D6 scope guard (cluster-agnostic ML layer inherited from ADR-0037).
+
+networkPolicy:
+  enabled: true
+
+airflow:
+  enabled: true
+
+  # -------------------------------------------------------------------------
+  # Executor
+  # -------------------------------------------------------------------------
+  executor: KubernetesExecutor
+
+  # -------------------------------------------------------------------------
+  # Images — pulled through ECR pull-through cache (ADR-0029 / ADR-0048 D5).
+  # -------------------------------------------------------------------------
+  images:
+    airflow:
+      repository: apache/airflow
+      tag: "2.9.3-python3.11"
+      pullPolicy: IfNotPresent
+
+  # -------------------------------------------------------------------------
+  # DAG delivery via gitSync sidecar — unchanged from ADR-0037.
+  # -------------------------------------------------------------------------
+  dags:
+    persistence:
+      enabled: false
+    gitSync:
+      enabled: true
+      repo: https://github.com/100rd/platform-design.git
+      branch: main
+      rev: HEAD
+      subPath: apps/infra/airflow/dags
+      sshKeySecret: airflow-git-sync-ssh
+
+  # -------------------------------------------------------------------------
+  # KubernetesExecutor config
+  # GPU training task pods: add schedulerName=volcano via executor_config in
+  # the DAG definition (cluster-agnostic pattern inherited from ADR-0037).
+  # -------------------------------------------------------------------------
+  config:
+    kubernetes:
+      namespace: ml-pipeline
+      delete_worker_pods: "True"
+      delete_worker_pods_on_failure: "False"
+
+  # -------------------------------------------------------------------------
+  # Scheduler — non-GPU Graviton Karpenter pool (ADR-0046 D3 / plan §7 OD-7).
+  # -------------------------------------------------------------------------
+  scheduler:
+    replicas: 1
+
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+
+    nodeSelector:
+      kubernetes.io/arch: arm64
+      karpenter.sh/nodepool: ml-graviton
+
+    livenessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 30
+      failureThreshold: 5
+
+    readinessProbe:
+      initialDelaySeconds: 20
+      periodSeconds: 20
+
+    podDisruptionBudget:
+      enabled: true
+      config:
+        minAvailable: 1
+
+    labels:
+      platform.system: ml-pipeline
+      platform.component: airflow
+      platform.managed-by: argocd
+
+    podAnnotations:
+      platform.system: ml-pipeline
+
+  # -------------------------------------------------------------------------
+  # Webserver — Graviton pool.
+  # -------------------------------------------------------------------------
+  webserver:
+    replicas: 1
+
+    resources:
+      requests:
+        cpu: 300m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+    nodeSelector:
+      kubernetes.io/arch: arm64
+      karpenter.sh/nodepool: ml-graviton
+
+    labels:
+      platform.system: ml-pipeline
+      platform.component: airflow
+      platform.managed-by: argocd
+
+  # -------------------------------------------------------------------------
+  # Workers (KubernetesExecutor task pod template).
+  # -------------------------------------------------------------------------
+  workers:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "4"
+        memory: 8Gi
+
+    labels:
+      platform.system: ml-pipeline
+      platform.component: airflow
+      platform.managed-by: argocd
+
+  # -------------------------------------------------------------------------
+  # Triggerer — Graviton pool.
+  # -------------------------------------------------------------------------
+  triggerer:
+    enabled: true
+    replicas: 1
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    nodeSelector:
+      kubernetes.io/arch: arm64
+      karpenter.sh/nodepool: ml-graviton
+
+  # -------------------------------------------------------------------------
+  # Database — dedicated RDS PostgreSQL via ESO ExternalSecret (ADR-0048 D3).
+  # Connection injected from aws-secrets-manager ClusterSecretStore; shape:
+  # postgresql+psycopg2://airflow:<password>@<rds-host>:5432/airflow
+  # RDS provisioned out-of-band by DBA team.
+  # -------------------------------------------------------------------------
+  data:
+    metadataSecretName: airflow-metadata-connection
+
+  fernetKeySecretName: airflow-fernet-key
+
+  # -------------------------------------------------------------------------
+  # ServiceAccount — EKS Pod Identity (ADR-0018).
+  # The IAM role ARN is set per-cluster via ArgoCD Application parameter.
+  # -------------------------------------------------------------------------
+  serviceAccount:
+    create: true
+    name: airflow
+    annotations:
+      # Set by ArgoCD Application parameter override.
+      # Value: ARN from catalog/units/aws-ml-artifact-store output
+      # mlflow_pod_identity_role_arn (re-used for airflow access to same S3 bucket).
+      eks.amazonaws.com/role-arn: ""
+
+  postgresql:
+    enabled: false
+
+  redis:
+    enabled: false
+
+  statsd:
+    enabled: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+  extraEnv:
+    - name: AIRFLOW__CORE__LOAD_EXAMPLES
+      value: "False"
+    - name: AIRFLOW__WEBSERVER__EXPOSE_CONFIG
+      value: "False"
+    # MLflow tracking URI from ESO ExternalSecret (aws-secrets-manager).
+    - name: MLFLOW_TRACKING_URI
+      valueFrom:
+        secretKeyRef:
+          name: mlflow-tracking-uri
+          key: uri

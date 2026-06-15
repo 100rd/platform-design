@@ -1,0 +1,93 @@
+---
+# CiliumNetworkPolicy — Airflow (bare metal)
+# ADR-0028: platform.system=ml-pipeline, component=airflow.
+# ADR-0051: Cilium eBPF CNI; CiliumNetworkPolicy for L7 filtering.
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: "cilium.io/v2"
+kind: CiliumNetworkPolicy
+metadata:
+  name: airflow-baremetal
+  namespace: {{ .Release.Namespace }}
+  labels:
+    platform.system: ml-pipeline
+    platform.component: airflow
+    platform.managed-by: argocd
+spec:
+  endpointSelector:
+    matchLabels:
+      platform.system: ml-pipeline
+      platform.component: airflow
+  ingress:
+    # Allow: Prometheus scrape
+    - fromEndpoints:
+        - matchLabels:
+            platform.system: observability
+      toPorts:
+        - ports:
+            - port: "8125"
+              protocol: UDP
+            - port: "8080"
+              protocol: TCP
+    # Allow: ingress from ml-pipeline (MLflow, CI runners)
+    - fromEndpoints:
+        - matchLabels:
+            platform.system: ml-pipeline
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # Allow: CloudNativePG PostgreSQL
+    - toEndpoints:
+        - matchLabels:
+            platform.system: ml-pipeline
+            platform.component: postgres
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # Allow: MLflow tracking server (register experiments)
+    - toEndpoints:
+        - matchLabels:
+            platform.system: ml-pipeline
+            platform.component: model-registry
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+    # Allow: MinIO / Ceph-RGW S3 (artifact access by task pods)
+    - toEndpoints:
+        - matchLabels:
+            platform.system: storage
+      toPorts:
+        - ports:
+            - port: "9000"
+              protocol: TCP
+            - port: "80"
+              protocol: TCP
+    # Allow: Vault (ESO refresh)
+    - toEndpoints:
+        - matchLabels:
+            platform.system: secrets
+      toPorts:
+        - ports:
+            - port: "8200"
+              protocol: TCP
+    # Allow: GitHub API (gitSync + Airflow REST trigger from GH Actions)
+    - toCIDR:
+        - 0.0.0.0/0
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # Allow: DNS
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+{{- end }}
