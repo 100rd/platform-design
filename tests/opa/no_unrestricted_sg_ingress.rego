@@ -21,10 +21,12 @@ _is_unrestricted_cidr(cidr_blocks) if {
   c in _open_cidrs
 }
 
-# Skip HTTPS (443) — legitimate for public-facing load balancers
-_is_sensitive_port(from_port, to_port) if {
-  not (from_port <= 443; 443 <= to_port; from_port == to_port)
-  true
+# HTTPS-only carve-out: a rule scoped exactly to port 443 is a legitimate
+# public load-balancer listener and is exempt. Rego v1 forbids multi-expression
+# `not (a; b)`, so the AND lives in this helper and the deny rules negate it.
+_is_https_only(from_port, to_port) if {
+  from_port == 443
+  to_port == 443
 }
 
 # aws_security_group — inline ingress blocks
@@ -38,7 +40,7 @@ deny contains msg if {
   _is_unrestricted_cidr(object.get(rule, "cidr_blocks", []))
   from_port := object.get(rule, "from_port", 0)
   to_port := object.get(rule, "to_port", 65535)
-  not (from_port == 443; to_port == 443)
+  not _is_https_only(from_port, to_port)
   msg := sprintf(
     "POLICY VIOLATION [sg-unrestricted-ingress]: resource %q has unrestricted ingress on ports %d-%d from 0.0.0.0/0 or ::/0",
     [addr, from_port, to_port],
@@ -56,7 +58,7 @@ deny contains msg if {
   _is_unrestricted_cidr(object.get(rule, "ipv6_cidr_blocks", []))
   from_port := object.get(rule, "from_port", 0)
   to_port := object.get(rule, "to_port", 65535)
-  not (from_port == 443; to_port == 443)
+  not _is_https_only(from_port, to_port)
   msg := sprintf(
     "POLICY VIOLATION [sg-unrestricted-ingress-ipv6]: resource %q has unrestricted IPv6 ingress on ports %d-%d",
     [addr, from_port, to_port],
@@ -74,7 +76,7 @@ deny contains msg if {
   _is_unrestricted_cidr(object.get(rc.change.after, "cidr_blocks", []))
   from_port := object.get(rc.change.after, "from_port", 0)
   to_port := object.get(rc.change.after, "to_port", 65535)
-  not (from_port == 443; to_port == 443)
+  not _is_https_only(from_port, to_port)
   msg := sprintf(
     "POLICY VIOLATION [sg-rule-unrestricted-ingress]: resource %q allows unrestricted ingress on ports %d-%d",
     [addr, from_port, to_port],
@@ -92,7 +94,7 @@ deny contains msg if {
   cidr in _open_cidrs
   from_port := object.get(rc.change.after, "from_port", 0)
   to_port := object.get(rc.change.after, "to_port", 65535)
-  not (from_port == 443; to_port == 443)
+  not _is_https_only(from_port, to_port)
   msg := sprintf(
     "POLICY VIOLATION [vpc-sg-unrestricted-ingress]: resource %q allows unrestricted ingress on ports %d-%d",
     [addr, from_port, to_port],
