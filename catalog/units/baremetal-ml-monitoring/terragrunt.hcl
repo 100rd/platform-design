@@ -34,12 +34,15 @@ terraform {
 }
 
 locals {
-  dc_vars  = read_terragrunt_config(find_in_parent_folders("dc.hcl"))
-  env_vars = read_terragrunt_config(find_in_parent_folders("env.hcl"))
+  # Guarded reads: the dc.hcl / env.hcl live tree is wired per-datacenter at deploy
+  # time. try() lets the catalog unit also validate standalone (CI) and fall back to
+  # the primary-DC defaults until the live dc/env tree exists.
+  dc_vars  = try(read_terragrunt_config(find_in_parent_folders("dc.hcl")), { locals = {} })
+  env_vars = try(read_terragrunt_config(find_in_parent_folders("env.hcl")), { locals = {} })
 
-  dc           = local.dc_vars.locals.dc_name      # "uk-primary" or "uk-standby"
-  environment  = local.env_vars.locals.environment # "production"
-  cluster_name = "talos-${local.dc}"               # "talos-uk-primary"
+  dc           = try(local.dc_vars.locals.dc_name, "uk-primary")      # "uk-primary" or "uk-standby"
+  environment  = try(local.env_vars.locals.environment, "production") # "production"
+  cluster_name = "talos-${local.dc}"                                  # "talos-uk-primary"
 }
 
 # -------------------------------------------------------------------------
