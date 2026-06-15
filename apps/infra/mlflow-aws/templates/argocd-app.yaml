@@ -1,0 +1,101 @@
+---
+# ArgoCD Application — MLflow on EKS (ADR-0048 D2/D3)
+# Delivers the MLflow Helm chart to the AWS EKS GPU ML cluster.
+# Inherits ADR-0037 shape; AWS deltas: S3 artifactRoot + Pod Identity SA annotation.
+# ADR-0028: namespace carries platform.system=ml-pipeline labels.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mlflow-aws
+  namespace: argocd
+  labels:
+    platform.system: ml-pipeline
+    platform.component: model-registry
+    platform.managed-by: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "16"
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: ml-pipeline-alerts
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: ml-pipeline-alerts
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/100rd/platform-design.git
+    targetRevision: HEAD
+    path: apps/infra/mlflow-aws
+
+    helm:
+      values: |
+        mlflow:
+          serviceAccount:
+            annotations:
+              # IAM role ARN from aws-ml-artifact-store unit output (mlflow_pod_identity_role_arn).
+              # Populated via ArgoCD Application parameter override at deploy time.
+              eks.amazonaws.com/role-arn: ""
+          artifactRoot: "s3://mlflow-artifacts-staging-ACCOUNT_ID"
+          extraEnvVars:
+            - name: MLFLOW_DEFAULT_ARTIFACT_ROOT
+              value: "s3://mlflow-artifacts-staging-ACCOUNT_ID"
+            - name: AWS_DEFAULT_REGION
+              value: "us-east-1"
+
+  destination:
+    name: eks-ml-primary
+    namespace: ml-pipeline
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+    managedNamespaceMetadata:
+      labels:
+        platform.system: ml-pipeline
+        platform.component: model-registry
+        platform.env: staging
+        platform.owner: team-ml
+        platform.managed-by: argocd
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+---
+# ExternalSecret — MLflow DB connection (RDS PostgreSQL via AWS Secrets Manager)
+# ESO v1 / ClusterSecretStore aws-secrets-manager (ADR-0008 / ADR-0048 D3).
+# Shape: postgresql+psycopg2://mlflow:<password>@<rds-host>:5432/mlflow
+# RDS provisioned out-of-band by DBA team; no credentials in code (ADR-0008).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: mlflow-db-connection
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: mlflow
+    app.kubernetes.io/component: backend-store
+    app.kubernetes.io/managed-by: helm
+    platform.system: ml-pipeline
+    platform.component: model-registry
+spec:
+  refreshInterval: 1h
+
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+
+  target:
+    name: mlflow-db-connection
+    creationPolicy: Owner
+
+  data:
+    - secretKey: connection
+      remoteRef:
+        # Populated by DBA team after RDS PostgreSQL provisioning (ADR-0048 D3).
+        key: /ml-pipeline/mlflow-db-connection
+        property: connection
+---
+# NetworkPolicy stub — MLflow on EKS (ADR-0048 D2/D3)
+# Full CiliumNetworkPolicy tracked in network-policies/ml-pipeline/.
