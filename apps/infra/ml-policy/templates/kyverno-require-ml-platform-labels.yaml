@@ -1,0 +1,73 @@
+{{- if .Values.kyverno.enabled }}
+---
+# ClusterPolicy — require ADR-0028 platform taxonomy labels on the NET-NEW ML/GPU
+# workload kinds (WS-E in-cluster parity to tests/opa/platform_tags_ml.rego).
+#
+# The existing apps/infra/kyverno/.../require-platform-labels.yaml covers Pod / Service /
+# Deployment / Rollout cluster-wide. This policy ADDS the ML/GPU-specific kinds the
+# greenfield estate introduces — Volcano batch jobs (ADR-0044 D3), GPU-serving
+# Deployments/StatefulSets, and the Gateway API Inference Extension objects (ADR-0047) —
+# scoped to the ML namespaces, so the taxonomy is enforced on the workloads the OPA/SCP
+# planes cannot see (they govern Terraform/cloud resources, not in-cluster CRDs).
+#
+# Phase: {{ .Values.enforcement.platformLabels }} (values.enforcement.platformLabels).
+# Ships Audit-first (ADR-0020 soak pattern); promote to Enforce after a clean window.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-ml-platform-labels
+  labels:
+    platform.system: {{ .Values.platformLabels.system | quote }}
+    platform.component: {{ .Values.platformLabels.component | quote }}
+    platform.owner: {{ .Values.platformLabels.owner | quote }}
+    platform.env: {{ .Values.platformLabels.env | quote }}
+    platform.managed-by: {{ .Values.platformLabels.managedBy | quote }}
+  annotations:
+    policies.kyverno.io/title: Require platform taxonomy labels on ML/GPU workloads
+    policies.kyverno.io/category: Platform Governance
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Job,Deployment,StatefulSet,InferencePool,InferenceObjective
+    policies.kyverno.io/description: >-
+      Validates that ML/GPU workloads (Volcano/batch Jobs, GPU-serving Deployments and
+      StatefulSets, and Gateway API Inference Extension objects) in the ML namespaces
+      carry the three required ADR-0028 platform taxonomy labels. In-cluster parity to
+      tests/opa/platform_tags_ml.rego (WS-E gap closure). Audit-first.
+    adr: ADR-0020,ADR-0028,ADR-0044,ADR-0047
+spec:
+  validationFailureAction: {{ .Values.enforcement.platformLabels }}
+  failurePolicy: Ignore
+  background: true
+  rules:
+    - name: require-ml-platform-labels-workloads
+      match:
+        any:
+          - resources:
+              kinds:
+                - Job
+                - Deployment
+                - StatefulSet
+              namespaces:
+                {{- range .Values.mlNamespaces }}
+                - {{ . }}
+                {{- end }}
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                {{- range .Values.excludedNamespaces }}
+                - {{ . }}
+                {{- end }}
+      validate:
+        message: >-
+          ML/GPU workload is missing required platform taxonomy labels (ADR-0028).
+          Every ML workload must carry platform.system, platform.component, and
+          platform.owner with non-empty values. See
+          docs/adrs/0028-unified-platform-tagging-and-labeling-taxonomy.md and the
+          OPA parity tests/opa/platform_tags_ml.rego.
+        pattern:
+          metadata:
+            labels:
+              platform.system: "?*"
+              platform.component: "?*"
+              platform.owner: "?*"
+{{- end }}
