@@ -29,7 +29,7 @@ locals {
   site_vars = read_terragrunt_config(find_in_parent_folders("site.hcl"))
 
   dc_name     = local.site_vars.locals.dc_name     # e.g. "uk-primary" or "uk-standby"
-  environment = local.site_vars.locals.environment  # e.g. "prod"
+  environment = local.site_vars.locals.environment # e.g. "prod"
 
   ml_pipeline_config = try(local.site_vars.locals.ml_pipeline_config, {})
 }
