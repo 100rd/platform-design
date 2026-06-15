@@ -6,7 +6,7 @@ variable "enabled" {
 }
 
 variable "namespace" {
-  description = "Namespace for the Gateway / InferencePool / InferenceModel objects (where vLLM runs)."
+  description = "Namespace for the Gateway / InferencePool / InferenceObjective objects (where vLLM runs)."
   type        = string
   default     = "gpu-inference"
 }
@@ -56,7 +56,7 @@ variable "endpoint_picker_name" {
 variable "inference_models" {
   description = "Per-model routing. Each maps an external model name to a served target model (multi-LoRA → multiple entries)."
   type = list(object({
-    name         = string                       # InferenceModel object name
+    name         = string                       # InferenceObjective object name
     model_name   = string                       # external model name clients request
     target_model = string                       # served model / LoRA adapter name
     criticality  = optional(string, "Standard") # Critical | Standard | Sheddable

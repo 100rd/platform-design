@@ -13,7 +13,7 @@ models / LoRA adapters route cleanly by name.
 |--------|---------|
 | `Gateway` | GKE inference GatewayClass entrypoint (+ Body-Based Router annotation) |
 | `InferencePool` | the set of vLLM replicas (selector + target port + endpoint-picker ref) |
-| `InferenceModel` (per entry) | external model name → served target model + criticality |
+| `InferenceObjective` (per entry) | external model name → served target model + criticality |
 | `HTTPRoute` | binds the Gateway to the InferencePool |
 | `GCPBackendPolicy` | attaches the Cloud Armor policy (when `cloud_armor_policy_id` is set) |
 

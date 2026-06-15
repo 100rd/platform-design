@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------------------------------------------------
 # GKE Inference Gateway — Catalog Unit (ADR-0042 D4)
 # ---------------------------------------------------------------------------------------------------------------------
-# Model-/KV-cache-aware serving front for vLLM (Gateway + InferencePool + InferenceModel
+# Model-/KV-cache-aware serving front for vLLM (Gateway + InferencePool + InferenceObjective
 # + Body-Based Router), with the Cloud Armor policy attached. Gated OFF by default
 # (gpu_analysis_config.inference_gateway_enabled). Requires the GKE Inference Gateway
 # CRDs on the cluster — apply-gated.
