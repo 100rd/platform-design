@@ -85,8 +85,8 @@ inputs = {
 
   # ADR-0028 platform taxonomy labels (dotted form for K8s labels on bare metal).
   platform_labels = {
-    "platform.system"  = "observability"
-    "platform.env"     = local.environment
-    "platform.owner"   = try(local.self_serve_cfg.team_slug, "platform")
+    "platform.system" = "observability"
+    "platform.env"    = local.environment
+    "platform.owner"  = try(local.self_serve_cfg.team_slug, "platform")
   }
 }
