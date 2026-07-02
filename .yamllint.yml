@@ -30,5 +30,3 @@ ignore:
   # Generated / vendored
   - ".git/"
   - "node_modules/"
-  # Vendored upstream Gateway API CRDs (standard-install) — upstream formatting, not ours
-  - "apps/infra/gateway-api-crds/crds/"

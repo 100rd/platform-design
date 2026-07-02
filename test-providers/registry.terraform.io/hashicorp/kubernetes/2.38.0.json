@@ -1,0 +1,10 @@
+{
+  "archives": {
+    "darwin_arm64": {
+      "hashes": [
+        "h1:soK8Lt0SZ6dB+HsypFRDzuX/npqlMU6M0fvyaR1yW0k="
+      ],
+      "url": "terraform-provider-kubernetes_2.38.0_darwin_arm64.zip"
+    }
+  }
+}

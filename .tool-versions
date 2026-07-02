@@ -4,4 +4,4 @@
 #
 # Format: <tool>:<version>, one per line.
 terraform 1.14.8
-terragrunt 1.0.8
+terragrunt 0.99.5

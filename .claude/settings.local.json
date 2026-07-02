@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(tf|yaml\\)$\")",
+      "WebSearch",
+      "Bash(brew list:*)",
+      "Bash(export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\")",
+      "Bash(gh --version)",
+      "Bash(gh auth:*)",
+      "Bash(gh label:*)",
+      "Bash(__NEW_LINE_c88329a1c52b9260__ gh:*)",
+      "Bash(__NEW_LINE_66dbe944bff0ced9__ gh:*)",
+      "Bash(__NEW_LINE_f153963672258d8b__ gh:*)",
+      "Bash(__NEW_LINE_ab90e756a7efe2f0__ gh:*)",
+      "Bash(__NEW_LINE_a2bf48d37dbe2db4__ gh:*)",
+      "Bash(__NEW_LINE_4e8ef5241fecb7ed__ gh:*)",
+      "Bash(device.attributes['gpu.nvidia.com'].productName == 'H100-SXM5'\":*)",
+      "Bash(device.attributes['gpu.nvidia.com'].productName == 'A100-SXM4-80GB'\":*)",
+      "Bash(__NEW_LINE_8866b80bd3185342__ gh:*)",
+      "Bash(__NEW_LINE_f79e2863a9a4c789__ gh:*)",
+      "Bash(__NEW_LINE_3852cfaf7ad34292__ gh:*)",
+      "Bash(__NEW_LINE_60f94745482f22bb__ gh:*)",
+      "Bash(__NEW_LINE_791aea4f43ce19f9__ gh:*)",
+      "Bash(__NEW_LINE_8beffe8d1fa00e9f__ gh:*)",
+      "Bash(__NEW_LINE_6b7aaebb708ac7ce__ gh:*)",
+      "Bash(__NEW_LINE_ac12b1dd45c2fc57__ gh:*)",
+      "Bash(__NEW_LINE_3d2b6f7cd9a245df__ gh:*)",
+      "Bash(__NEW_LINE_fd61ee81a90d7606__ gh:*)"
+    ]
+  }
+}

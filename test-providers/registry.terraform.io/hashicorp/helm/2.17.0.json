@@ -1,0 +1,10 @@
+{
+  "archives": {
+    "darwin_arm64": {
+      "hashes": [
+        "h1:kQMkcPVvHOguOqnxoEU2sm1ND9vCHiT8TvZ2x6v/Rsw="
+      ],
+      "url": "terraform-provider-helm_2.17.0_darwin_arm64.zip"
+    }
+  }
+}

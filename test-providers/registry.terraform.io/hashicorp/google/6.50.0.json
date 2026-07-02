@@ -1,0 +1,10 @@
+{
+  "archives": {
+    "darwin_arm64": {
+      "hashes": [
+        "h1:79CwMTsp3Ud1nOl5hFS5mxQHyT0fGVye7pqpU0PPlHI="
+      ],
+      "url": "terraform-provider-google_6.50.0_darwin_arm64.zip"
+    }
+  }
+}
