@@ -1,0 +1,483 @@
+{
+    "type": "excalidraw",
+    "version": 2,
+    "source": "https://gemini.google.com",
+    "elements": [
+        {
+            "id": "aws-boundary",
+            "type": "rectangle",
+            "x": -350,
+            "y": -250,
+            "width": 1400,
+            "height": 1100,
+            "fillStyle": "solid",
+            "strokeWidth": 2,
+            "strokeStyle": "dashed",
+            "roughness": 1,
+            "opacity": 100,
+            "seed": 1,
+            "label": {
+                "text": "AWS Cloud",
+                "fontSize": 20,
+                "fontFamily": 1,
+                "textAlign": "center",
+                "verticalAlign": "top"
+            }
+        },
+        {
+            "id": "vpc-boundary",
+            "type": "rectangle",
+            "x": -320,
+            "y": -150,
+            "width": 1340,
+            "height": 950,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 0,
+            "opacity": 100,
+            "seed": 2,
+            "label": {
+                "text": "VPC (3 AZs)",
+                "fontSize": 16,
+                "fontFamily": 1,
+                "textAlign": "left",
+                "verticalAlign": "top"
+            }
+        },
+        {
+            "id": "eks-control-plane",
+            "type": "rectangle",
+            "x": -250,
+            "y": -100,
+            "width": 200,
+            "height": 100,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 0,
+            "opacity": 100,
+            "seed": 3,
+            "label": {
+                "text": "EKS Control Plane\n(Managed by AWS)",
+                "fontSize": 14,
+                "fontFamily": 1,
+                "textAlign": "center",
+                "verticalAlign": "middle"
+            }
+        },
+        {
+            "id": "data-plane",
+            "type": "rectangle",
+            "x": -300,
+            "y": 100,
+            "width": 1280,
+            "height": 650,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "dashed",
+            "roughness": 1,
+            "opacity": 100,
+            "seed": 4,
+            "label": {
+                "text": "Data Plane (EC2 Nodes in Private Subnets)",
+                "fontSize": 16,
+                "fontFamily": 1,
+                "textAlign": "left",
+                "verticalAlign": "top"
+            }
+        },
+        {
+            "id": "managed-node-group",
+            "type": "rectangle",
+            "x": -280,
+            "y": 150,
+            "width": 300,
+            "height": 150,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 0,
+            "opacity": 100,
+            "seed": 5,
+            "label": {
+                "text": "EKS Managed Node Group\n(On-Demand, for Core Services)",
+                "fontSize": 14,
+                "fontFamily": 1,
+                "textAlign": "center",
+                "verticalAlign": "middle"
+            }
+        },
+        {
+            "id": "karpenter-nodes",
+            "type": "rectangle",
+            "x": 50,
+            "y": 150,
+            "width": 900,
+            "height": 580,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 0,
+            "opacity": 100,
+            "seed": 6,
+            "label": {
+                "text": "Nodes provisioned by Karpenter",
+                "fontSize": 14,
+                "fontFamily": 1,
+                "textAlign": "center",
+                "verticalAlign": "top"
+            }
+        },
+        {
+            "id": "karpenter-virtual-nodes",
+            "type": "rectangle",
+            "x": 70,
+            "y": 200,
+            "width": 400,
+            "height": 200,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 0,
+            "opacity": 100,
+            "seed": 7,
+            "label": {
+                "text": "Standard Virtual Nodes (Spot/OnDemand)\nFor general workloads",
+                "fontSize": 14,
+                "fontFamily": 1,
+                "textAlign": "center",
+                "verticalAlign": "middle"
+            }
+        },
+        {
+            "id": "karpenter-metal-nodes",
+            "type": "rectangle",
+            "x": 500,
+            "y": 200,
+            "width": 430,
+            "height": 500,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 0,
+            "opacity": 100,
+            "seed": 8,
+            "label": {
+                "text": "Bare Metal Nodes (*.metal)\nFor High-Isolation Workloads",
+                "fontSize": 14,
+                "fontFamily": 1,
+                "textAlign": "center",
+                "verticalAlign": "top"
+            }
+        },
+        {
+            "id": "kubevirt-pod",
+            "type": "rectangle",
+            "x": 550,
+            "y": 300,
+            "width": 330,
+            "height": 350,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "dashed",
+            "roughness": 1,
+            "opacity": 100,
+            "seed": 9,
+            "label": {
+                "text": "KubeVirt Pod",
+                "fontSize": 14,
+                "fontFamily": 1,
+                "textAlign": "center",
+                "verticalAlign": "top"
+            }
+        },
+        {
+            "id": "kubevirt-vm",
+            "type": "rectangle",
+            "x": 570,
+            "y": 350,
+            "width": 290,
+            "height": 280,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 0,
+            "opacity": 100,
+            "seed": 10,
+            "label": {
+                "text": "Virtual Machine\n(Agent Code)",
+                "fontSize": 14,
+                "fontFamily": 1,
+                "textAlign": "center",
+                "verticalAlign": "middle"
+            }
+        },
+        {
+            "id": "standard-pod",
+            "type": "rectangle",
+            "x": 120,
+            "y": 250,
+            "width": 150,
+            "height": 100,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 0,
+            "opacity": 100,
+            "seed": 11,
+            "label": {
+                "text": "Standard Pod",
+                "fontSize": 14,
+                "fontFamily": 1,
+                "textAlign": "center",
+                "verticalAlign": "middle"
+            }
+        },
+        {
+            "id": "karpenter-controller",
+            "type": "rectangle",
+            "x": -230,
+            "y": 180,
+            "width": 120,
+            "height": 50,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 0,
+            "opacity": 100,
+            "seed": 12,
+            "label": {
+                "text": "Karpenter",
+                "fontSize": 14,
+                "fontFamily": 1,
+                "textAlign": "center",
+                "verticalAlign": "middle"
+            }
+        },
+        {
+            "id": "istio-controller",
+            "type": "rectangle",
+            "x": -230,
+            "y": 240,
+            "width": 120,
+            "height": 50,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 0,
+            "opacity": 100,
+            "seed": 13,
+            "label": {
+                "text": "istiod",
+                "fontSize": 14,
+                "fontFamily": 1,
+                "textAlign": "center",
+                "verticalAlign": "middle"
+            }
+        },
+        {
+            "id": "cilium-daemonset",
+            "type": "text",
+            "x": -280,
+            "y": 310,
+            "width": 200,
+            "height": 50,
+            "label": {
+                "text": "Cilium (DaemonSet on all nodes)\nKEDA, ESO, etc.",
+                "fontSize": 12,
+                "fontFamily": 1,
+                "textAlign": "center",
+                "verticalAlign": "middle"
+            }
+        },
+        {
+            "id": "gateway-api",
+            "type": "rectangle",
+            "x": -250,
+            "y": 400,
+            "width": 200,
+            "height": 100,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 0,
+            "opacity": 100,
+            "seed": 14,
+            "label": {
+                "text": "Gateway API\n(Implemented by Istio)",
+                "fontSize": 14,
+                "fontFamily": 1,
+                "textAlign": "center",
+                "verticalAlign": "middle"
+            }
+        },
+        {
+            "id": "alb",
+            "type": "rectangle",
+            "x": -250,
+            "y": 550,
+            "width": 200,
+            "height": 100,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 0,
+            "opacity": 100,
+            "seed": 15,
+            "label": {
+                "text": "AWS ALB",
+                "fontSize": 14,
+                "fontFamily": 1,
+                "textAlign": "center",
+                "verticalAlign": "middle"
+            }
+        },
+        {
+            "id": "internet",
+            "type": "cloud",
+            "x": -250,
+            "y": 700,
+            "width": 200,
+            "height": 100,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 1,
+            "opacity": 100,
+            "seed": 16
+        },
+        {
+            "id": "arrow-internet-alb",
+            "type": "arrow",
+            "points": [
+                [-150, 700],
+                [-150, 650]
+            ],
+            "start": { "type": "point", "x": -150, "y": 700 },
+            "end": { "type": "point", "x": -150, "y": 650 },
+            "label": { "text": "Ingress Traffic" }
+        },
+        {
+            "id": "arrow-alb-gateway",
+            "type": "arrow",
+            "points": [
+                [-150, 550],
+                [-150, 500]
+            ],
+            "start": { "type": "point", "x": -150, "y": 550 },
+            "end": { "type": "point", "x": -150, "y": 500 }
+        },
+        {
+            "id": "arrow-gateway-nodes",
+            "type": "arrow",
+            "points": [
+                [-50, 450],
+                [70, 350]
+            ],
+            "start": { "type": "point", "x": -50, "y": 450 },
+            "end": { "type": "point", "x": 70, "y": 350 }
+        },
+        {
+            "id": "arrow-karpenter-eks",
+            "type": "arrow",
+            "points": [
+                [-110, 205],
+                [-150, 50]
+            ],
+            "start": { "type": "point", "x": -110, "y": 205 },
+            "end": { "type": "point", "x": -150, "y": 50 },
+            "label": { "text": "k8s API" }
+        },
+        {
+            "id": "arrow-karpenter-ec2",
+            "type": "arrow",
+            "points": [
+                [-10, 205],
+                [50, 170]
+            ],
+            "start": { "type": "point", "x": -10, "y": 205 },
+            "end": { "type": "point", "x": 50, "y": 170 },
+            "label": { "text": "Provisions Nodes\n(EC2 API)" }
+        },
+        {
+            "id": "aws-iam",
+            "type": "rectangle",
+            "x": 1100,
+            "y": -100,
+            "width": 150,
+            "height": 70,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 0,
+            "opacity": 100,
+            "seed": 17,
+            "label": {
+                "text": "AWS IAM",
+                "fontSize": 14,
+                "fontFamily": 1,
+                "textAlign": "center",
+                "verticalAlign": "middle"
+            }
+        },
+        {
+            "id": "aws-secrets-manager",
+            "type": "rectangle",
+            "x": 1100,
+            "y": 0,
+            "width": 150,
+            "height": 70,
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 0,
+            "opacity": 100,
+            "seed": 18,
+            "label": {
+                "text": "AWS Secrets\nManager",
+                "fontSize": 14,
+                "fontFamily": 1,
+                "textAlign": "center",
+                "verticalAlign": "middle"
+            }
+        },
+        {
+            "id": "arrow-pod-iam",
+            "type": "arrow",
+            "points": [
+                [270, 300],
+                [1100, -50]
+            ],
+            "start": { "type": "point", "x": 270, "y": 300 },
+            "end": { "type": "point", "x": 1100, "y": -50 },
+            "label": { "text": "IRSA: Assumes Role" }
+        },
+        {
+            "id": "arrow-eso-secrets",
+            "type": "arrow",
+            "points": [
+                [20, 320],
+                [1100, 35]
+            ],
+            "start": { "type": "point", "x": 20, "y": 320 },
+            "end": { "type": "point", "x": 1100, "y": 35 },
+            "label": { "text": "ESO reads secrets" }
+        },
+        {
+            "id": "label-isolation",
+            "type": "text",
+            "x": 500,
+            "y": 710,
+            "width": 430,
+            "height": 100,
+            "label": {
+                "text": "Label-Based Isolation:\n1. Karpenter places pod based on label.\n2. Cilium policy restricts network via label.\n3. Istio policy authorizes at L7 via label.",
+                "fontSize": 12,
+                "fontFamily": 1,
+                "textAlign": "left",
+                "verticalAlign": "middle"
+            }
+        }
+    ]
+}
