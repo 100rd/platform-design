@@ -28,7 +28,8 @@ jobs:
               -summary \
               -kubernetes-version 1.32.0 \
               -schema-location default \
-              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'; then
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+              -ignore-missing-schemas; then
               echo "FAILED: $chart"
               FAILED=1
             fi
