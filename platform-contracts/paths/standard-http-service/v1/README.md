@@ -34,6 +34,11 @@ actions, probes, expected responses, compensation, and evidence TTL. Completion 
 
 Any missing, expired, conflicting, or unverifiable result prevents verified completion.
 
+The effect-local `delivery.close-unmerged-draft-pull-request/v1` compensator covers only the
+open-PR side effect before human merge. The path-level
+`delivery.revert-and-prune-preview/v1` action remains a separate composite Saga for a landed
+change and its preview resources; closing a Draft PR cannot satisfy the path-level verifier.
+
 ## Current admission
 
 Only `preview/v1` admits this experimental path. Human merge remains mandatory. Promotion to

@@ -54,6 +54,7 @@ spec:
   registries:
     actions:
       - delivery.await-human-merge/v1
+      - delivery.close-unmerged-draft-pull-request/v1
       - delivery.observe-argocd-sync/v1
       - delivery.open-draft-pull-request/v1
       - delivery.prune-preview-realm/v1
