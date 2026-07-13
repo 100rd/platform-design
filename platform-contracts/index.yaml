@@ -1,0 +1,100 @@
+apiVersion: platform/contracts-index/v1
+kind: PlatformContractIndex
+metadata:
+  owner: platform-team
+  version: v1
+spec:
+  digestAlgorithm: sha256-path-nul-bytes-v1
+  bundleDigest: 40d837bdc2386e6f4e7031b048d64a4224b8398f9810f7ce98ab981200bd9ed6
+  artifacts:
+    - path: entity-classes/environment/v1/entity-class.yaml
+      kind: EntityClass
+      schema: urn:darkfactory:platform-contract:entity-class:v1
+      sha256: 56935e1b40c8d28c6bfde0b17fbd52e6ddbe651ef9c7622fa348d0304e873648
+    - path: entity-classes/http-service/v1/entity-class.yaml
+      kind: EntityClass
+      schema: urn:darkfactory:platform-contract:entity-class:v1
+      sha256: ba9c8c445ff60417160b2712f4a13356bce8ef2a40636c48f8b0d716c847a162
+    - path: paths/standard-http-service/v1/path.yaml
+      kind: PlatformPath
+      schema: urn:darkfactory:platform-contract:platform-path:v1
+      sha256: 5646fbd8a3916216b208c8eb93263a1fa74bc25b9e92b75fc5e522f8549c9ead
+    - path: paths/standard-http-service/v1/request.schema.json
+      kind: Schema
+      schema: https://json-schema.org/draft/2020-12/schema
+      sha256: 439432fd6fcb8b876fe7d9d3498910c96c51ed249b857dc1f376482bd4f17f72
+    - path: products/standard-service/v1/product.yaml
+      kind: PlatformProduct
+      schema: urn:darkfactory:platform-contract:platform-product:v1
+      sha256: 5b6b55edf7b71548b80d4f22a814c9c197b4f4a38c74a7162c120361c9058d84
+    - path: realms/preview/v1/realm.yaml
+      kind: Realm
+      schema: urn:darkfactory:platform-contract:realm:v1
+      sha256: af681d9b167ad8503e26fe957752704b6f2ca3c31d6d888c56382f9ce949d29c
+    - path: schemas/v1/entity-class.schema.json
+      kind: Schema
+      schema: https://json-schema.org/draft/2020-12/schema
+      sha256: 745c089840975f2a363b9cfc09312259a50a667c2345fc5ebac9ab2550a75bc2
+    - path: schemas/v1/platform-path.schema.json
+      kind: Schema
+      schema: https://json-schema.org/draft/2020-12/schema
+      sha256: 37178490442b22c6002887d78d96a638f5ad53cd88d6f3392e7431554236c8a1
+    - path: schemas/v1/platform-product.schema.json
+      kind: Schema
+      schema: https://json-schema.org/draft/2020-12/schema
+      sha256: b66066f71f51531a79528d2fc60a0981440fe5ffa1331abc9ba972c44c9acbea
+    - path: schemas/v1/product-request.schema.json
+      kind: Schema
+      schema: https://json-schema.org/draft/2020-12/schema
+      sha256: af25910db76fdc09a60116ff8456d38e04e0a818960636e5e33bf01e9fc2a8bb
+    - path: schemas/v1/realm.schema.json
+      kind: Schema
+      schema: https://json-schema.org/draft/2020-12/schema
+      sha256: f80e13163bcf41ad5652adc7f772d754c6d308e6c4c3198a01ffc64165119c81
+  registries:
+    actions:
+      - delivery.await-human-merge/v1
+      - delivery.observe-argocd-sync/v1
+      - delivery.open-draft-pull-request/v1
+      - delivery.prune-preview-realm/v1
+      - delivery.revert-and-prune-preview/v1
+      - execution.register-compensation/v1
+      - realm.resolve-preview/v1
+      - source.author-http-service-change/v1
+      - source.inspect-existing-repository/v1
+      - verification.run-http-probes/v1
+      - verification.run-source-gates/v1
+    capabilities:
+      - delivery.argocd/v1
+      - ingress.internal-http/v1
+      - kubernetes.default-deny-network-policy/v1
+      - kubernetes.namespace/v1
+      - kubernetes.resource-quota/v1
+      - runtime.go-1.23/v1
+      - supply-chain.sbom/v1
+      - supply-chain.signature/v1
+    evidenceTypes:
+      - ci.check-run/v1
+      - compensation.result/v1
+      - gitops.revision-status/v1
+      - http.probe-result/v1
+      - kubernetes.realm-boundary/v1
+      - supply-chain.attestation/v1
+    policies:
+      - delivery.human-merge-required/v1
+      - global.no-direct-apply/v1
+      - global.no-main-push/v1
+      - global.no-production-mutation/v1
+      - realm.preview-containment/v1
+      - realm.preview-no-secrets/v1
+      - supply-chain.build-once-by-digest/v1
+    probes:
+      - build.security-gates/v1
+      - build.unit-tests/v1
+      - gitops.argocd-synced-healthy/v1
+      - http.healthz/v1
+      - http.readyz/v1
+      - http.request-contract/v1
+      - realm.preview-containment/v1
+      - realm.preview-pruned/v1
+      - supply-chain.image-attestation/v1

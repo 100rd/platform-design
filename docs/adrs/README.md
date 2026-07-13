@@ -99,6 +99,7 @@ decision.
 | [0052](0052-baremetal-storage-rook-ceph.md) | Bare-metal storage for ML artifacts & state — Rook-Ceph (block/FS/RGW S3) vs Mayastor vs local-path; MinIO/Ceph-RGW artifact store; **requires `rbd`+`ceph` kernel modules in Talos MachineConfig** | Proposed | pending | WS-A/WS-B of Bare-Metal ML platform plan; substitutes GCS `ml-artifact-store`; design 2026-06-15 |
 | [0053](0053-baremetal-gpu-fabric-roce-infiniband.md) | Bare-metal high-performance GPU fabric (RoCEv2/InfiniBand + SR-IOV day-0 → DRANET gated) & on-prem serving front (Gateway API: InferencePool/InferenceObjective + WAF) | Proposed | pending | extends WS-A (fabric/serving axis); bare-metal mirror of ADR-0042; design 2026-06-15 |
 | [0054](0054-baremetal-elasticity-node-lifecycle.md) | Bare-metal elasticity & node lifecycle without a cloud autoscaler — Cluster-API/Sidero vs Metal³ vs robot-API vs static pools; workload scale-to-zero | Proposed | pending | WS-A of Bare-Metal ML platform plan; replaces GKE/Karpenter autoscaling; design 2026-06-15 |
+| [0056](0056-machine-readable-platform-contracts.md) | Machine-readable platform contracts for organizational automation | Accepted | contract published; execution pending | native · Omnius P0 vertical |
 
 
 

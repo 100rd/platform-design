@@ -1,0 +1,6 @@
+# Platform contracts are organizational execution authority. Changes require
+# review by the platform owner before Omnius may consume a new pinned revision.
+/platform-contracts/ @100rd
+/docs/adrs/0056-machine-readable-platform-contracts.md @100rd
+/.github/workflows/platform-contracts-validate.yml @100rd
+/scripts/validate-platform-contracts.py @100rd

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:darkfactory:platform-contract:product-request:v1",
+  "title": "ProductRequest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "metadata", "product", "path", "realmClass", "inputs"],
+  "properties": {
+    "schemaVersion": {"const": "platform/request/v1"},
+    "kind": {"const": "ProductRequest"},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requestId"],
+      "properties": {
+        "requestId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,63}$"}
+      }
+    },
+    "product": {"type": "string", "pattern": "^[a-z][a-z0-9-]+/v[1-9][0-9]*$"},
+    "path": {"type": "string", "pattern": "^[a-z][a-z0-9-]+/v[1-9][0-9]*$"},
+    "realmClass": {"type": "string", "pattern": "^[a-z][a-z0-9-]+/v[1-9][0-9]*$"},
+    "inputs": {"type": "object"}
+  }
+}

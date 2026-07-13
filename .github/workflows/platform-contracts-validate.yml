@@ -1,0 +1,35 @@
+name: Platform contract validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "platform-contracts/**"
+      - "scripts/validate-platform-contracts.py"
+      - "scripts/requirements-platform-contracts.txt"
+      - ".github/workflows/platform-contracts-validate.yml"
+  pull_request:
+    paths:
+      - "platform-contracts/**"
+      - "scripts/validate-platform-contracts.py"
+      - "scripts/requirements-platform-contracts.txt"
+      - ".github/workflows/platform-contracts-validate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scripts/requirements-platform-contracts.txt
+      - name: Install validator dependencies
+        run: pip install -r scripts/requirements-platform-contracts.txt
+      - name: Validate schemas, digests, references, and fixtures
+        run: python3 scripts/validate-platform-contracts.py

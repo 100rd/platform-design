@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:darkfactory:platform-contract:entity-class:v1",
+  "title": "EntityClass v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "metadata", "requiredCapabilities", "naming", "lifecycle", "probes", "compensation", "allowedRealms"],
+  "properties": {
+    "schemaVersion": {"const": "platform/entity-class/v1"},
+    "kind": {"const": "EntityClass"},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "owner", "state"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[A-Z][A-Za-z0-9]{2,63}$"},
+        "version": {"type": "string", "pattern": "^v[1-9][0-9]*$"},
+        "owner": {"type": "string", "pattern": "^[a-z][a-z0-9-]{2,62}$"},
+        "state": {"enum": ["draft", "experimental", "validated", "approved", "deprecated"]}
+      }
+    },
+    "requiredCapabilities": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9.-]+/v[1-9][0-9]*$"}
+    },
+    "naming": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pattern", "maxLength"],
+      "properties": {
+        "pattern": {"type": "string", "minLength": 3, "maxLength": 160},
+        "maxLength": {"type": "integer", "minimum": 16, "maximum": 253}
+      }
+    },
+    "lifecycle": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": {"enum": ["create", "observe", "update", "delete"]}
+    },
+    "probes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "phase", "required"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9.-]+/v[1-9][0-9]*$"},
+          "phase": {"enum": ["preflight", "delivery", "runtime", "compensation"]},
+          "required": {"type": "boolean"}
+        }
+      }
+    },
+    "compensation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "verifier"],
+      "properties": {
+        "action": {"type": "string", "pattern": "^[a-z][a-z0-9.-]+/v[1-9][0-9]*$"},
+        "verifier": {"type": "string", "pattern": "^[a-z][a-z0-9.-]+/v[1-9][0-9]*$"}
+      }
+    },
+    "allowedRealms": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]+/v[1-9][0-9]*$"}
+    }
+  }
+}
