@@ -1,0 +1,37 @@
+schemaVersion: platform/realm/v1
+kind: Realm
+metadata:
+  name: preview
+  version: v2
+  owner: platform-team
+  state: experimental
+resolution:
+  requestedClass: preview
+  effectiveNameTemplate: preview-{workOrderId}
+  derivedBy: realm.resolve-preview/v1
+admission:
+  pathStates:
+    - experimental
+    - validated
+    - approved
+  paths:
+    - standard-http-service/v2
+namespace:
+  dedicated: true
+  defaultDeny: true
+  quotaProfile: preview-small
+  deleteOnCompletion: true
+boundaries:
+  productionCredentials: deny
+  crossRealmMutation: deny
+  sharedStateMutation: deny
+  dataMutation: deny
+  runtimeSecrets: deny
+  directApply: deny
+policyRefs:
+  - global.no-main-push/v1
+  - global.no-direct-apply/v1
+  - global.no-production-mutation/v1
+  - realm.preview-containment/v1
+  - realm.preview-no-secrets/v1
+  - delivery.human-merge-required/v1

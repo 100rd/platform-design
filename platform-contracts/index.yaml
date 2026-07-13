@@ -5,16 +5,28 @@ metadata:
   version: v1
 spec:
   digestAlgorithm: sha256-path-nul-bytes-v1
-  bundleDigest: 40d837bdc2386e6f4e7031b048d64a4224b8398f9810f7ce98ab981200bd9ed6
+  bundleDigest: 11454cd89172c44a8ddbf021a44f41724e20e3e94180e4450f8f7bc78e2f0697
   artifacts:
+    - path: delivery-profiles/argocd-preview-http-service/v1/profile.yaml
+      kind: PlatformDeliveryProfile
+      schema: urn:darkfactory:platform-contract:delivery-profile:v1
+      sha256: 6eb7e8681331cccff2a1e9e46a59a216dd0e69ec5014589a1212e51bb4afbac8
     - path: entity-classes/environment/v1/entity-class.yaml
       kind: EntityClass
       schema: urn:darkfactory:platform-contract:entity-class:v1
       sha256: 56935e1b40c8d28c6bfde0b17fbd52e6ddbe651ef9c7622fa348d0304e873648
+    - path: entity-classes/environment/v2/entity-class.yaml
+      kind: EntityClass
+      schema: urn:darkfactory:platform-contract:entity-class:v1
+      sha256: 5b1b541df319b408804b79b01b579db150ba9d98299dae307bd6a6567378ecad
     - path: entity-classes/http-service/v1/entity-class.yaml
       kind: EntityClass
       schema: urn:darkfactory:platform-contract:entity-class:v1
       sha256: ba9c8c445ff60417160b2712f4a13356bce8ef2a40636c48f8b0d716c847a162
+    - path: entity-classes/http-service/v2/entity-class.yaml
+      kind: EntityClass
+      schema: urn:darkfactory:platform-contract:entity-class:v1
+      sha256: 13709c261c6b67193f9a7ff02a6f87c0084c425ff5a6fc2608973b8efd4e74d8
     - path: paths/standard-http-service/v1/path.yaml
       kind: PlatformPath
       schema: urn:darkfactory:platform-contract:platform-path:v1
@@ -23,14 +35,34 @@ spec:
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
       sha256: 439432fd6fcb8b876fe7d9d3498910c96c51ed249b857dc1f376482bd4f17f72
+    - path: paths/standard-http-service/v2/path.yaml
+      kind: PlatformPath
+      schema: urn:darkfactory:platform-contract:platform-path:v2
+      sha256: 6c71ce1eb084699aba90ba83611a004747bbb88f611cedf48d1deb12e0cb9209
+    - path: paths/standard-http-service/v2/request.schema.json
+      kind: Schema
+      schema: https://json-schema.org/draft/2020-12/schema
+      sha256: c33cf5edb1926706a1feefe465cbdbd64fa005b6a166c9e7df310d1c427cc078
     - path: products/standard-service/v1/product.yaml
       kind: PlatformProduct
       schema: urn:darkfactory:platform-contract:platform-product:v1
       sha256: 5b6b55edf7b71548b80d4f22a814c9c197b4f4a38c74a7162c120361c9058d84
+    - path: products/standard-service/v2/product.yaml
+      kind: PlatformProduct
+      schema: urn:darkfactory:platform-contract:platform-product:v1
+      sha256: 3871ff2ab767e62e66f409b1955a6ca1579011702b18a8a2179f9e7302e7e431
     - path: realms/preview/v1/realm.yaml
       kind: Realm
       schema: urn:darkfactory:platform-contract:realm:v1
       sha256: af681d9b167ad8503e26fe957752704b6f2ca3c31d6d888c56382f9ce949d29c
+    - path: realms/preview/v2/realm.yaml
+      kind: Realm
+      schema: urn:darkfactory:platform-contract:realm:v1
+      sha256: fdb5f2cebcd0444a6a99cc30e233d9fb60199b66c27d4c1c6fbfb5552f8a7d7d
+    - path: schemas/v1/delivery-profile.schema.json
+      kind: Schema
+      schema: https://json-schema.org/draft/2020-12/schema
+      sha256: c7e8cde98c470a383214e5b0152ada5ae87826b492e64b173cceb919a4439e69
     - path: schemas/v1/entity-class.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
@@ -51,6 +83,10 @@ spec:
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
       sha256: f80e13163bcf41ad5652adc7f772d754c6d308e6c4c3198a01ffc64165119c81
+    - path: schemas/v2/platform-path.schema.json
+      kind: Schema
+      schema: https://json-schema.org/draft/2020-12/schema
+      sha256: c22396e37ddbec21e326b2b5bdf0728b935c8042c680ba29f0c01d82b2e58396
   registries:
     actions:
       - delivery.await-human-merge/v1
@@ -88,6 +124,7 @@ spec:
       - global.no-production-mutation/v1
       - realm.preview-containment/v1
       - realm.preview-no-secrets/v1
+      - source.repository-owner-authorized/v1
       - supply-chain.build-once-by-digest/v1
     probes:
       - build.security-gates/v1

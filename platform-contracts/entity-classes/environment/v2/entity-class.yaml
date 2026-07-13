@@ -1,0 +1,30 @@
+schemaVersion: platform/entity-class/v1
+kind: EntityClass
+metadata:
+  name: Environment
+  version: v2
+  owner: platform-team
+  state: experimental
+requiredCapabilities:
+  - kubernetes.namespace/v1
+  - kubernetes.resource-quota/v1
+  - kubernetes.default-deny-network-policy/v1
+naming:
+  pattern: ^preview-[a-z0-9][a-z0-9-]{7,52}$
+  maxLength: 63
+lifecycle:
+  - create
+  - observe
+  - delete
+probes:
+  - id: realm.preview-containment/v1
+    phase: preflight
+    required: true
+  - id: realm.preview-pruned/v1
+    phase: compensation
+    required: true
+compensation:
+  action: delivery.prune-preview-realm/v1
+  verifier: realm.preview-pruned/v1
+allowedRealms:
+  - preview/v2

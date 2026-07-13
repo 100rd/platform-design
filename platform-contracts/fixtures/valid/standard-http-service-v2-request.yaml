@@ -1,0 +1,23 @@
+schemaVersion: platform/request/v1
+kind: ProductRequest
+metadata:
+  requestId: wo-01j2k3m4n5p6q7r8
+product: standard-service/v2
+path: standard-http-service/v2
+realmClass: preview/v2
+inputs:
+  serviceName: payments-api
+  ownerRef: team:payments
+  repositoryRef: github:example-org/payments-api
+  sourceSubpath: services/payments
+  runtime: go-1.23
+  exposure: internal
+  port: 8080
+  resourceProfile: small
+  acceptance:
+    - method: GET
+      path: /path/v2/payments
+      expected:
+        status: 200
+        jsonSubset:
+          ready: true

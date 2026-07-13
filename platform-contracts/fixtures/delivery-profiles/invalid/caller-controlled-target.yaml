@@ -1,0 +1,62 @@
+schemaVersion: platform/delivery-profile/v1
+kind: PlatformDeliveryProfile
+metadata: {name: caller-controlled-target, version: v1, owner: platform-team, state: experimental}
+path: standard-http-service/v1
+mechanism: delivery.argocd/v1
+templateBindings:
+  workOrderIdFrom: workOrder.id
+  serviceNameFrom: request.inputs.serviceName
+  realmNameFrom: realm.effectiveName
+source:
+  repositoryFrom: request.inputs.gitopsRepository
+  repositoryAuthorization:
+    policy: source.repository-owner-authorized/v1
+    subjectFrom: workOrder.authenticatedRequester
+    ownerFrom: request.inputs.ownerRef
+    repositoryFrom: request.inputs.repositoryRef
+    credentialScope: exact-repository
+    onMissing: deny
+  gitopsPathTemplate: deploy/preview/{serviceName}/{workOrderId}
+  targetRevisionFrom: request.inputs.branch
+  imageDigestFrom: request.inputs.image
+  desiredInventoryFrom: workflow.validate-change.renderedManifestDigest
+  singleRepository: true
+application:
+  controlPlaneRef: argocd:preview-primary
+  namespace: argocd
+  nameTemplate: preview-{workOrderId}
+  project: preview
+  requiredLabels:
+    darkfactory.platform/path: standard-http-service-v1
+    darkfactory.platform/realm: "{realmName}"
+    darkfactory.platform/work-order: "{workOrderId}"
+destination: {clusterRef: "kubernetes:preview-primary", namespaceTemplate: "preview-{workOrderId}"}
+resourceEnvelope:
+  requiredKinds: [v1/Namespace]
+  allowedKinds: [v1/Namespace]
+  clusterScopedBindings: [{kind: v1/Namespace, nameFrom: destination.namespaceTemplate, maxCount: 1}]
+  ownershipLabel: darkfactory.platform/work-order
+  ownershipValueFrom: workOrder.id
+  requiredAssertions: [dedicated-namespace]
+observations:
+  action: delivery.observe-argocd-sync/v1
+  gitopsProbe: gitops.argocd-synced-healthy/v1
+  gitopsEvidenceType: gitops.revision-status/v1
+  realmProbe: realm.preview-containment/v1
+  realmEvidenceType: kubernetes.realm-boundary/v1
+  requiredSyncStatus: Synced
+  requiredHealthStatus: Healthy
+  exactRevision: true
+  exactImageDigest: true
+compensation:
+  action: delivery.revert-and-prune-preview/v1
+  verifier: realm.preview-pruned/v1
+  evidenceType: compensation.result/v1
+  scope:
+    repositoryFrom: source.repositoryFrom
+    gitopsPathFrom: source.gitopsPathTemplate
+    applicationNameFrom: application.nameTemplate
+    destinationNamespaceFrom: destination.namespaceTemplate
+    inventoryDigestFrom: source.desiredInventoryFrom
+    ownershipLabelFrom: resourceEnvelope.ownershipLabel
+    ownershipValueFrom: resourceEnvelope.ownershipValueFrom
