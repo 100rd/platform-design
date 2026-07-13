@@ -32,13 +32,23 @@ variables, free-form scripts, and direct apply/deploy are outside this contract.
 3. The bundle digest is calculated over the authoritative files listed in the index, in
    lexical path order, as `path + NUL + bytes`. The index itself is excluded to avoid a
    self-referential digest. Every listed file also has an individual SHA-256.
-4. Platform products, entity classes, Realms, paths, and requests remain distinct artifacts.
+4. Platform products, entity classes, Realms, delivery profiles, paths, and requests remain distinct artifacts.
    JSON Schema Draft 2020-12 with stable `urn:darkfactory:platform-contract:*` identifiers is
    the compatibility boundary. No schema service or GitHub Pages publication is introduced.
 5. `standard-http-service/v1` enters in `experimental` state and is admitted only to the
    `preview/v1` Realm class. Lower-environment evidence is required before any later promotion.
 6. Omnius receives only registered action, policy, and probe identifiers. The path cannot
    contain raw commands or implementation-specific apply authority.
+7. Each executable path references one indexed `PlatformDeliveryProfile`. The platform owner uses
+   that closed artifact to fix trusted source bindings, GitOps naming and topology references,
+   resource envelopes, observation rules, and compensation. Omnius resolves logical endpoint
+   references through separately governed adapter configuration and never accepts delivery targets
+   from a request or model.
+8. Adding the mandatory delivery-profile reference creates `platform/path/v2` and a new immutable
+   `standard-service/v2` → `standard-http-service/v2` → `preview/v2` graph. The complete v1 graph
+   and schema remain byte-compatible with their original contract. The initial delivery profile
+   also requires an authenticated repository-ownership policy decision and binds its sole Namespace
+   and compensation targets to the WorkOrder identity.
 
 ## Alternatives considered
 

@@ -1,0 +1,23 @@
+schemaVersion: platform/product/v1
+kind: PlatformProduct
+metadata:
+  name: standard-service
+  version: v2
+  owner: platform-team
+  lifecycle: experimental
+consumers:
+  - human
+  - agent
+paths:
+  - standard-http-service/v2
+support:
+  slo: platform-gold
+  supportOwner: platform-team
+  lifecyclePolicy: platform-product-lifecycle/v1
+economics:
+  costModel: per-instance
+  budgetProfile: preview-small
+success:
+  adoptionMetric: platform_path.completed_requests
+  outcomeMetric: platform_path.verified_completion_ratio
+  retirementSignal: Retire when the path has no supported consumers for two review periods.
