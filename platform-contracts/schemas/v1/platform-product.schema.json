@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:darkfactory:platform-contract:platform-product:v1",
+  "title": "PlatformProduct v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "metadata", "consumers", "paths", "support", "economics", "success"],
+  "properties": {
+    "schemaVersion": {"const": "platform/product/v1"},
+    "kind": {"const": "PlatformProduct"},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "owner", "lifecycle"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]{2,62}$"},
+        "version": {"type": "string", "pattern": "^v[1-9][0-9]*$"},
+        "owner": {"type": "string", "pattern": "^[a-z][a-z0-9-]{2,62}$"},
+        "lifecycle": {"enum": ["draft", "experimental", "validated", "approved", "deprecated"]}
+      }
+    },
+    "consumers": {
+      "type": "array",
+      "uniqueItems": true,
+      "minItems": 2,
+      "items": {"enum": ["human", "agent"]}
+    },
+    "paths": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]+/v[1-9][0-9]*$"}
+    },
+    "support": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slo", "supportOwner", "lifecyclePolicy"],
+      "properties": {
+        "slo": {"type": "string", "pattern": "^[a-z][a-z0-9-]+$"},
+        "supportOwner": {"type": "string", "pattern": "^[a-z][a-z0-9-]+$"},
+        "lifecyclePolicy": {"type": "string", "pattern": "^[a-z][a-z0-9-]+/v[1-9][0-9]*$"}
+      }
+    },
+    "economics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["costModel", "budgetProfile"],
+      "properties": {
+        "costModel": {"enum": ["per-instance", "per-request", "allocated-shared"]},
+        "budgetProfile": {"type": "string", "pattern": "^[a-z][a-z0-9-]+$"}
+      }
+    },
+    "success": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adoptionMetric", "outcomeMetric", "retirementSignal"],
+      "properties": {
+        "adoptionMetric": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]+$"},
+        "outcomeMetric": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]+$"},
+        "retirementSignal": {"type": "string", "minLength": 10, "maxLength": 240}
+      }
+    }
+  }
+}

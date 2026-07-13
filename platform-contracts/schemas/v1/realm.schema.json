@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:darkfactory:platform-contract:realm:v1",
+  "title": "Realm v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "metadata", "resolution", "admission", "namespace", "boundaries", "policyRefs"],
+  "properties": {
+    "schemaVersion": {"const": "platform/realm/v1"},
+    "kind": {"const": "Realm"},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "owner", "state"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]{2,62}$"},
+        "version": {"type": "string", "pattern": "^v[1-9][0-9]*$"},
+        "owner": {"type": "string", "pattern": "^[a-z][a-z0-9-]{2,62}$"},
+        "state": {"enum": ["draft", "experimental", "validated", "approved", "deprecated"]}
+      }
+    },
+    "resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requestedClass", "effectiveNameTemplate", "derivedBy"],
+      "properties": {
+        "requestedClass": {"type": "string", "pattern": "^[a-z][a-z0-9-]+$"},
+        "effectiveNameTemplate": {"type": "string", "pattern": "^preview-\\{workOrderId\\}$"},
+        "derivedBy": {"type": "string", "pattern": "^[a-z][a-z0-9.-]+/v[1-9][0-9]*$"}
+      }
+    },
+    "admission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pathStates", "paths"],
+      "properties": {
+        "pathStates": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"enum": ["experimental", "validated", "approved"]}
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]+/v[1-9][0-9]*$"}
+        }
+      }
+    },
+    "namespace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dedicated", "defaultDeny", "quotaProfile", "deleteOnCompletion"],
+      "properties": {
+        "dedicated": {"const": true},
+        "defaultDeny": {"const": true},
+        "quotaProfile": {"type": "string", "pattern": "^[a-z][a-z0-9-]+$"},
+        "deleteOnCompletion": {"const": true}
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["productionCredentials", "crossRealmMutation", "sharedStateMutation", "dataMutation", "runtimeSecrets", "directApply"],
+      "properties": {
+        "productionCredentials": {"const": "deny"},
+        "crossRealmMutation": {"const": "deny"},
+        "sharedStateMutation": {"const": "deny"},
+        "dataMutation": {"const": "deny"},
+        "runtimeSecrets": {"const": "deny"},
+        "directApply": {"const": "deny"}
+      }
+    },
+    "policyRefs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9.-]+/v[1-9][0-9]*$"}
+    }
+  }
+}
