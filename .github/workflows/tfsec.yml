@@ -53,7 +53,7 @@ jobs:
     # Remove once SYNC_ROADMAP Phase 1.1 violations are remediated.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Run TFSec on terraform/modules/
         uses: aquasecurity/tfsec-action@v1.0.3
@@ -86,7 +86,7 @@ jobs:
     # Remove once SYNC_ROADMAP Phase 1.1 violations are remediated.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Run TFSec on catalog/
         uses: aquasecurity/tfsec-action@v1.0.3
@@ -117,7 +117,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install TFSec
         run: |
