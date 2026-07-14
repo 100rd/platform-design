@@ -8,6 +8,7 @@
     "schemaVersion",
     "platformCommitSha",
     "platformBundleDigest",
+    "executionEnvelopeDigest",
     "workOrderId",
     "subject",
     "identityBinding",
@@ -17,6 +18,8 @@
     "controlInventoryDigest",
     "cluster",
     "objects",
+    "positiveAuthorization",
+    "positiveAuthorizationMatrixDigest",
     "negativeAuthorization",
     "negativeAuthorizationMatrixDigest",
     "inheritedAuthority",
@@ -32,6 +35,7 @@
     "schemaVersion": {"const": "delivery/observer-access-attestation/v1"},
     "platformCommitSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "platformBundleDigest": {"$ref": "#/$defs/digest"},
+    "executionEnvelopeDigest": {"$ref": "#/$defs/digest"},
     "workOrderId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,52}$"},
     "subject": {"type": "string", "pattern": "^system:serviceaccount:darkfactory-observers:obs-[a-z0-9][a-z0-9-]{7,52}$"},
     "identityBinding": {
@@ -80,6 +84,43 @@
         "serviceAccount": {"$ref": "#/$defs/serviceAccount"}
       }
     },
+    "positiveAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "application-get",
+        "deployment-list",
+        "endpointslice-list",
+        "ingress-list",
+        "namespace-get",
+        "networkpolicy-list",
+        "persistentvolumeclaim-list",
+        "pod-list",
+        "replicaset-list",
+        "resourcequota-list",
+        "role-list",
+        "rolebinding-list",
+        "service-list",
+        "serviceaccount-list"
+      ],
+      "properties": {
+        "application-get": {"$ref": "#/$defs/allowResult"},
+        "deployment-list": {"$ref": "#/$defs/allowResult"},
+        "endpointslice-list": {"$ref": "#/$defs/allowResult"},
+        "ingress-list": {"$ref": "#/$defs/allowResult"},
+        "namespace-get": {"$ref": "#/$defs/allowResult"},
+        "networkpolicy-list": {"$ref": "#/$defs/allowResult"},
+        "persistentvolumeclaim-list": {"$ref": "#/$defs/allowResult"},
+        "pod-list": {"$ref": "#/$defs/allowResult"},
+        "replicaset-list": {"$ref": "#/$defs/allowResult"},
+        "resourcequota-list": {"$ref": "#/$defs/allowResult"},
+        "role-list": {"$ref": "#/$defs/allowResult"},
+        "rolebinding-list": {"$ref": "#/$defs/allowResult"},
+        "service-list": {"$ref": "#/$defs/allowResult"},
+        "serviceaccount-list": {"$ref": "#/$defs/allowResult"}
+      }
+    },
+    "positiveAuthorizationMatrixDigest": {"$ref": "#/$defs/digest"},
     "negativeAuthorization": {
       "type": "object",
       "additionalProperties": false,
@@ -195,6 +236,16 @@
   },
   "$defs": {
     "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "allowResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "requestDigest", "responseDigest"],
+      "properties": {
+        "decision": {"const": "allowed"},
+        "requestDigest": {"$ref": "#/$defs/digest"},
+        "responseDigest": {"$ref": "#/$defs/digest"}
+      }
+    },
     "denialResult": {
       "type": "object",
       "additionalProperties": false,

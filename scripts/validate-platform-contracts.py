@@ -1273,10 +1273,28 @@ def validate_runtime_schema_examples(
         "service-proxy-get",
         "tokenrequest-create",
     )
+    positive_cases = (
+        "application-get",
+        "deployment-list",
+        "endpointslice-list",
+        "ingress-list",
+        "namespace-get",
+        "networkpolicy-list",
+        "persistentvolumeclaim-list",
+        "pod-list",
+        "replicaset-list",
+        "resourcequota-list",
+        "role-list",
+        "rolebinding-list",
+        "service-list",
+        "serviceaccount-list",
+    )
+    execution_envelope_digest = digest_for("execution-envelope")
     attestation = {
         "schemaVersion": "delivery/observer-access-attestation/v1",
         "platformCommitSha": "c" * 40,
         "platformBundleDigest": index["spec"]["bundleDigest"],
+        "executionEnvelopeDigest": execution_envelope_digest,
         "workOrderId": work_order_id,
         "subject": (
             "system:serviceaccount:darkfactory-observers:"
@@ -1321,6 +1339,15 @@ def validate_runtime_schema_examples(
                 "v1", "ServiceAccount", observer_name, "darkfactory-observers"
             ),
         },
+        "positiveAuthorization": {
+            case: {
+                "decision": "allowed",
+                "requestDigest": digest_for(f"request:{case}"),
+                "responseDigest": digest_for(f"response:{case}"),
+            }
+            for case in positive_cases
+        },
+        "positiveAuthorizationMatrixDigest": digest_for("positive-matrix"),
         "negativeAuthorization": {
             case: {
                 "decision": "denied",
@@ -1574,6 +1601,8 @@ def validate_runtime_schema_examples(
         )
         if authority["platformBundleDigest"] != index["spec"]["bundleDigest"]:
             raise ContractError("RBAC attestation is bound to another platform bundle")
+        if authority["executionEnvelopeDigest"] != execution_envelope_digest:
+            raise ContractError("RBAC attestation is bound to another execution envelope")
         if authority["profileDigest"] != delivery_profile_digest:
             raise ContractError("RBAC attestation is bound to another delivery profile")
         work_order_values = {
@@ -1845,6 +1874,16 @@ def validate_runtime_schema_examples(
         )
     )
 
+    denied_positive = copy.deepcopy(attestation)
+    denied_positive["positiveAuthorization"]["application-get"]["decision"] = "denied"
+    invalid_examples.append(
+        (
+            "denied required observer permission",
+            "urn:darkfactory:platform-contract:observer-access-attestation:v1",
+            denied_positive,
+        )
+    )
+
     wrong_snapshot = copy.deepcopy(observation)
     wrong_snapshot["finalCollectionSnapshots"]["v1-pods"]["kindId"] = "v1/Service"
     invalid_examples.append(
@@ -1906,6 +1945,20 @@ def validate_runtime_schema_examples(
         (
             "foreign platform bundle",
             foreign_platform_bundle,
+            scope,
+            observation,
+            cleanup,
+        )
+    )
+
+    foreign_execution_envelope = copy.deepcopy(attestation)
+    foreign_execution_envelope["executionEnvelopeDigest"] = digest_for(
+        "foreign-execution-envelope"
+    )
+    semantic_mutations.append(
+        (
+            "foreign execution envelope",
+            foreign_execution_envelope,
             scope,
             observation,
             cleanup,

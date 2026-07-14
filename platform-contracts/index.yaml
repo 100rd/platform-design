@@ -5,7 +5,7 @@ metadata:
   version: v1
 spec:
   digestAlgorithm: sha256-path-nul-bytes-v1
-  bundleDigest: ec63c48e977ceb96240825322f3693cb7b49bdc9ba6a4e3c2acfa6e3ae7bc20f
+  bundleDigest: ff74f28a6b5177990628e3b7994a058fabc6b6db622d1c9f0b8c3154a2f8fd66
   artifacts:
     - path: attestor-profiles/eks-kms-ed25519/v1/profile.yaml
       kind: ObserverAttestorProfile
@@ -130,7 +130,7 @@ spec:
     - path: schemas/v1/observer-access-attestation.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
-      sha256: 92bce914170b6a79cc4d9977e9c7d69a755575c7c94e6602f56f858d06a0622e
+      sha256: e9f65ffdf55a1d97a674a4a016f93a5fff7cae48367143251af8df7fcc8be771
     - path: schemas/v1/observer-access-cleanup-evidence.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema

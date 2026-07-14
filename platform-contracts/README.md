@@ -92,7 +92,9 @@ trusted signer.
 The draft attestor catalog separates `kind-development/v1` from `eks-kms-ed25519/v1`. Both remain
 `readinessEligible: false`. Authority evidence binds the exact platform revision and bundle, cluster
 identity, five-minute expiry, trust-profile identity, and a domain-separated Ed25519 payload. The
-local process-memory key can qualify behavior but cannot satisfy a readiness profile.
+signed execution-envelope digest plus closed required-positive and forbidden-negative authorization
+matrices are part of the same evidence. The local process-memory key can qualify behavior but cannot
+satisfy a readiness profile.
 
 Normal cleanup revokes the lease, revalidates and deletes only six exact WorkOrder-owned objects in
 the specified order using attested UID and resourceVersion DELETE preconditions, verifies their
