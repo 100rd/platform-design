@@ -418,7 +418,9 @@ runtimeVerification:
     audienceFrom: adapter.destination.tokenAudience
     apiServerFrom: adapter.destination.apiServer
     caSha256From: adapter.destination.caSha256
-    maxLifetime: PT5M
+    requestedLifetime: PT10M
+    maxActualLifetime: PT10M
+    minimumRemainingAtStart: PT4M5S
     absoluteDeadline: PT4M
     maxResponseBytes: 1048576
     operations: [deployments.list, endpointslices.list, namespace.get, networkpolicies.list, pods.list, replicasets.list, services.list]
@@ -438,6 +440,18 @@ runtimeVerification:
     observedPolicySnapshotFrom: evidence.kubernetes.delivery-observation.finalCollectionSnapshots.networking-v1-networkpolicies
     requiredAssertion: http-verifier-ingress-only
     callerNetworkTargetAccepted: false
+  evidenceCommit:
+    action: evidence.store-http-probe-result/v1
+    storeProfileFrom: adapter.httpVerification.evidenceStoreProfile
+    storeProfileDigestFrom: executionEnvelope.httpEvidenceStoreProfileDigest
+    objectKeyTemplate: http-probe-result/v1/{workOrderId}/{runId}.json
+    writePrecondition: if-none-match-star-policy-enforced
+    readBack: exact-canonical-bytes-and-evidence-digest
+    identicalReplay: idempotent-committed
+    sameKeyConflict: park-and-escalate
+    receiptSchema: urn:darkfactory:platform-contract:http-evidence-commit-receipt:v1
+    receiptEvidenceType: http.probe-commit-receipt/v1
+    cleanupOnFailure: always-attempt-without-completion
 compensation:
   action: delivery.revert-prune-and-revoke-preview/v2
   verifier: realm.preview-and-observer-pruned/v1

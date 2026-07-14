@@ -205,7 +205,7 @@
     "runtimeVerification": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["action", "profile", "profileSchema", "subjectSchema", "resultSchema", "evidenceType", "deliveryObservationSchemaFrom", "credential", "network"],
+      "required": ["action", "profile", "profileSchema", "subjectSchema", "resultSchema", "evidenceType", "deliveryObservationSchemaFrom", "credential", "network", "evidenceCommit"],
       "properties": {
         "action": {"const": "verification.run-http-probes/v1"},
         "profile": {"const": "http-preview-service/v1"},
@@ -217,7 +217,7 @@
         "credential": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["authority", "serviceAccountFrom", "issueAction", "audienceFrom", "apiServerFrom", "caSha256From", "maxLifetime", "absoluteDeadline", "maxResponseBytes", "operations", "kindIds", "subjectIssuerProfileFrom"],
+          "required": ["authority", "serviceAccountFrom", "issueAction", "audienceFrom", "apiServerFrom", "caSha256From", "requestedLifetime", "maxActualLifetime", "minimumRemainingAtStart", "absoluteDeadline", "maxResponseBytes", "operations", "kindIds", "subjectIssuerProfileFrom"],
           "properties": {
             "authority": {"const": "platform-control-plane"},
             "serviceAccountFrom": {"const": "observerAccess.serviceAccount.nameTemplate"},
@@ -225,7 +225,9 @@
             "audienceFrom": {"const": "adapter.destination.tokenAudience"},
             "apiServerFrom": {"const": "adapter.destination.apiServer"},
             "caSha256From": {"const": "adapter.destination.caSha256"},
-            "maxLifetime": {"const": "PT5M"},
+            "requestedLifetime": {"const": "PT10M"},
+            "maxActualLifetime": {"const": "PT10M"},
+            "minimumRemainingAtStart": {"const": "PT4M5S"},
             "absoluteDeadline": {"const": "PT4M"},
             "maxResponseBytes": {"const": 1048576},
             "operations": {"const": ["deployments.list", "endpointslices.list", "namespace.get", "networkpolicies.list", "pods.list", "replicasets.list", "services.list"]},
@@ -251,6 +253,24 @@
             "observedPolicySnapshotFrom": {"const": "evidence.kubernetes.delivery-observation.finalCollectionSnapshots.networking-v1-networkpolicies"},
             "requiredAssertion": {"const": "http-verifier-ingress-only"},
             "callerNetworkTargetAccepted": {"const": false}
+          }
+        },
+        "evidenceCommit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["action", "storeProfileFrom", "storeProfileDigestFrom", "objectKeyTemplate", "writePrecondition", "readBack", "identicalReplay", "sameKeyConflict", "receiptSchema", "receiptEvidenceType", "cleanupOnFailure"],
+          "properties": {
+            "action": {"const": "evidence.store-http-probe-result/v1"},
+            "storeProfileFrom": {"const": "adapter.httpVerification.evidenceStoreProfile"},
+            "storeProfileDigestFrom": {"const": "executionEnvelope.httpEvidenceStoreProfileDigest"},
+            "objectKeyTemplate": {"const": "http-probe-result/v1/{workOrderId}/{runId}.json"},
+            "writePrecondition": {"const": "if-none-match-star-policy-enforced"},
+            "readBack": {"const": "exact-canonical-bytes-and-evidence-digest"},
+            "identicalReplay": {"const": "idempotent-committed"},
+            "sameKeyConflict": {"const": "park-and-escalate"},
+            "receiptSchema": {"const": "urn:darkfactory:platform-contract:http-evidence-commit-receipt:v1"},
+            "receiptEvidenceType": {"const": "http.probe-commit-receipt/v1"},
+            "cleanupOnFailure": {"const": "always-attempt-without-completion"}
           }
         }
       }

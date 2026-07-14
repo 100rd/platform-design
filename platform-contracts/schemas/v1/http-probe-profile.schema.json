@@ -131,7 +131,7 @@
     "evidence": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["subjectSchema", "resultSchema", "evidenceType", "canonicalization", "digestAlgorithm", "signatureAlgorithm", "verifierProfileFrom", "signingKeyFrom", "workerEvidenceAccepted", "rawResponseStored"],
+      "required": ["subjectSchema", "resultSchema", "evidenceType", "canonicalization", "digestAlgorithm", "signatureAlgorithm", "signaturePayloadProfile", "signatureDomain", "verifierProfileFrom", "signingKeyFrom", "workerEvidenceAccepted", "rawResponseStored"],
       "properties": {
         "subjectSchema": {"const": "urn:darkfactory:platform-contract:http-probe-subject:v1"},
         "resultSchema": {"const": "urn:darkfactory:platform-contract:http-probe-result:v1"},
@@ -139,6 +139,8 @@
         "canonicalization": {"const": "rfc8785-json-canonicalization/v1"},
         "digestAlgorithm": {"const": "sha256"},
         "signatureAlgorithm": {"const": "Ed25519"},
+        "signaturePayloadProfile": {"const": "domain-separated-evidence-digest/v1"},
+        "signatureDomain": {"const": "darkfactory.http-probe-result/v1"},
         "verifierProfileFrom": {"const": "adapter.httpVerification.verifierProfile"},
         "signingKeyFrom": {"const": "adapter.httpVerification.signingKey"},
         "workerEvidenceAccepted": {"const": false},

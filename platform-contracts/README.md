@@ -72,10 +72,12 @@ resourceVersion; the contract makes no cross-kind atomic-snapshot claim.
 
 For runtime verification the same WorkOrder-specific read-only observer identity gains only
 EndpointSlice list authority in addition to its existing bounded inventory reads. The control plane
-issues a separate five-minute probe credential and a four-minute signed subject after delivery
-evidence is stored. The verifier network source and port 8080 ingress are adapter- and
-NetworkPolicy-derived; requests cannot nominate a destination. Access is revoked after the probes,
-and normal or terminal compensation still proves cleanup.
+issues a separate exact-ten-minute TokenRequest-floor credential and a four-minute signed subject
+after delivery evidence is stored. The verifier network source and port 8080 ingress are adapter- and
+NetworkPolicy-derived; requests cannot nominate a destination. The result signature covers a fixed
+domain plus the canonical evidence digest. A create-only store action reads the exact result back and
+records an immutable receipt before normal revoke. Store failure still triggers fail-safe cleanup but
+cannot satisfy completion; terminal compensation still proves cleanup.
 
 Kubernetes built-in bindings may grant `/api` and `/apis` discovery to authenticated principals. The
 platform-owned rules grant no `nonResourceURLs`, the observer transport exposes no discovery method,
