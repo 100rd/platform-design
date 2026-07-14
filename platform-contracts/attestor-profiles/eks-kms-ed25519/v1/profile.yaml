@@ -1,0 +1,49 @@
+apiVersion: platform/contracts/v1alpha1
+kind: ObserverAttestorProfile
+metadata:
+  name: eks-kms-ed25519
+  version: v1
+  status: draft
+spec:
+  profileId: eks-kms-ed25519/v1
+  trustClass: production
+  readinessEligible: false
+  clusterType: eks
+  runtimeIdentity:
+    type: kubernetes-service-account
+    subject: system:serviceaccount:darkfactory-attestors:observer-rbac-attestor
+    nodeBoundary: platform-control-node-pool
+    observerCredentialAccessible: false
+  kubernetesAuthority:
+    readKindIds:
+      - argoproj.io/v1alpha1/Application
+      - rbac.authorization.k8s.io/v1/ClusterRole
+      - rbac.authorization.k8s.io/v1/ClusterRoleBinding
+      - rbac.authorization.k8s.io/v1/Role
+      - rbac.authorization.k8s.io/v1/RoleBinding
+      - v1/Namespace
+      - v1/ServiceAccount
+    subjectAccessReviewCreate: true
+    impersonate: false
+    secretOrConfigRead: false
+    tokenRequestCreate: false
+    workloadOrRbacMutation: false
+    workOrderSource: signed-execution-envelope/v1
+  signing:
+    algorithm: Ed25519
+    provider: aws-kms
+    providerAlgorithm: ED25519_SHA_512
+    keySpec: ECC_NIST_EDWARDS25519
+    signingKeyIdFrom: adapter.observerAttestor.kmsKeyArn
+    payloadProfile: domain-separated-evidence-digest/v1
+    privateKeyStoredInKubernetes: false
+  evidence:
+    schema: urn:darkfactory:platform-contract:observer-access-attestation:v1
+    maxAge: PT5M
+    binds:
+      - cluster-identity
+      - execution-envelope
+      - live-object-epochs
+      - negative-authorization-matrix
+      - platform-bundle
+      - trust-profile

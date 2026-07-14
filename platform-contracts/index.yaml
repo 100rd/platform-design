@@ -5,8 +5,16 @@ metadata:
   version: v1
 spec:
   digestAlgorithm: sha256-path-nul-bytes-v1
-  bundleDigest: 1c86f50f9463c4d71383663e7dfd450aa10d63b603ebda2a19aac52037167c87
+  bundleDigest: ec63c48e977ceb96240825322f3693cb7b49bdc9ba6a4e3c2acfa6e3ae7bc20f
   artifacts:
+    - path: attestor-profiles/eks-kms-ed25519/v1/profile.yaml
+      kind: ObserverAttestorProfile
+      schema: urn:darkfactory:platform-contract:observer-attestor-profile:v1
+      sha256: 478a5cb8fbeabdfaf1d9b16df6ecb80ef6a310e15fa08e062a2d009738877158
+    - path: attestor-profiles/kind-development/v1/profile.yaml
+      kind: ObserverAttestorProfile
+      schema: urn:darkfactory:platform-contract:observer-attestor-profile:v1
+      sha256: 7d4c7a9fce35523e5cd1a860218de69ed80c339328ac763ec9a12918b0446959
     - path: delivery-profiles/argocd-preview-http-service/v1/profile.yaml
       kind: PlatformDeliveryProfile
       schema: urn:darkfactory:platform-contract:delivery-profile:v1
@@ -14,7 +22,7 @@ spec:
     - path: delivery-profiles/argocd-preview-http-service/v2/profile.yaml
       kind: PlatformDeliveryProfile
       schema: urn:darkfactory:platform-contract:delivery-profile:v2
-      sha256: 19e1fce6de041974c44a2be9f4ad09f5ead3a0a28eb413ff0ef53f986334964e
+      sha256: b79f1d77d887573f2daffa0ebab40c3c70b9ff64a91b124f68f6a635925f9b7a
     - path: entity-classes/environment/v1/entity-class.yaml
       kind: EntityClass
       schema: urn:darkfactory:platform-contract:entity-class:v1
@@ -122,7 +130,7 @@ spec:
     - path: schemas/v1/observer-access-attestation.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
-      sha256: 9f6644383a0c1728f5333ad84050012019e5559815e9e39c1bf0f525bb7a5c53
+      sha256: 92bce914170b6a79cc4d9977e9c7d69a755575c7c94e6602f56f858d06a0622e
     - path: schemas/v1/observer-access-cleanup-evidence.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
@@ -130,7 +138,11 @@ spec:
     - path: schemas/v1/observer-access-profile.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
-      sha256: 9d55e8292ad715ac298049c6f09411d1fd3df6f73233188e89918868dfccbaeb
+      sha256: 3ec008a1d4d7e7f6fa450b0f257cb7bac2970ad6b17054a21cdee7466d7b37d5
+    - path: schemas/v1/observer-attestor-profile.schema.json
+      kind: Schema
+      schema: https://json-schema.org/draft/2020-12/schema
+      sha256: 2c3bdf0b8bb6030bee155e92430a1d1c6bab48c3ae1a83f501acde17d18877a4
     - path: schemas/v1/platform-path.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
