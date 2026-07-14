@@ -33,9 +33,10 @@ permit self-attestation, cross-cluster replay, and accidental admission of devel
    `ECC_NIST_EDWARDS25519` key with `ED25519_SHA_512`. The private key is never stored in Kubernetes.
    The local profile uses a per-run process-memory Ed25519 key outside the observer identity and is
    non-admissible by construction.
-5. Evidence binds the exact platform commit and bundle, delivery profile, attestor profile, cluster
-   identity, live access-object epochs, inherited authority, positive and negative authorization
-   decisions, WorkOrder identity, and a maximum five-minute validity window.
+5. Evidence binds the exact signed execution-envelope digest, platform commit and bundle, delivery
+   profile, attestor profile, cluster identity, live access-object epochs, every required-positive and
+   forbidden-negative SubjectAccessReview decision, WorkOrder identity, and a maximum five-minute
+   validity window.
 6. The canonical evidence digest excludes `evidenceSha256` and `signature.value`. The signature is
    Ed25519 over the domain-separated payload
    `UTF8("darkfactory.observer-access-attestation/v1") || 0x00 ||
@@ -94,4 +95,3 @@ Rejected because cluster Secret readers could forge the external authority proof
 - `platform-contracts/attestor-profiles/`
 - ADR-0056
 - ADR-0057
-
