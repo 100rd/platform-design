@@ -98,6 +98,7 @@ def validate_index(index: dict[str, Any]) -> list[dict[str, str]]:
         "realms",
         "delivery-profiles",
         "probe-profiles",
+        "attestor-profiles",
         "paths",
     )
     discovered = sorted(
@@ -121,6 +122,7 @@ def validate_index(index: dict[str, Any]) -> list[dict[str, str]]:
         "Realm",
         "PlatformDeliveryProfile",
         "HttpProbeProfile",
+        "ObserverAttestorProfile",
         "PlatformPath",
     }
     for position, artifact in enumerate(artifacts):
@@ -554,14 +556,79 @@ def validate_delivery_profile(
         raise ContractError(f"{context}: compensation scope is not identity-bound")
 
 
+def validate_attestor_profile(profile: dict[str, Any], context: str) -> None:
+    spec = profile["spec"]
+    if artifact_id(profile) != spec["profileId"]:
+        raise ContractError(f"{context}: profile identity differs from metadata")
+    if spec["readinessEligible"]:
+        raise ContractError(f"{context}: proposed attestor profile cannot grant readiness")
+    expected = {
+        "kind-development/v1": {
+            "trustClass": "development",
+            "clusterType": "kind",
+            "runtimeIdentity": {
+                "type": "external-process",
+                "subject": "local-process:omnius-kind-observer-attestor",
+                "nodeBoundary": "developer-workstation",
+                "observerCredentialAccessible": False,
+            },
+            "signing": {
+                "algorithm": "Ed25519",
+                "provider": "process-memory",
+                "providerAlgorithm": "Ed25519",
+                "keySpec": "Ed25519",
+                "signingKeyIdFrom": "runtime.ephemeralSigningKeyId",
+                "payloadProfile": "domain-separated-evidence-digest/v1",
+                "privateKeyStoredInKubernetes": False,
+            },
+        },
+        "eks-kms-ed25519/v1": {
+            "trustClass": "production",
+            "clusterType": "eks",
+            "runtimeIdentity": {
+                "type": "kubernetes-service-account",
+                "subject": (
+                    "system:serviceaccount:darkfactory-attestors:"
+                    "observer-rbac-attestor"
+                ),
+                "nodeBoundary": "platform-control-node-pool",
+                "observerCredentialAccessible": False,
+            },
+            "signing": {
+                "algorithm": "Ed25519",
+                "provider": "aws-kms",
+                "providerAlgorithm": "ED25519_SHA_512",
+                "keySpec": "ECC_NIST_EDWARDS25519",
+                "signingKeyIdFrom": "adapter.observerAttestor.kmsKeyArn",
+                "payloadProfile": "domain-separated-evidence-digest/v1",
+                "privateKeyStoredInKubernetes": False,
+            },
+        },
+    }
+    selected = expected.get(spec["profileId"])
+    if selected is None:
+        raise ContractError(f"{context}: unknown attestor profile")
+    for key, value in selected.items():
+        if spec[key] != value:
+            raise ContractError(f"{context}: {key} differs from the closed profile")
+
+
 def validate_semantics(
     index: dict[str, Any], schemas: dict[str, Any], documents: dict[str, dict[str, Any]]
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+) -> tuple[
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+]:
     products: dict[str, Any] = {}
     entities: dict[str, Any] = {}
     realms: dict[str, Any] = {}
     delivery_profiles: dict[str, Any] = {}
     probe_profiles: dict[str, Any] = {}
+    attestor_profiles: dict[str, Any] = {}
     paths: dict[str, Any] = {}
     for document in documents.values():
         kind = document.get("kind")
@@ -576,6 +643,8 @@ def validate_semantics(
             target = delivery_profiles
         elif kind == "HttpProbeProfile":
             target = probe_profiles
+        elif kind == "ObserverAttestorProfile":
+            target = attestor_profiles
         elif kind == "PlatformPath":
             target = paths
         else:
@@ -587,6 +656,23 @@ def validate_semantics(
     registries = {name: set(values) for name, values in index["spec"]["registries"].items()}
     for profile_id, profile in delivery_profiles.items():
         validate_delivery_profile(profile, registries, profile_id)
+        if profile["schemaVersion"] == "platform/delivery-profile/v2":
+            catalog = profile["observerAccess"]["attestation"][
+                "catalogAttestorProfiles"
+            ]
+            if set(catalog) != set(attestor_profiles):
+                raise ContractError(
+                    f"{profile_id}: attestor catalog does not match indexed profiles"
+                )
+            eligible = profile["observerAccess"]["attestation"][
+                "readinessEligibleAttestorProfiles"
+            ]
+            if eligible:
+                raise ContractError(
+                    f"{profile_id}: draft attestor profile cannot grant readiness"
+                )
+    for profile_id, profile in attestor_profiles.items():
+        validate_attestor_profile(profile, profile_id)
     for probe_profile_id, probe_profile in probe_profiles.items():
         require_registered(
             probe_profile["conditionPlan"]["freezeAction"],
@@ -902,7 +988,58 @@ def validate_semantics(
         raise ContractError(
             f"orphaned HTTP probe profiles: {sorted(orphaned_probe_profiles)}"
         )
-    return products, paths, realms, delivery_profiles, probe_profiles
+    return (
+        products,
+        paths,
+        realms,
+        delivery_profiles,
+        probe_profiles,
+        attestor_profiles,
+    )
+
+
+def validate_attestor_profile_mutations(
+    schemas: dict[str, Any], profiles: dict[str, Any]
+) -> None:
+    validator = Draft202012Validator(
+        schemas["urn:darkfactory:platform-contract:observer-attestor-profile:v1"],
+        format_checker=FORMAT_CHECKER,
+    )
+    mutations: list[tuple[str, dict[str, Any]]] = []
+
+    development = profiles["kind-development/v1"]
+    aws_provider_in_kind = copy.deepcopy(development)
+    aws_provider_in_kind["spec"]["signing"]["provider"] = "aws-kms"
+    mutations.append(("AWS provider in kind profile", aws_provider_in_kind))
+
+    production = profiles["eks-kms-ed25519/v1"]
+    foreign_subject = copy.deepcopy(production)
+    foreign_subject["spec"]["runtimeIdentity"]["subject"] = (
+        "system:serviceaccount:default:foreign-attestor"
+    )
+    mutations.append(("foreign production attestor subject", foreign_subject))
+
+    self_granted_readiness = copy.deepcopy(production)
+    self_granted_readiness["spec"]["readinessEligible"] = True
+    mutations.append(("self-granted attestor readiness", self_granted_readiness))
+
+    kubernetes_private_key = copy.deepcopy(production)
+    kubernetes_private_key["spec"]["signing"]["privateKeyStoredInKubernetes"] = True
+    mutations.append(("Kubernetes-stored production key", kubernetes_private_key))
+
+    runtime_owned_work_order = copy.deepcopy(production)
+    runtime_owned_work_order["spec"]["kubernetesAuthority"]["workOrderSource"] = (
+        "kubernetes-crd"
+    )
+    mutations.append(("cluster-owned WorkOrder authority", runtime_owned_work_order))
+
+    for name, mutation in mutations:
+        try:
+            validator.validate(mutation)
+            validate_attestor_profile(mutation, name)
+        except (ContractError, ValidationError):
+            continue
+        raise ContractError(f"invalid attestor profile mutation unexpectedly passed: {name}")
 
 
 def validate_request(
@@ -1069,13 +1206,26 @@ def validate_delivery_profile_fixtures(
         raise ContractError(f"invalid v2 mutation unexpectedly passed: {name}")
 
 
-def validate_runtime_schema_examples(schemas: dict[str, Any]) -> None:
+def validate_runtime_schema_examples(
+    schemas: dict[str, Any], index: dict[str, Any]
+) -> None:
     schema_registry = Registry().with_resources(
         (schema_id, Resource.from_contents(schema))
         for schema_id, schema in schemas.items()
     )
     def digest_for(value: str) -> str:
         return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+    artifact_digests = {
+        artifact["path"]: artifact["sha256"]
+        for artifact in index["spec"]["artifacts"]
+    }
+    delivery_profile_digest = artifact_digests[
+        "delivery-profiles/argocd-preview-http-service/v2/profile.yaml"
+    ]
+    attestor_profile_digest = artifact_digests[
+        "attestor-profiles/eks-kms-ed25519/v1/profile.yaml"
+    ]
 
     signature = "s" * 86
     work_order_id = "obscontract1"
@@ -1125,6 +1275,8 @@ def validate_runtime_schema_examples(schemas: dict[str, Any]) -> None:
     )
     attestation = {
         "schemaVersion": "delivery/observer-access-attestation/v1",
+        "platformCommitSha": "c" * 40,
+        "platformBundleDigest": index["spec"]["bundleDigest"],
         "workOrderId": work_order_id,
         "subject": (
             "system:serviceaccount:darkfactory-observers:"
@@ -1135,9 +1287,15 @@ def validate_runtime_schema_examples(schemas: dict[str, Any]) -> None:
             "canonicalDigest": digest_for("identity-binding"),
         },
         "semanticVerifier": "kubernetes.observer-rbac-attested/v1",
-        "profileDigest": digest_for("observer-profile"),
+        "profileDigest": delivery_profile_digest,
         "cleanupPlanDigest": digest_for("cleanup-plan"),
         "controlInventoryDigest": digest_for("control-inventory"),
+        "cluster": {
+            "ref": "kubernetes:preview-primary",
+            "identityDigest": digest_for("cluster-identity"),
+            "apiServerDigest": digest_for("https://127.0.0.1:6443"),
+            "caSha256": digest_for("cluster-ca"),
+        },
         "objects": {
             "applicationRole": object_evidence(
                 "rbac.authorization.k8s.io/v1", "Role", observer_name, "argocd"
@@ -1185,17 +1343,24 @@ def validate_runtime_schema_examples(schemas: dict[str, Any]) -> None:
             "canonicalDigest": digest_for("inherited-authority"),
         },
         "attestor": {
-            "profileDigest": digest_for("attestor-profile"),
-            "subject": "system:serviceaccount:darkfactory-attestors:rbac-attestor",
+            "profileId": "eks-kms-ed25519/v1",
+            "trustClass": "production",
+            "profileDigest": attestor_profile_digest,
+            "subject": (
+                "system:serviceaccount:darkfactory-attestors:"
+                "observer-rbac-attestor"
+            ),
             "independentFromObserver": True,
             "signingKeyId": "kms:preview-attestor-v1",
         },
         "signature": {
-            "algorithm": "ECDSA_SHA_256",
+            "algorithm": "Ed25519",
             "keyId": "kms:preview-attestor-v1",
+            "payloadProfile": "domain-separated-evidence-digest/v1",
             "value": signature,
         },
         "observedAt": "2026-07-14T00:00:00Z",
+        "expiresAt": "2026-07-14T00:05:00Z",
         "canonicalization": "rfc8785-json-canonicalization/v1",
         "digestPayloadExcludes": ["evidenceSha256", "signature.value"],
         "evidenceSha256": digest_for("authority-evidence"),
@@ -1374,7 +1539,7 @@ def validate_runtime_schema_examples(schemas: dict[str, Any]) -> None:
         "evidenceSha256": digest_for("cleanup-evidence"),
     }
     trusted_profiles = {
-        "attestor": (digest_for("attestor-profile"), "kms:preview-attestor-v1"),
+        "attestor": (attestor_profile_digest, "kms:preview-attestor-v1"),
         "scopeIssuer": (digest_for("scope-issuer-profile"), "kms:preview-scope-v1"),
         "deliveryVerifier": (
             digest_for("delivery-verifier-profile"),
@@ -1407,6 +1572,10 @@ def validate_runtime_schema_examples(schemas: dict[str, Any]) -> None:
             "system:serviceaccount:darkfactory-observers:"
             f"{expected_observer}"
         )
+        if authority["platformBundleDigest"] != index["spec"]["bundleDigest"]:
+            raise ContractError("RBAC attestation is bound to another platform bundle")
+        if authority["profileDigest"] != delivery_profile_digest:
+            raise ContractError("RBAC attestation is bound to another delivery profile")
         work_order_values = {
             observation_scope["workOrderId"],
             delivery_evidence["workOrderId"],
@@ -1421,6 +1590,20 @@ def validate_runtime_schema_examples(schemas: dict[str, Any]) -> None:
             raise ContractError("runtime evidence subject is not WorkOrder-derived")
         if authority["attestor"]["subject"] == expected_subject:
             raise ContractError("authority attestor is the observer principal")
+        if authority["signature"]["keyId"] != authority["attestor"]["signingKeyId"]:
+            raise ContractError("authority signature key differs from attestor profile")
+        if authority["attestor"]["profileId"] not in {
+            "eks-kms-ed25519/v1",
+            "kind-development/v1",
+        }:
+            raise ContractError("authority attestor profile is unknown")
+        expected_trust_class = (
+            "production"
+            if authority["attestor"]["profileId"] == "eks-kms-ed25519/v1"
+            else "development"
+        )
+        if authority["attestor"]["trustClass"] != expected_trust_class:
+            raise ContractError("authority attestor trust class is false")
 
         presented_profiles = {
             "attestor": (
@@ -1496,6 +1679,9 @@ def validate_runtime_schema_examples(schemas: dict[str, Any]) -> None:
         deadline = datetime.fromisoformat(observation_scope["deadline"].replace("Z", "+00:00"))
         expires_at = datetime.fromisoformat(observation_scope["expiresAt"].replace("Z", "+00:00"))
         authority_time = datetime.fromisoformat(authority["observedAt"].replace("Z", "+00:00"))
+        authority_expiry = datetime.fromisoformat(
+            authority["expiresAt"].replace("Z", "+00:00")
+        )
         observation_time = datetime.fromisoformat(
             delivery_evidence["observedAt"].replace("Z", "+00:00")
         )
@@ -1504,6 +1690,14 @@ def validate_runtime_schema_examples(schemas: dict[str, Any]) -> None:
         )
         if not issued_at - timedelta(seconds=30) <= authority_time <= issued_at:
             raise ContractError("RBAC attestation is stale or follows credential issuance")
+        if not authority_time < authority_expiry <= authority_time + timedelta(minutes=5):
+            raise ContractError("RBAC attestation expiry exceeds its trust profile")
+        if authority["cluster"]["apiServerDigest"] != digest_for(
+            observation_scope["apiServer"]
+        ):
+            raise ContractError("RBAC attestation targets another API server")
+        if authority["cluster"]["caSha256"] != observation_scope["caSha256"]:
+            raise ContractError("RBAC attestation targets another cluster CA")
         if not issued_at < deadline <= issued_at + timedelta(seconds=30):
             raise ContractError("observation deadline is outside the signed scope")
         if not deadline < expires_at <= issued_at + timedelta(minutes=10):
@@ -1706,6 +1900,68 @@ def validate_runtime_schema_examples(schemas: dict[str, Any]) -> None:
         ("overlong absolute deadline", attestation, overlong_scope, observation, cleanup)
     )
 
+    foreign_platform_bundle = copy.deepcopy(attestation)
+    foreign_platform_bundle["platformBundleDigest"] = digest_for("foreign-platform-bundle")
+    semantic_mutations.append(
+        (
+            "foreign platform bundle",
+            foreign_platform_bundle,
+            scope,
+            observation,
+            cleanup,
+        )
+    )
+
+    foreign_attested_cluster = copy.deepcopy(attestation)
+    foreign_attested_cluster["cluster"]["apiServerDigest"] = digest_for(
+        "https://foreign.example.invalid"
+    )
+    semantic_mutations.append(
+        (
+            "foreign attested cluster",
+            foreign_attested_cluster,
+            scope,
+            observation,
+            cleanup,
+        )
+    )
+
+    overlong_attestation = copy.deepcopy(attestation)
+    overlong_attestation["expiresAt"] = "2026-07-14T00:05:01Z"
+    semantic_mutations.append(
+        (
+            "overlong authority evidence",
+            overlong_attestation,
+            scope,
+            observation,
+            cleanup,
+        )
+    )
+
+    false_attestor_class = copy.deepcopy(attestation)
+    false_attestor_class["attestor"]["trustClass"] = "development"
+    semantic_mutations.append(
+        (
+            "false attestor trust class",
+            false_attestor_class,
+            scope,
+            observation,
+            cleanup,
+        )
+    )
+
+    substituted_signature_key = copy.deepcopy(attestation)
+    substituted_signature_key["signature"]["keyId"] = "kms:substituted-attestor"
+    semantic_mutations.append(
+        (
+            "substituted attestor signature key",
+            substituted_signature_key,
+            scope,
+            observation,
+            cleanup,
+        )
+    )
+
     false_total = copy.deepcopy(observation)
     false_total["totalObjectCount"] = 1
     semantic_mutations.append(
@@ -1895,12 +2151,18 @@ def main() -> int:
         artifacts = validate_index(index)
         validate_digests(index, artifacts)
         schemas, documents = load_and_validate_artifacts(artifacts)
-        products, paths, realms, delivery_profiles, probe_profiles = validate_semantics(
-            index, schemas, documents
-        )
+        (
+            products,
+            paths,
+            realms,
+            delivery_profiles,
+            probe_profiles,
+            attestor_profiles,
+        ) = validate_semantics(index, schemas, documents)
         validate_fixtures(schemas, products, paths, realms)
         validate_delivery_profile_fixtures(index, schemas)
-        validate_runtime_schema_examples(schemas)
+        validate_attestor_profile_mutations(schemas, attestor_profiles)
+        validate_runtime_schema_examples(schemas, index)
         validate_http_probe_contracts(schemas, index)
     except Exception as error:
         print(f"platform-contract validation failed: {error}", file=sys.stderr)
@@ -1910,7 +2172,8 @@ def main() -> int:
         f"{len(artifacts)} indexed artifacts, {len(products)} product, "
         f"{len(paths)} path, {len(realms)} Realm, "
         f"{len(delivery_profiles)} delivery profile, "
-        f"{len(probe_profiles)} HTTP probe profile"
+        f"{len(probe_profiles)} HTTP probe profile, "
+        f"{len(attestor_profiles)} observer attestor profile"
     )
     return 0
 

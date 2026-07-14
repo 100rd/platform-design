@@ -1,0 +1,49 @@
+apiVersion: platform/contracts/v1alpha1
+kind: ObserverAttestorProfile
+metadata:
+  name: kind-development
+  version: v1
+  status: draft
+spec:
+  profileId: kind-development/v1
+  trustClass: development
+  readinessEligible: false
+  clusterType: kind
+  runtimeIdentity:
+    type: external-process
+    subject: local-process:omnius-kind-observer-attestor
+    nodeBoundary: developer-workstation
+    observerCredentialAccessible: false
+  kubernetesAuthority:
+    readKindIds:
+      - argoproj.io/v1alpha1/Application
+      - rbac.authorization.k8s.io/v1/ClusterRole
+      - rbac.authorization.k8s.io/v1/ClusterRoleBinding
+      - rbac.authorization.k8s.io/v1/Role
+      - rbac.authorization.k8s.io/v1/RoleBinding
+      - v1/Namespace
+      - v1/ServiceAccount
+    subjectAccessReviewCreate: true
+    impersonate: false
+    secretOrConfigRead: false
+    tokenRequestCreate: false
+    workloadOrRbacMutation: false
+    workOrderSource: signed-execution-envelope/v1
+  signing:
+    algorithm: Ed25519
+    provider: process-memory
+    providerAlgorithm: Ed25519
+    keySpec: Ed25519
+    signingKeyIdFrom: runtime.ephemeralSigningKeyId
+    payloadProfile: domain-separated-evidence-digest/v1
+    privateKeyStoredInKubernetes: false
+  evidence:
+    schema: urn:darkfactory:platform-contract:observer-access-attestation:v1
+    maxAge: PT5M
+    binds:
+      - cluster-identity
+      - execution-envelope
+      - live-object-epochs
+      - negative-authorization-matrix
+      - platform-bundle
+      - trust-profile

@@ -7,8 +7,8 @@ indexed bundle pinned by exact Git commit and bundle SHA-256.
 ## Layout
 
 - `schemas/v1/` and later version directories define closed Draft 2020-12 schemas.
-- `products/`, `entity-classes/`, `realms/`, `delivery-profiles/`, `probe-profiles/`, and `paths/`
-  contain owned instances.
+- `products/`, `entity-classes/`, `realms/`, `delivery-profiles/`, `probe-profiles/`,
+  `attestor-profiles/`, and `paths/` contain owned instances.
 - `index.yaml` lists every authoritative file, its schema, and its content digest.
 - `fixtures/` contains requests that must pass or fail validation.
 
@@ -88,6 +88,11 @@ other mutation denial matrix is evidence, including canonical request and respon
 Attestor, scope issuer, delivery verifier, reclaim-decision issuer, and cleanup verifier profile
 digests and signing keys come from adapter-owned trust anchors. Evidence cannot nominate its own
 trusted signer.
+
+The draft attestor catalog separates `kind-development/v1` from `eks-kms-ed25519/v1`. Both remain
+`readinessEligible: false`. Authority evidence binds the exact platform revision and bundle, cluster
+identity, five-minute expiry, trust-profile identity, and a domain-separated Ed25519 payload. The
+local process-memory key can qualify behavior but cannot satisfy a readiness profile.
 
 Normal cleanup revokes the lease, revalidates and deletes only six exact WorkOrder-owned objects in
 the specified order using attested UID and resourceVersion DELETE preconditions, verifies their

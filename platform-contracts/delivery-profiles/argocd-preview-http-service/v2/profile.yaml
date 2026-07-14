@@ -212,6 +212,8 @@ observerAccess:
     probe: kubernetes.observer-rbac-attested/v1
     semanticVerifier: kubernetes.observer-rbac-attested/v1
     attestorProfileFrom: adapter.observerAccess.attestorProfile
+    catalogAttestorProfiles: [eks-kms-ed25519/v1, kind-development/v1]
+    readinessEligibleAttestorProfiles: []
     signatureRequired: true
     evidenceType: kubernetes.observer-access/v1
     inheritedAuthorityEvidenceType: kubernetes.inherited-authority/v1

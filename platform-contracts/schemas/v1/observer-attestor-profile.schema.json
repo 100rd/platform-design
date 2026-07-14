@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:darkfactory:platform-contract:observer-attestor-profile:v1",
+  "title": "ObserverAttestorProfile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "properties": {
+    "apiVersion": {"const": "platform/contracts/v1alpha1"},
+    "kind": {"const": "ObserverAttestorProfile"},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "status"],
+      "properties": {
+        "name": {"enum": ["eks-kms-ed25519", "kind-development"]},
+        "version": {"const": "v1"},
+        "status": {"const": "draft"}
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profileId", "trustClass", "readinessEligible", "clusterType", "runtimeIdentity", "kubernetesAuthority", "signing", "evidence"],
+      "properties": {
+        "profileId": {"enum": ["eks-kms-ed25519/v1", "kind-development/v1"]},
+        "trustClass": {"enum": ["development", "production"]},
+        "readinessEligible": {"const": false},
+        "clusterType": {"enum": ["eks", "kind"]},
+        "runtimeIdentity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "subject", "nodeBoundary", "observerCredentialAccessible"],
+          "properties": {
+            "type": {"enum": ["external-process", "kubernetes-service-account"]},
+            "subject": {"type": "string", "minLength": 1, "maxLength": 253},
+            "nodeBoundary": {"enum": ["developer-workstation", "platform-control-node-pool"]},
+            "observerCredentialAccessible": {"const": false}
+          }
+        },
+        "kubernetesAuthority": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["readKindIds", "subjectAccessReviewCreate", "impersonate", "secretOrConfigRead", "tokenRequestCreate", "workloadOrRbacMutation", "workOrderSource"],
+          "properties": {
+            "readKindIds": {"const": ["argoproj.io/v1alpha1/Application", "rbac.authorization.k8s.io/v1/ClusterRole", "rbac.authorization.k8s.io/v1/ClusterRoleBinding", "rbac.authorization.k8s.io/v1/Role", "rbac.authorization.k8s.io/v1/RoleBinding", "v1/Namespace", "v1/ServiceAccount"]},
+            "subjectAccessReviewCreate": {"const": true},
+            "impersonate": {"const": false},
+            "secretOrConfigRead": {"const": false},
+            "tokenRequestCreate": {"const": false},
+            "workloadOrRbacMutation": {"const": false},
+            "workOrderSource": {"const": "signed-execution-envelope/v1"}
+          }
+        },
+        "signing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["algorithm", "provider", "providerAlgorithm", "keySpec", "signingKeyIdFrom", "payloadProfile", "privateKeyStoredInKubernetes"],
+          "properties": {
+            "algorithm": {"const": "Ed25519"},
+            "provider": {"enum": ["aws-kms", "process-memory"]},
+            "providerAlgorithm": {"enum": ["ED25519_SHA_512", "Ed25519"]},
+            "keySpec": {"enum": ["ECC_NIST_EDWARDS25519", "Ed25519"]},
+            "signingKeyIdFrom": {"enum": ["adapter.observerAttestor.kmsKeyArn", "runtime.ephemeralSigningKeyId"]},
+            "payloadProfile": {"const": "domain-separated-evidence-digest/v1"},
+            "privateKeyStoredInKubernetes": {"const": false}
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema", "maxAge", "binds"],
+          "properties": {
+            "schema": {"const": "urn:darkfactory:platform-contract:observer-access-attestation:v1"},
+            "maxAge": {"const": "PT5M"},
+            "binds": {"const": ["cluster-identity", "execution-envelope", "live-object-epochs", "negative-authorization-matrix", "platform-bundle", "trust-profile"]}
+          }
+        }
+      }
+    }
+  }
+}

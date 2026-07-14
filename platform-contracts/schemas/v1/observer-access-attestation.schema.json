@@ -6,6 +6,8 @@
   "additionalProperties": false,
   "required": [
     "schemaVersion",
+    "platformCommitSha",
+    "platformBundleDigest",
     "workOrderId",
     "subject",
     "identityBinding",
@@ -13,6 +15,7 @@
     "profileDigest",
     "cleanupPlanDigest",
     "controlInventoryDigest",
+    "cluster",
     "objects",
     "negativeAuthorization",
     "negativeAuthorizationMatrixDigest",
@@ -20,12 +23,15 @@
     "attestor",
     "signature",
     "observedAt",
+    "expiresAt",
     "canonicalization",
     "digestPayloadExcludes",
     "evidenceSha256"
   ],
   "properties": {
     "schemaVersion": {"const": "delivery/observer-access-attestation/v1"},
+    "platformCommitSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "platformBundleDigest": {"$ref": "#/$defs/digest"},
     "workOrderId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,52}$"},
     "subject": {"type": "string", "pattern": "^system:serviceaccount:darkfactory-observers:obs-[a-z0-9][a-z0-9-]{7,52}$"},
     "identityBinding": {
@@ -41,6 +47,17 @@
     "profileDigest": {"$ref": "#/$defs/digest"},
     "cleanupPlanDigest": {"$ref": "#/$defs/digest"},
     "controlInventoryDigest": {"$ref": "#/$defs/digest"},
+    "cluster": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "identityDigest", "apiServerDigest", "caSha256"],
+      "properties": {
+        "ref": {"type": "string", "minLength": 1, "maxLength": 253},
+        "identityDigest": {"$ref": "#/$defs/digest"},
+        "apiServerDigest": {"$ref": "#/$defs/digest"},
+        "caSha256": {"$ref": "#/$defs/digest"}
+      }
+    },
     "objects": {
       "type": "object",
       "additionalProperties": false,
@@ -149,8 +166,10 @@
     "attestor": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["profileDigest", "subject", "independentFromObserver", "signingKeyId"],
+      "required": ["profileId", "trustClass", "profileDigest", "subject", "independentFromObserver", "signingKeyId"],
       "properties": {
+        "profileId": {"enum": ["eks-kms-ed25519/v1", "kind-development/v1"]},
+        "trustClass": {"enum": ["development", "production"]},
         "profileDigest": {"$ref": "#/$defs/digest"},
         "subject": {"type": "string", "minLength": 1, "maxLength": 253},
         "independentFromObserver": {"const": true},
@@ -160,14 +179,16 @@
     "signature": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["algorithm", "keyId", "value"],
+      "required": ["algorithm", "keyId", "payloadProfile", "value"],
       "properties": {
-        "algorithm": {"enum": ["ECDSA_SHA_256", "Ed25519"]},
+        "algorithm": {"const": "Ed25519"},
         "keyId": {"type": "string", "minLength": 1, "maxLength": 253},
+        "payloadProfile": {"const": "domain-separated-evidence-digest/v1"},
         "value": {"type": "string", "pattern": "^[A-Za-z0-9_-]{43,4096}$"}
       }
     },
     "observedAt": {"type": "string", "format": "date-time"},
+    "expiresAt": {"type": "string", "format": "date-time"},
     "canonicalization": {"const": "rfc8785-json-canonicalization/v1"},
     "digestPayloadExcludes": {"const": ["evidenceSha256", "signature.value"]},
     "evidenceSha256": {"$ref": "#/$defs/digest"}
