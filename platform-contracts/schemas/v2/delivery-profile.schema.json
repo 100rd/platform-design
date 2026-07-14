@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:darkfactory:platform-contract:delivery-profile:v2",
+  "title": "PlatformDeliveryProfile v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "metadata", "path", "mechanism", "templateBindings", "source", "application", "destination", "resourceEnvelope", "observations", "observerAccess", "compensation"],
+  "properties": {
+    "schemaVersion": {"const": "platform/delivery-profile/v2"},
+    "kind": {"const": "PlatformDeliveryProfile"},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "owner", "state"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]{2,62}$"},
+        "version": {"type": "string", "pattern": "^v[1-9][0-9]*$"},
+        "owner": {"type": "string", "pattern": "^[a-z][a-z0-9-]{2,62}$"},
+        "state": {"enum": ["draft", "experimental", "validated", "approved", "deprecated"]}
+      }
+    },
+    "path": {"type": "string", "pattern": "^[a-z][a-z0-9-]+/v[1-9][0-9]*$"},
+    "mechanism": {"type": "string", "pattern": "^[a-z][a-z0-9.-]+/v[1-9][0-9]*$"},
+    "templateBindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workOrderIdFrom", "serviceNameFrom", "realmNameFrom"],
+      "properties": {
+        "workOrderIdFrom": {"const": "workOrder.id"},
+        "serviceNameFrom": {"const": "request.inputs.serviceName"},
+        "realmNameFrom": {"const": "realm.effectiveName"}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repositoryFrom", "repositoryAuthorization", "gitopsPathTemplate", "targetRevisionFrom", "imageDigestFrom", "desiredInventoryFrom", "singleRepository"],
+      "properties": {
+        "repositoryFrom": {"const": "request.inputs.repositoryRef"},
+        "repositoryAuthorization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["policy", "subjectFrom", "ownerFrom", "repositoryFrom", "credentialScope", "onMissing"],
+          "properties": {
+            "policy": {"const": "source.repository-owner-authorized/v1"},
+            "subjectFrom": {"const": "workOrder.authenticatedRequester"},
+            "ownerFrom": {"const": "request.inputs.ownerRef"},
+            "repositoryFrom": {"const": "request.inputs.repositoryRef"},
+            "credentialScope": {"const": "exact-repository"},
+            "onMissing": {"const": "deny"}
+          }
+        },
+        "gitopsPathTemplate": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[a-zA-Z0-9_.-]+(?:/[a-zA-Z0-9_.{}-]+)*$"
+        },
+        "targetRevisionFrom": {"const": "workflow.await-human-merge.mergeCommitSha"},
+        "imageDigestFrom": {"const": "evidence.supply-chain.attested-image"},
+        "desiredInventoryFrom": {"const": "workflow.validate-change.renderedManifestDigest"},
+        "singleRepository": {"const": true}
+      }
+    },
+    "application": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["controlPlaneRef", "namespace", "nameTemplate", "project", "requiredLabels"],
+      "properties": {
+        "controlPlaneRef": {"type": "string", "pattern": "^argocd:[a-z][a-z0-9-]{2,62}$"},
+        "namespace": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9.-]{0,61}[a-z0-9])?$"},
+        "nameTemplate": {"type": "string", "pattern": "^preview-\\{workOrderId\\}$"},
+        "project": {"type": "string", "pattern": "^[a-z][a-z0-9-]{2,62}$"},
+        "requiredLabels": {
+          "type": "object",
+          "minProperties": 3,
+          "maxProperties": 12,
+          "propertyNames": {"pattern": "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(?:/[a-zA-Z0-9]([a-zA-Z0-9_.-]*[a-zA-Z0-9])?)?$"},
+          "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 63}
+        }
+      }
+    },
+    "destination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clusterRef", "namespaceTemplate"],
+      "properties": {
+        "clusterRef": {"type": "string", "pattern": "^kubernetes:[a-z][a-z0-9-]{2,62}$"},
+        "namespaceTemplate": {"type": "string", "pattern": "^preview-\\{workOrderId\\}$"}
+      }
+    },
+    "resourceEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredKinds", "allowedKinds", "clusterScopedBindings", "ownershipLabel", "ownershipValueFrom", "requiredAssertions"],
+      "properties": {
+        "requiredKinds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "apps/v1/Deployment",
+              "networking.k8s.io/v1/Ingress",
+              "networking.k8s.io/v1/NetworkPolicy",
+              "v1/Namespace",
+              "v1/ResourceQuota",
+              "v1/Service"
+            ]
+          }
+        },
+        "allowedKinds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "apps/v1/Deployment",
+              "networking.k8s.io/v1/Ingress",
+              "networking.k8s.io/v1/NetworkPolicy",
+              "v1/Namespace",
+              "v1/ResourceQuota",
+              "v1/Service"
+            ]
+          }
+        },
+        "clusterScopedBindings": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "nameFrom", "maxCount"],
+            "properties": {
+              "kind": {"const": "v1/Namespace"},
+              "nameFrom": {"const": "destination.namespaceTemplate"},
+              "maxCount": {"const": 1}
+            }
+          }
+        },
+        "ownershipLabel": {"const": "darkfactory.platform/work-order"},
+        "ownershipValueFrom": {"const": "workOrder.id"},
+        "requiredAssertions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "dedicated-namespace",
+              "default-deny-network",
+              "digest-pinned-image",
+              "no-workload-rbac",
+              "no-persistent-volumes",
+              "no-runtime-secrets",
+              "no-service-account-token",
+              "quota-bound"
+            ]
+          }
+        }
+      }
+    },
+    "observations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "scopeSchema", "snapshotSchema", "evidenceSchema", "semanticVerifier", "verifierProfileFrom", "semanticInvariants", "gitopsProbe", "gitopsEvidenceType", "realmProbe", "realmEvidenceType", "requiredSyncStatus", "requiredHealthStatus", "exactRevision", "exactImageDigest"],
+      "properties": {
+        "action": {"type": "string", "pattern": "^[a-z][a-z0-9.-]+/v[1-9][0-9]*$"},
+        "scopeSchema": {"const": "urn:darkfactory:platform-contract:observation-scope:v1"},
+        "snapshotSchema": {"const": "urn:darkfactory:platform-contract:namespaced-resource-snapshot:v1"},
+        "evidenceSchema": {"const": "urn:darkfactory:platform-contract:delivery-observation-evidence:v1"},
+        "semanticVerifier": {"const": "realm.preview-delivery-observed/v1"},
+        "verifierProfileFrom": {"const": "adapter.observations.deliveryVerifierProfile"},
+        "semanticInvariants": {
+          "const": [
+            "adapter-server-ca-audience-match",
+            "authority-and-state-evidence-distinct",
+            "canonical-digests-recomputed",
+            "collection-resource-versions-are-per-kind",
+            "identity-fields-match-work-order-derivation",
+            "issued-deadline-expiry-ordered",
+            "snapshot-items-match-keyed-kind",
+            "snapshot-name-and-uid-unique",
+            "total-object-count-derived",
+            "transport-recording-has-no-discovery",
+            "two-passes-security-state-equal"
+          ]
+        },
+        "gitopsProbe": {"type": "string", "pattern": "^[a-z][a-z0-9.-]+/v[1-9][0-9]*$"},
+        "gitopsEvidenceType": {"type": "string", "pattern": "^[a-z][a-z0-9.-]+/v[1-9][0-9]*$"},
+        "realmProbe": {"type": "string", "pattern": "^[a-z][a-z0-9.-]+/v[1-9][0-9]*$"},
+        "realmEvidenceType": {"type": "string", "pattern": "^[a-z][a-z0-9.-]+/v[1-9][0-9]*$"},
+        "requiredSyncStatus": {"const": "Synced"},
+        "requiredHealthStatus": {"const": "Healthy"},
+        "exactRevision": {"const": true},
+        "exactImageDigest": {"const": true}
+      }
+    },
+    "observerAccess": {
+      "$ref": "urn:darkfactory:platform-contract:observer-access-profile:v1"
+    },
+    "compensation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "verifier", "evidenceType", "scope"],
+      "properties": {
+        "action": {"type": "string", "pattern": "^[a-z][a-z0-9.-]+/v[1-9][0-9]*$"},
+        "verifier": {"type": "string", "pattern": "^[a-z][a-z0-9.-]+/v[1-9][0-9]*$"},
+        "evidenceType": {"type": "string", "pattern": "^[a-z][a-z0-9.-]+/v[1-9][0-9]*$"},
+        "scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["repositoryFrom", "gitopsPathFrom", "applicationNameFrom", "destinationNamespaceFrom", "inventoryDigestFrom", "ownershipLabelFrom", "ownershipValueFrom", "observerAccessInventoryFrom", "observerAccessSubjectFrom"],
+          "properties": {
+            "repositoryFrom": {"const": "source.repositoryFrom"},
+            "gitopsPathFrom": {"const": "source.gitopsPathTemplate"},
+            "applicationNameFrom": {"const": "application.nameTemplate"},
+            "destinationNamespaceFrom": {"const": "destination.namespaceTemplate"},
+            "inventoryDigestFrom": {"const": "source.desiredInventoryFrom"},
+            "ownershipLabelFrom": {"const": "resourceEnvelope.ownershipLabel"},
+            "ownershipValueFrom": {"const": "resourceEnvelope.ownershipValueFrom"},
+            "observerAccessInventoryFrom": {"const": "observerAccess.desiredInventoryFrom"},
+            "observerAccessSubjectFrom": {"const": "observerAccess.serviceAccount.nameTemplate"}
+          }
+        }
+      }
+    }
+  }
+}

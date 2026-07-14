@@ -1,0 +1,45 @@
+schemaVersion: platform/entity-class/v1
+kind: EntityClass
+metadata:
+  name: HttpService
+  version: v3
+  owner: platform-team
+  state: draft
+requiredCapabilities:
+  - runtime.go-1.23/v1
+  - delivery.argocd/v1
+  - ingress.internal-http/v1
+  - supply-chain.sbom/v1
+  - supply-chain.signature/v1
+naming:
+  pattern: ^[a-z][a-z0-9-]{2,40}[a-z0-9]$
+  maxLength: 42
+lifecycle:
+  - create
+  - observe
+  - update
+  - delete
+probes:
+  - id: build.unit-tests/v1
+    phase: delivery
+    required: true
+  - id: supply-chain.image-attestation/v1
+    phase: delivery
+    required: true
+  - id: gitops.argocd-synced-healthy/v1
+    phase: runtime
+    required: true
+  - id: http.healthz/v1
+    phase: runtime
+    required: true
+  - id: http.readyz/v1
+    phase: runtime
+    required: true
+  - id: http.request-contract/v1
+    phase: runtime
+    required: true
+compensation:
+  action: delivery.revert-prune-and-revoke-preview/v2
+  verifier: realm.preview-and-observer-pruned/v1
+allowedRealms:
+  - preview/v2

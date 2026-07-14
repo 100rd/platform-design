@@ -1,0 +1,395 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:darkfactory:platform-contract:observer-access-profile:v1",
+  "title": "ObserverAccessProfile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "authority",
+    "workerAuthorable",
+    "desiredInventoryFrom",
+    "observerNamespace",
+    "serviceAccount",
+    "applicationRole",
+    "applicationRoleBinding",
+    "namespaceClusterRole",
+    "namespaceClusterRoleBinding",
+    "inventoryClusterRole",
+    "realmRoleBinding",
+    "requiredLabels",
+    "requiredLabelsApplyTo",
+    "credential",
+    "attestation",
+    "cleanup"
+  ],
+  "properties": {
+    "authority": {"const": "platform-control-plane"},
+    "workerAuthorable": {"const": false},
+    "desiredInventoryFrom": {"const": "workflow.register-observer-access-compensation.controlInventoryDigest"},
+    "observerNamespace": {"const": "darkfactory-observers"},
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nameTemplate", "automountServiceAccountToken"],
+      "properties": {
+        "nameTemplate": {"const": "obs-{workOrderId}"},
+        "automountServiceAccountToken": {"const": false}
+      }
+    },
+    "applicationRole": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespaceFrom", "nameTemplate", "rules"],
+      "properties": {
+        "namespaceFrom": {"const": "application.namespace"},
+        "nameTemplate": {"const": "obs-{workOrderId}"},
+        "rules": {
+          "const": [
+            {
+              "apiGroups": ["argoproj.io"],
+              "resources": ["applications"],
+              "resourceNamesFrom": ["application.nameTemplate"],
+              "verbs": ["get"]
+            }
+          ]
+        }
+      }
+    },
+    "applicationRoleBinding": {"$ref": "#/$defs/applicationRoleBinding"},
+    "namespaceClusterRole": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nameTemplate", "rules"],
+      "properties": {
+        "nameTemplate": {"const": "obs-{workOrderId}"},
+        "rules": {
+          "const": [
+            {
+              "apiGroups": [""],
+              "resources": ["namespaces"],
+              "resourceNamesFrom": ["destination.namespaceTemplate"],
+              "verbs": ["get"]
+            }
+          ]
+        }
+      }
+    },
+    "namespaceClusterRoleBinding": {"$ref": "#/$defs/namespaceClusterRoleBinding"},
+    "inventoryClusterRole": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "shared", "rules"],
+      "properties": {
+        "name": {"const": "darkfactory-preview-delivery-list-v1"},
+        "shared": {"const": true},
+        "rules": {
+          "const": [
+            {
+              "apiGroups": [""],
+              "resources": ["persistentvolumeclaims", "pods", "resourcequotas", "serviceaccounts", "services"],
+              "verbs": ["list"]
+            },
+            {
+              "apiGroups": ["apps"],
+              "resources": ["deployments", "replicasets"],
+              "verbs": ["list"]
+            },
+            {
+              "apiGroups": ["networking.k8s.io"],
+              "resources": ["ingresses", "networkpolicies"],
+              "verbs": ["list"]
+            },
+            {
+              "apiGroups": ["rbac.authorization.k8s.io"],
+              "resources": ["rolebindings", "roles"],
+              "verbs": ["list"]
+            }
+          ]
+        }
+      }
+    },
+    "realmRoleBinding": {"$ref": "#/$defs/realmRoleBinding"},
+    "requiredLabels": {
+      "const": {
+        "darkfactory.platform/access-profile": "argocd-preview-http-service-v2",
+        "darkfactory.platform/control-plane": "omnius",
+        "darkfactory.platform/work-order": "{workOrderId}"
+      }
+    },
+    "requiredLabelsApplyTo": {
+      "const": [
+        "applicationRole",
+        "applicationRoleBinding",
+        "namespaceClusterRole",
+        "namespaceClusterRoleBinding",
+        "realmRoleBinding",
+        "serviceAccount"
+      ]
+    },
+    "credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "issueAction",
+        "audienceFrom",
+        "apiServerFrom",
+        "caSha256From",
+        "maxLifetime",
+        "absoluteDeadline",
+        "maxObjects",
+        "maxResponseBytes",
+        "operations",
+        "kindIds",
+        "scopeSchema",
+        "scopeSemanticVerifier",
+        "scopeIssuerProfileFrom"
+      ],
+      "properties": {
+        "issueAction": {"const": "delivery.issue-observer-credential/v1"},
+        "audienceFrom": {"const": "adapter.destination.tokenAudience"},
+        "apiServerFrom": {"const": "adapter.destination.apiServer"},
+        "caSha256From": {"const": "adapter.destination.caSha256"},
+        "maxLifetime": {"const": "PT10M"},
+        "absoluteDeadline": {"const": "PT30S"},
+        "maxObjects": {"const": 100},
+        "maxResponseBytes": {"const": 1048576},
+        "operations": {"const": ["application.get", "namespace.get", "realm.list"]},
+        "kindIds": {
+          "const": [
+            "apps/v1/Deployment",
+            "apps/v1/ReplicaSet",
+            "networking.k8s.io/v1/Ingress",
+            "networking.k8s.io/v1/NetworkPolicy",
+            "rbac.authorization.k8s.io/v1/Role",
+            "rbac.authorization.k8s.io/v1/RoleBinding",
+            "v1/PersistentVolumeClaim",
+            "v1/Pod",
+            "v1/ResourceQuota",
+            "v1/Service",
+            "v1/ServiceAccount"
+          ]
+        },
+        "scopeSchema": {"const": "urn:darkfactory:platform-contract:observation-scope:v1"},
+        "scopeSemanticVerifier": {"const": "kubernetes.observation-scope-bound/v1"},
+        "scopeIssuerProfileFrom": {"const": "adapter.observerAccess.scopeIssuerProfile"}
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "schema",
+        "probe",
+        "semanticVerifier",
+        "attestorProfileFrom",
+        "signatureRequired",
+        "evidenceType",
+        "inheritedAuthorityEvidenceType",
+        "inheritedAuthorityMode",
+        "inheritedAuthorityBaselineProfileFrom",
+        "negativeAuthorizationCases",
+        "requiredObjectDigests",
+        "platformRulesAllowNonResourceUrls",
+        "discoveryTransportOperation"
+      ],
+      "properties": {
+        "action": {"const": "delivery.attest-observer-access/v1"},
+        "schema": {"const": "urn:darkfactory:platform-contract:observer-access-attestation:v1"},
+        "probe": {"const": "kubernetes.observer-rbac-attested/v1"},
+        "semanticVerifier": {"const": "kubernetes.observer-rbac-attested/v1"},
+        "attestorProfileFrom": {"const": "adapter.observerAccess.attestorProfile"},
+        "signatureRequired": {"const": true},
+        "evidenceType": {"const": "kubernetes.observer-access/v1"},
+        "inheritedAuthorityEvidenceType": {"const": "kubernetes.inherited-authority/v1"},
+        "inheritedAuthorityMode": {"const": "exact-profile-and-baseline-delta"},
+        "inheritedAuthorityBaselineProfileFrom": {"const": "adapter.destination.authenticatedAuthorityBaselineProfile"},
+        "negativeAuthorizationCases": {
+          "type": "array",
+          "minItems": 21,
+          "maxItems": 21,
+          "items": {
+            "oneOf": [
+              {"$ref": "#/$defs/singleAuthorizationCase"},
+              {"$ref": "#/$defs/setAuthorizationCase"}
+            ]
+          }
+        },
+        "requiredObjectDigests": {
+          "const": [
+            "applicationRole",
+            "applicationRoleBinding",
+            "inventoryClusterRole",
+            "namespaceClusterRole",
+            "namespaceClusterRoleBinding",
+            "realmRoleBinding",
+            "serviceAccount"
+          ]
+        },
+        "platformRulesAllowNonResourceUrls": {"const": false},
+        "discoveryTransportOperation": {"const": false}
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revokeAction",
+        "verifier",
+        "evidenceType",
+        "evidenceSchema",
+        "reaperAction",
+        "registerBeforeCreate",
+        "cleanupPlanDigestFrom",
+        "deletePreconditionFrom",
+        "deletePreconditionFields",
+        "deleteOnPreconditionConflict",
+        "revalidateBeforeEachDelete",
+        "safeToReclaimFrom",
+        "safeToReclaimPolicy",
+        "safeToReclaimIssuerProfileFrom",
+        "verifierProfileFrom",
+        "reaperJoinFrom",
+        "reaperOnUnavailable",
+        "cleanupOrder",
+        "exactWorkOrderObjects",
+        "sharedObjectsPreserved",
+        "tokenExpiryIsCleanup",
+        "onAmbiguous",
+        "triggers"
+      ],
+      "properties": {
+        "revokeAction": {"const": "delivery.revoke-observer-access/v1"},
+        "verifier": {"const": "kubernetes.observer-access-revoked/v1"},
+        "evidenceType": {"const": "kubernetes.observer-cleanup/v1"},
+        "evidenceSchema": {"const": "urn:darkfactory:platform-contract:observer-access-cleanup-evidence:v1"},
+        "reaperAction": {"const": "delivery.reap-orphaned-observer-access/v1"},
+        "registerBeforeCreate": {"const": true},
+        "cleanupPlanDigestFrom": {"const": "workflow.register-observer-access-compensation.cleanupPlanDigest"},
+        "deletePreconditionFrom": {"const": "evidence.observerAccessAttestation.objects"},
+        "deletePreconditionFields": {"const": ["uid", "resourceVersion"]},
+        "deleteOnPreconditionConflict": {"const": "park-and-escalate"},
+        "revalidateBeforeEachDelete": {"const": true},
+        "safeToReclaimFrom": {"const": "specTx.safeToReclaimDecision"},
+        "safeToReclaimPolicy": {"const": "delivery.observer-access-safe-to-reclaim/v1"},
+        "safeToReclaimIssuerProfileFrom": {"const": "adapter.observerAccess.reclaimIssuerProfile"},
+        "verifierProfileFrom": {"const": "adapter.observerAccess.cleanupVerifierProfile"},
+        "reaperJoinFrom": {"const": "workOrderStore.terminalOrAbsent"},
+        "reaperOnUnavailable": {"const": "alert-without-delete"},
+        "cleanupOrder": {
+          "const": [
+            "revoke-lease",
+            "delete-realm-role-binding",
+            "delete-application-role-binding",
+            "delete-namespace-cluster-role-binding",
+            "delete-application-role",
+            "delete-namespace-cluster-role",
+            "delete-service-account",
+            "verify-absence-and-shared-role-digest"
+          ]
+        },
+        "exactWorkOrderObjects": {
+          "const": [
+            "applicationRole",
+            "applicationRoleBinding",
+            "namespaceClusterRole",
+            "namespaceClusterRoleBinding",
+            "realmRoleBinding",
+            "serviceAccount"
+          ]
+        },
+        "sharedObjectsPreserved": {"const": ["inventoryClusterRole"]},
+        "tokenExpiryIsCleanup": {"const": false},
+        "onAmbiguous": {"const": "park-and-escalate"},
+        "triggers": {"const": ["cancelled", "completed", "expired", "failed"]}
+      }
+    }
+  },
+  "$defs": {
+    "singleAuthorizationCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "verbs", "apiGroup", "resource", "subresource", "scopeFrom", "namesFrom"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]+$"},
+        "verbs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+        "apiGroup": {"type": "string"},
+        "resource": {"type": "string", "minLength": 1},
+        "subresource": {"type": "string"},
+        "scopeFrom": {"type": "string", "minLength": 1},
+        "namesFrom": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "setAuthorizationCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "verbs", "resourcesFrom", "scopeFrom"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]+$"},
+        "verbs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+        "resourcesFrom": {"type": "string", "minLength": 1},
+        "scopeFrom": {"type": "string", "minLength": 1}
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "nameFrom", "namespaceFrom"],
+      "properties": {
+        "kind": {"const": "ServiceAccount"},
+        "nameFrom": {"const": "observerAccess.serviceAccount.nameTemplate"},
+        "namespaceFrom": {"const": "observerAccess.observerNamespace"}
+      }
+    },
+    "applicationRoleBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespaceFrom", "nameTemplate", "roleRef", "subject"],
+      "properties": {
+        "namespaceFrom": {"const": "application.namespace"},
+        "nameTemplate": {"const": "obs-{workOrderId}"},
+        "roleRef": {
+          "const": {
+            "apiGroup": "rbac.authorization.k8s.io",
+            "kind": "Role",
+            "nameFrom": "observerAccess.applicationRole.nameTemplate"
+          }
+        },
+        "subject": {"$ref": "#/$defs/subject"}
+      }
+    },
+    "namespaceClusterRoleBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nameTemplate", "roleRef", "subject"],
+      "properties": {
+        "nameTemplate": {"const": "obs-{workOrderId}"},
+        "roleRef": {
+          "const": {
+            "apiGroup": "rbac.authorization.k8s.io",
+            "kind": "ClusterRole",
+            "nameFrom": "observerAccess.namespaceClusterRole.nameTemplate"
+          }
+        },
+        "subject": {"$ref": "#/$defs/subject"}
+      }
+    },
+    "realmRoleBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespaceFrom", "nameTemplate", "roleRef", "subject"],
+      "properties": {
+        "namespaceFrom": {"const": "destination.namespaceTemplate"},
+        "nameTemplate": {"const": "obs-{workOrderId}"},
+        "roleRef": {
+          "const": {
+            "apiGroup": "rbac.authorization.k8s.io",
+            "kind": "ClusterRole",
+            "nameFrom": "observerAccess.inventoryClusterRole.name"
+          }
+        },
+        "subject": {"$ref": "#/$defs/subject"}
+      }
+    }
+  }
+}

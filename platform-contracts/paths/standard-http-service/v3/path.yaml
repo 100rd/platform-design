@@ -1,0 +1,133 @@
+schemaVersion: platform/path/v2
+kind: PlatformPath
+metadata:
+  name: standard-http-service
+  version: v3
+  owner: platform-team
+  state: draft
+product: standard-service/v3
+inputSchema: urn:darkfactory:platform-contract:path-input:standard-http-service:v3
+deliveryProfile: argocd-preview-http-service/v2
+entityClasses:
+  - Environment/v3
+  - HttpService/v3
+supportedRealms:
+  - preview/v2
+workflow:
+  - id: inspect-source
+    action: source.inspect-existing-repository/v1
+    needs: []
+  - id: author-change
+    action: source.author-http-service-change/v1
+    needs: [inspect-source]
+  - id: validate-change
+    action: verification.run-source-gates/v1
+    needs: [author-change]
+  - id: register-compensation
+    action: execution.register-compensation/v1
+    needs: [validate-change]
+  - id: open-draft-pr
+    action: delivery.open-draft-pull-request/v1
+    needs: [register-compensation]
+  - id: await-human-merge
+    action: delivery.await-human-merge/v1
+    needs: [open-draft-pr]
+  - id: register-observer-access-compensation
+    action: execution.register-compensation/v1
+    needs: [await-human-merge]
+  - id: provision-observer-access
+    action: delivery.provision-observer-access/v1
+    needs: [register-observer-access-compensation]
+  - id: attest-observer-access
+    action: delivery.attest-observer-access/v1
+    needs: [provision-observer-access]
+  - id: issue-observer-credential
+    action: delivery.issue-observer-credential/v1
+    needs: [attest-observer-access]
+  - id: observe-gitops
+    action: delivery.observe-argocd-sync/v2
+    needs: [issue-observer-credential]
+  - id: store-observation-evidence
+    action: evidence.store-delivery-observation/v1
+    needs: [observe-gitops]
+  - id: revoke-observer-access
+    action: delivery.revoke-observer-access/v1
+    needs: [store-observation-evidence]
+  - id: verify-runtime
+    action: verification.run-http-probes/v1
+    needs: [revoke-observer-access]
+policies:
+  - delivery.platform-observer-access/v1
+  - global.no-main-push/v1
+  - global.no-direct-apply/v1
+  - global.no-production-mutation/v1
+  - realm.preview-containment/v1
+  - realm.preview-no-secrets/v1
+  - source.repository-owner-authorized/v1
+  - delivery.human-merge-required/v1
+  - supply-chain.build-once-by-digest/v1
+conditionsOfDone:
+  - id: source.unit-tests
+    probe: build.unit-tests/v1
+    evidenceType: ci.check-run/v1
+    required: true
+  - id: source.security-gates
+    probe: build.security-gates/v1
+    evidenceType: ci.check-run/v1
+    required: true
+  - id: supply-chain.attested-image
+    probe: supply-chain.image-attestation/v1
+    evidenceType: supply-chain.attestation/v1
+    required: true
+  - id: delivery.gitops-revision
+    probe: gitops.argocd-synced-healthy/v1
+    evidenceType: gitops.revision-status/v1
+    required: true
+  - id: delivery.observer-authority
+    probe: kubernetes.observer-rbac-attested/v1
+    evidenceType: kubernetes.observer-access/v1
+    required: true
+  - id: delivery.observer-cleanup
+    probe: kubernetes.observer-access-revoked/v1
+    evidenceType: kubernetes.observer-cleanup/v1
+    required: true
+  - id: realm.contained
+    probe: realm.preview-delivery-observed/v1
+    evidenceType: kubernetes.delivery-observation/v1
+    required: true
+  - id: runtime.health
+    probe: http.healthz/v1
+    evidenceType: http.probe-result/v1
+    required: true
+    consecutivePasses: 3
+  - id: runtime.readiness
+    probe: http.readyz/v1
+    evidenceType: http.probe-result/v1
+    required: true
+    consecutivePasses: 3
+  - id: runtime.request-contract
+    probe: http.request-contract/v1
+    evidenceType: http.probe-result/v1
+    required: true
+    consecutivePasses: 3
+compensation:
+  action: delivery.revert-prune-and-revoke-preview/v2
+  verifier: realm.preview-and-observer-pruned/v1
+  triggers:
+    - cancelled
+    - failed
+    - expired
+    - completed
+evidence:
+  ttl: PT24H
+  manifestType: darkfactory.evidence-manifest/v1
+  requiredTypes:
+    - ci.check-run/v1
+    - compensation.result/v1
+    - supply-chain.attestation/v1
+    - gitops.revision-status/v1
+    - http.probe-result/v1
+    - kubernetes.delivery-observation/v1
+    - kubernetes.inherited-authority/v1
+    - kubernetes.observer-access/v1
+    - kubernetes.observer-cleanup/v1

@@ -1,0 +1,412 @@
+schemaVersion: platform/delivery-profile/v2
+kind: PlatformDeliveryProfile
+metadata:
+  name: argocd-preview-http-service
+  version: v2
+  owner: platform-team
+  state: draft
+path: standard-http-service/v3
+mechanism: delivery.argocd/v1
+templateBindings:
+  workOrderIdFrom: workOrder.id
+  serviceNameFrom: request.inputs.serviceName
+  realmNameFrom: realm.effectiveName
+source:
+  repositoryFrom: request.inputs.repositoryRef
+  repositoryAuthorization:
+    policy: source.repository-owner-authorized/v1
+    subjectFrom: workOrder.authenticatedRequester
+    ownerFrom: request.inputs.ownerRef
+    repositoryFrom: request.inputs.repositoryRef
+    credentialScope: exact-repository
+    onMissing: deny
+  gitopsPathTemplate: deploy/preview/{serviceName}/{workOrderId}
+  targetRevisionFrom: workflow.await-human-merge.mergeCommitSha
+  imageDigestFrom: evidence.supply-chain.attested-image
+  desiredInventoryFrom: workflow.validate-change.renderedManifestDigest
+  singleRepository: true
+application:
+  controlPlaneRef: argocd:preview-primary
+  namespace: argocd
+  nameTemplate: preview-{workOrderId}
+  project: preview
+  requiredLabels:
+    darkfactory.platform/path: standard-http-service-v3
+    darkfactory.platform/realm: "{realmName}"
+    darkfactory.platform/work-order: "{workOrderId}"
+destination:
+  clusterRef: kubernetes:preview-primary
+  namespaceTemplate: preview-{workOrderId}
+resourceEnvelope:
+  requiredKinds:
+    - apps/v1/Deployment
+    - networking.k8s.io/v1/Ingress
+    - networking.k8s.io/v1/NetworkPolicy
+    - v1/Namespace
+    - v1/ResourceQuota
+    - v1/Service
+  allowedKinds:
+    - apps/v1/Deployment
+    - networking.k8s.io/v1/Ingress
+    - networking.k8s.io/v1/NetworkPolicy
+    - v1/Namespace
+    - v1/ResourceQuota
+    - v1/Service
+  clusterScopedBindings:
+    - kind: v1/Namespace
+      nameFrom: destination.namespaceTemplate
+      maxCount: 1
+  ownershipLabel: darkfactory.platform/work-order
+  ownershipValueFrom: workOrder.id
+  requiredAssertions:
+    - dedicated-namespace
+    - default-deny-network
+    - digest-pinned-image
+    - no-persistent-volumes
+    - no-runtime-secrets
+    - no-service-account-token
+    - no-workload-rbac
+    - quota-bound
+observations:
+  action: delivery.observe-argocd-sync/v2
+  scopeSchema: urn:darkfactory:platform-contract:observation-scope:v1
+  snapshotSchema: urn:darkfactory:platform-contract:namespaced-resource-snapshot:v1
+  evidenceSchema: urn:darkfactory:platform-contract:delivery-observation-evidence:v1
+  semanticVerifier: realm.preview-delivery-observed/v1
+  verifierProfileFrom: adapter.observations.deliveryVerifierProfile
+  semanticInvariants:
+    - adapter-server-ca-audience-match
+    - authority-and-state-evidence-distinct
+    - canonical-digests-recomputed
+    - collection-resource-versions-are-per-kind
+    - identity-fields-match-work-order-derivation
+    - issued-deadline-expiry-ordered
+    - snapshot-items-match-keyed-kind
+    - snapshot-name-and-uid-unique
+    - total-object-count-derived
+    - transport-recording-has-no-discovery
+    - two-passes-security-state-equal
+  gitopsProbe: gitops.argocd-synced-healthy/v1
+  gitopsEvidenceType: gitops.revision-status/v1
+  realmProbe: realm.preview-delivery-observed/v1
+  realmEvidenceType: kubernetes.delivery-observation/v1
+  requiredSyncStatus: Synced
+  requiredHealthStatus: Healthy
+  exactRevision: true
+  exactImageDigest: true
+observerAccess:
+  authority: platform-control-plane
+  workerAuthorable: false
+  desiredInventoryFrom: workflow.register-observer-access-compensation.controlInventoryDigest
+  observerNamespace: darkfactory-observers
+  serviceAccount:
+    nameTemplate: obs-{workOrderId}
+    automountServiceAccountToken: false
+  applicationRole:
+    namespaceFrom: application.namespace
+    nameTemplate: obs-{workOrderId}
+    rules:
+      - apiGroups: [argoproj.io]
+        resources: [applications]
+        resourceNamesFrom: [application.nameTemplate]
+        verbs: [get]
+  applicationRoleBinding:
+    namespaceFrom: application.namespace
+    nameTemplate: obs-{workOrderId}
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      nameFrom: observerAccess.applicationRole.nameTemplate
+    subject:
+      kind: ServiceAccount
+      nameFrom: observerAccess.serviceAccount.nameTemplate
+      namespaceFrom: observerAccess.observerNamespace
+  namespaceClusterRole:
+    nameTemplate: obs-{workOrderId}
+    rules:
+      - apiGroups: [""]
+        resources: [namespaces]
+        resourceNamesFrom: [destination.namespaceTemplate]
+        verbs: [get]
+  namespaceClusterRoleBinding:
+    nameTemplate: obs-{workOrderId}
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      nameFrom: observerAccess.namespaceClusterRole.nameTemplate
+    subject:
+      kind: ServiceAccount
+      nameFrom: observerAccess.serviceAccount.nameTemplate
+      namespaceFrom: observerAccess.observerNamespace
+  inventoryClusterRole:
+    name: darkfactory-preview-delivery-list-v1
+    shared: true
+    rules:
+      - apiGroups: [""]
+        resources: [persistentvolumeclaims, pods, resourcequotas, serviceaccounts, services]
+        verbs: [list]
+      - apiGroups: [apps]
+        resources: [deployments, replicasets]
+        verbs: [list]
+      - apiGroups: [networking.k8s.io]
+        resources: [ingresses, networkpolicies]
+        verbs: [list]
+      - apiGroups: [rbac.authorization.k8s.io]
+        resources: [rolebindings, roles]
+        verbs: [list]
+  realmRoleBinding:
+    namespaceFrom: destination.namespaceTemplate
+    nameTemplate: obs-{workOrderId}
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      nameFrom: observerAccess.inventoryClusterRole.name
+    subject:
+      kind: ServiceAccount
+      nameFrom: observerAccess.serviceAccount.nameTemplate
+      namespaceFrom: observerAccess.observerNamespace
+  requiredLabels:
+    darkfactory.platform/access-profile: argocd-preview-http-service-v2
+    darkfactory.platform/control-plane: omnius
+    darkfactory.platform/work-order: "{workOrderId}"
+  requiredLabelsApplyTo:
+    - applicationRole
+    - applicationRoleBinding
+    - namespaceClusterRole
+    - namespaceClusterRoleBinding
+    - realmRoleBinding
+    - serviceAccount
+  credential:
+    issueAction: delivery.issue-observer-credential/v1
+    audienceFrom: adapter.destination.tokenAudience
+    apiServerFrom: adapter.destination.apiServer
+    caSha256From: adapter.destination.caSha256
+    maxLifetime: PT10M
+    absoluteDeadline: PT30S
+    maxObjects: 100
+    maxResponseBytes: 1048576
+    operations: [application.get, namespace.get, realm.list]
+    kindIds:
+      - apps/v1/Deployment
+      - apps/v1/ReplicaSet
+      - networking.k8s.io/v1/Ingress
+      - networking.k8s.io/v1/NetworkPolicy
+      - rbac.authorization.k8s.io/v1/Role
+      - rbac.authorization.k8s.io/v1/RoleBinding
+      - v1/PersistentVolumeClaim
+      - v1/Pod
+      - v1/ResourceQuota
+      - v1/Service
+      - v1/ServiceAccount
+    scopeSchema: urn:darkfactory:platform-contract:observation-scope:v1
+    scopeSemanticVerifier: kubernetes.observation-scope-bound/v1
+    scopeIssuerProfileFrom: adapter.observerAccess.scopeIssuerProfile
+  attestation:
+    action: delivery.attest-observer-access/v1
+    schema: urn:darkfactory:platform-contract:observer-access-attestation:v1
+    probe: kubernetes.observer-rbac-attested/v1
+    semanticVerifier: kubernetes.observer-rbac-attested/v1
+    attestorProfileFrom: adapter.observerAccess.attestorProfile
+    signatureRequired: true
+    evidenceType: kubernetes.observer-access/v1
+    inheritedAuthorityEvidenceType: kubernetes.inherited-authority/v1
+    inheritedAuthorityMode: exact-profile-and-baseline-delta
+    inheritedAuthorityBaselineProfileFrom: adapter.destination.authenticatedAuthorityBaselineProfile
+    negativeAuthorizationCases:
+      - id: appproject-get
+        verbs: [get]
+        apiGroup: argoproj.io
+        resource: appprojects
+        subresource: ""
+        scopeFrom: application.namespace
+        namesFrom: [application.project]
+      - id: configmap-get
+        verbs: [get]
+        apiGroup: ""
+        resource: configmaps
+        subresource: ""
+        scopeFrom: destination.namespaceTemplate
+        namesFrom: [policy.anyConfigMap]
+      - id: configmap-list
+        verbs: [list]
+        apiGroup: ""
+        resource: configmaps
+        subresource: ""
+        scopeFrom: destination.namespaceTemplate
+        namesFrom: []
+      - id: foreign-application-get
+        verbs: [get]
+        apiGroup: argoproj.io
+        resource: applications
+        subresource: ""
+        scopeFrom: application.namespace
+        namesFrom: [policy.foreignApplication]
+      - id: foreign-namespace-get
+        verbs: [get]
+        apiGroup: ""
+        resource: namespaces
+        subresource: ""
+        scopeFrom: cluster
+        namesFrom: [policy.foreignNamespace]
+      - id: impersonate-groups
+        verbs: [impersonate]
+        apiGroup: ""
+        resource: groups
+        subresource: ""
+        scopeFrom: cluster
+        namesFrom: [policy.anyIdentity]
+      - id: impersonate-serviceaccounts
+        verbs: [impersonate]
+        apiGroup: ""
+        resource: serviceaccounts
+        subresource: ""
+        scopeFrom: cluster
+        namesFrom: [policy.anyIdentity]
+      - id: impersonate-userextras-scopes
+        verbs: [impersonate]
+        apiGroup: authentication.k8s.io
+        resource: userextras
+        subresource: scopes
+        scopeFrom: cluster
+        namesFrom: [policy.anyIdentity]
+      - id: impersonate-users
+        verbs: [impersonate]
+        apiGroup: ""
+        resource: users
+        subresource: ""
+        scopeFrom: cluster
+        namesFrom: [policy.anyIdentity]
+      - id: pod-exec-create
+        verbs: [create]
+        apiGroup: ""
+        resource: pods
+        subresource: exec
+        scopeFrom: destination.namespaceTemplate
+        namesFrom: [policy.anyPod]
+      - id: pod-log-get
+        verbs: [get]
+        apiGroup: ""
+        resource: pods
+        subresource: log
+        scopeFrom: destination.namespaceTemplate
+        namesFrom: [policy.anyPod]
+      - id: pod-portforward-create
+        verbs: [create]
+        apiGroup: ""
+        resource: pods
+        subresource: portforward
+        scopeFrom: destination.namespaceTemplate
+        namesFrom: [policy.anyPod]
+      - id: secret-list
+        verbs: [list]
+        apiGroup: ""
+        resource: secrets
+        subresource: ""
+        scopeFrom: destination.namespaceTemplate
+        namesFrom: []
+      - id: secret-get
+        verbs: [get]
+        apiGroup: ""
+        resource: secrets
+        subresource: ""
+        scopeFrom: destination.namespaceTemplate
+        namesFrom: [policy.anySecret]
+      - id: service-proxy-get
+        verbs: [get]
+        apiGroup: ""
+        resource: services
+        subresource: proxy
+        scopeFrom: destination.namespaceTemplate
+        namesFrom: [policy.anyService]
+      - id: tokenrequest-create
+        verbs: [create]
+        apiGroup: ""
+        resource: serviceaccounts
+        subresource: token
+        scopeFrom: observerAccess.observerNamespace
+        namesFrom: [observerAccess.serviceAccount.nameTemplate]
+      - id: foreign-tokenrequest-create
+        verbs: [create]
+        apiGroup: ""
+        resource: serviceaccounts
+        subresource: token
+        scopeFrom: observerAccess.observerNamespace
+        namesFrom: [policy.foreignServiceAccount]
+      - id: foreign-realm-list
+        verbs: [list]
+        resourcesFrom: observerAccess.credential.kindIds
+        scopeFrom: policy.foreignRealm
+      - id: declared-resource-mutations
+        verbs: [create, delete, deletecollection, patch, update]
+        resourcesFrom: policy.workloadAndControlKindIds
+        scopeFrom: policy.declaredScopes
+      - id: inventory-watch
+        verbs: [watch]
+        resourcesFrom: observerAccess.credential.kindIds
+        scopeFrom: destination.namespaceTemplate
+      - id: sensitive-resource-watch
+        verbs: [watch]
+        resourcesFrom: policy.sensitiveKindIds
+        scopeFrom: destination.namespaceTemplate
+    requiredObjectDigests:
+      - applicationRole
+      - applicationRoleBinding
+      - inventoryClusterRole
+      - namespaceClusterRole
+      - namespaceClusterRoleBinding
+      - realmRoleBinding
+      - serviceAccount
+    platformRulesAllowNonResourceUrls: false
+    discoveryTransportOperation: false
+  cleanup:
+    revokeAction: delivery.revoke-observer-access/v1
+    verifier: kubernetes.observer-access-revoked/v1
+    evidenceType: kubernetes.observer-cleanup/v1
+    evidenceSchema: urn:darkfactory:platform-contract:observer-access-cleanup-evidence:v1
+    reaperAction: delivery.reap-orphaned-observer-access/v1
+    registerBeforeCreate: true
+    cleanupPlanDigestFrom: workflow.register-observer-access-compensation.cleanupPlanDigest
+    deletePreconditionFrom: evidence.observerAccessAttestation.objects
+    deletePreconditionFields: [uid, resourceVersion]
+    deleteOnPreconditionConflict: park-and-escalate
+    revalidateBeforeEachDelete: true
+    safeToReclaimFrom: specTx.safeToReclaimDecision
+    safeToReclaimPolicy: delivery.observer-access-safe-to-reclaim/v1
+    safeToReclaimIssuerProfileFrom: adapter.observerAccess.reclaimIssuerProfile
+    verifierProfileFrom: adapter.observerAccess.cleanupVerifierProfile
+    reaperJoinFrom: workOrderStore.terminalOrAbsent
+    reaperOnUnavailable: alert-without-delete
+    cleanupOrder:
+      - revoke-lease
+      - delete-realm-role-binding
+      - delete-application-role-binding
+      - delete-namespace-cluster-role-binding
+      - delete-application-role
+      - delete-namespace-cluster-role
+      - delete-service-account
+      - verify-absence-and-shared-role-digest
+    exactWorkOrderObjects:
+      - applicationRole
+      - applicationRoleBinding
+      - namespaceClusterRole
+      - namespaceClusterRoleBinding
+      - realmRoleBinding
+      - serviceAccount
+    sharedObjectsPreserved: [inventoryClusterRole]
+    tokenExpiryIsCleanup: false
+    onAmbiguous: park-and-escalate
+    triggers: [cancelled, completed, expired, failed]
+compensation:
+  action: delivery.revert-prune-and-revoke-preview/v2
+  verifier: realm.preview-and-observer-pruned/v1
+  evidenceType: compensation.result/v1
+  scope:
+    repositoryFrom: source.repositoryFrom
+    gitopsPathFrom: source.gitopsPathTemplate
+    applicationNameFrom: application.nameTemplate
+    destinationNamespaceFrom: destination.namespaceTemplate
+    inventoryDigestFrom: source.desiredInventoryFrom
+    ownershipLabelFrom: resourceEnvelope.ownershipLabel
+    ownershipValueFrom: resourceEnvelope.ownershipValueFrom
+    observerAccessInventoryFrom: observerAccess.desiredInventoryFrom
+    observerAccessSubjectFrom: observerAccess.serviceAccount.nameTemplate

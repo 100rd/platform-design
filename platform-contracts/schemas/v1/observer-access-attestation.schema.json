@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:darkfactory:platform-contract:observer-access-attestation:v1",
+  "title": "ObserverAccessAttestation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "workOrderId",
+    "subject",
+    "identityBinding",
+    "semanticVerifier",
+    "profileDigest",
+    "cleanupPlanDigest",
+    "controlInventoryDigest",
+    "objects",
+    "negativeAuthorization",
+    "negativeAuthorizationMatrixDigest",
+    "inheritedAuthority",
+    "attestor",
+    "signature",
+    "observedAt",
+    "canonicalization",
+    "digestPayloadExcludes",
+    "evidenceSha256"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "delivery/observer-access-attestation/v1"},
+    "workOrderId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,52}$"},
+    "subject": {"type": "string", "pattern": "^system:serviceaccount:darkfactory-observers:obs-[a-z0-9][a-z0-9-]{7,52}$"},
+    "identityBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["derivation", "canonicalDigest"],
+      "properties": {
+        "derivation": {"const": "workorder-derived-observer-access/v1"},
+        "canonicalDigest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "semanticVerifier": {"const": "kubernetes.observer-rbac-attested/v1"},
+    "profileDigest": {"$ref": "#/$defs/digest"},
+    "cleanupPlanDigest": {"$ref": "#/$defs/digest"},
+    "controlInventoryDigest": {"$ref": "#/$defs/digest"},
+    "objects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applicationRole",
+        "applicationRoleBinding",
+        "inventoryClusterRole",
+        "namespaceClusterRole",
+        "namespaceClusterRoleBinding",
+        "realmRoleBinding",
+        "serviceAccount"
+      ],
+      "properties": {
+        "applicationRole": {"$ref": "#/$defs/applicationRole"},
+        "applicationRoleBinding": {"$ref": "#/$defs/applicationRoleBinding"},
+        "inventoryClusterRole": {"$ref": "#/$defs/inventoryClusterRole"},
+        "namespaceClusterRole": {"$ref": "#/$defs/namespaceClusterRole"},
+        "namespaceClusterRoleBinding": {"$ref": "#/$defs/namespaceClusterRoleBinding"},
+        "realmRoleBinding": {"$ref": "#/$defs/realmRoleBinding"},
+        "serviceAccount": {"$ref": "#/$defs/serviceAccount"}
+      }
+    },
+    "negativeAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "appproject-get",
+        "configmap-get",
+        "configmap-list",
+        "declared-resource-mutations",
+        "foreign-application-get",
+        "foreign-namespace-get",
+        "foreign-realm-list",
+        "foreign-tokenrequest-create",
+        "impersonate-groups",
+        "impersonate-serviceaccounts",
+        "impersonate-userextras-scopes",
+        "impersonate-users",
+        "pod-exec-create",
+        "pod-log-get",
+        "pod-portforward-create",
+        "secret-get",
+        "secret-list",
+        "sensitive-resource-watch",
+        "service-proxy-get",
+        "tokenrequest-create",
+        "inventory-watch"
+      ],
+      "properties": {
+        "appproject-get": {"$ref": "#/$defs/denialResult"},
+        "configmap-get": {"$ref": "#/$defs/denialResult"},
+        "configmap-list": {"$ref": "#/$defs/denialResult"},
+        "declared-resource-mutations": {"$ref": "#/$defs/denialResult"},
+        "foreign-application-get": {"$ref": "#/$defs/denialResult"},
+        "foreign-namespace-get": {"$ref": "#/$defs/denialResult"},
+        "foreign-realm-list": {"$ref": "#/$defs/denialResult"},
+        "foreign-tokenrequest-create": {"$ref": "#/$defs/denialResult"},
+        "impersonate-groups": {"$ref": "#/$defs/denialResult"},
+        "impersonate-serviceaccounts": {"$ref": "#/$defs/denialResult"},
+        "impersonate-userextras-scopes": {"$ref": "#/$defs/denialResult"},
+        "impersonate-users": {"$ref": "#/$defs/denialResult"},
+        "inventory-watch": {"$ref": "#/$defs/denialResult"},
+        "pod-exec-create": {"$ref": "#/$defs/denialResult"},
+        "pod-log-get": {"$ref": "#/$defs/denialResult"},
+        "pod-portforward-create": {"$ref": "#/$defs/denialResult"},
+        "secret-get": {"$ref": "#/$defs/denialResult"},
+        "secret-list": {"$ref": "#/$defs/denialResult"},
+        "sensitive-resource-watch": {"$ref": "#/$defs/denialResult"},
+        "service-proxy-get": {"$ref": "#/$defs/denialResult"},
+        "tokenrequest-create": {"$ref": "#/$defs/denialResult"}
+      }
+    },
+    "negativeAuthorizationMatrixDigest": {"$ref": "#/$defs/digest"},
+    "inheritedAuthority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reported",
+        "complete",
+        "evaluationMode",
+        "baselineProfileDigest",
+        "baselineRulesDigest",
+        "profileGrantDigest",
+        "effectiveAuthorityDigest",
+        "resourceRules",
+        "nonResourceRules",
+        "canonicalDigest"
+      ],
+      "properties": {
+        "reported": {"const": true},
+        "complete": {"const": true},
+        "evaluationMode": {"const": "exact-profile-and-baseline-delta"},
+        "baselineProfileDigest": {"$ref": "#/$defs/digest"},
+        "baselineRulesDigest": {"$ref": "#/$defs/digest"},
+        "profileGrantDigest": {"$ref": "#/$defs/digest"},
+        "effectiveAuthorityDigest": {"$ref": "#/$defs/digest"},
+        "resourceRules": {
+          "const": []
+        },
+        "nonResourceRules": {
+          "const": []
+        },
+        "canonicalDigest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "attestor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profileDigest", "subject", "independentFromObserver", "signingKeyId"],
+      "properties": {
+        "profileDigest": {"$ref": "#/$defs/digest"},
+        "subject": {"type": "string", "minLength": 1, "maxLength": 253},
+        "independentFromObserver": {"const": true},
+        "signingKeyId": {"type": "string", "minLength": 1, "maxLength": 253}
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "keyId", "value"],
+      "properties": {
+        "algorithm": {"enum": ["ECDSA_SHA_256", "Ed25519"]},
+        "keyId": {"type": "string", "minLength": 1, "maxLength": 253},
+        "value": {"type": "string", "pattern": "^[A-Za-z0-9_-]{43,4096}$"}
+      }
+    },
+    "observedAt": {"type": "string", "format": "date-time"},
+    "canonicalization": {"const": "rfc8785-json-canonicalization/v1"},
+    "digestPayloadExcludes": {"const": ["evidenceSha256", "signature.value"]},
+    "evidenceSha256": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "denialResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "requestDigest", "responseDigest"],
+      "properties": {
+        "decision": {"const": "denied"},
+        "requestDigest": {"$ref": "#/$defs/digest"},
+        "responseDigest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "inheritedResourceRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["apiGroups", "resources", "resourceNames", "verbs", "scope"],
+      "properties": {
+        "apiGroups": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+        "resources": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "resourceNames": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "verbs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "scope": {"type": "string", "minLength": 1, "maxLength": 253}
+      }
+    },
+    "inheritedNonResourceRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nonResourceUrls", "verbs"],
+      "properties": {
+        "nonResourceUrls": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^/", "maxLength": 253}},
+        "verbs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "clusterObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["apiVersion", "kind", "name", "uid", "resourceVersion", "canonicalDigest"],
+      "properties": {
+        "apiVersion": {"const": "rbac.authorization.k8s.io/v1"},
+        "kind": {"enum": ["ClusterRole", "ClusterRoleBinding"]},
+        "name": {"type": "string", "minLength": 1, "maxLength": 63},
+        "uid": {"type": "string", "minLength": 1, "maxLength": 128},
+        "resourceVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+        "canonicalDigest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "namespacedObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["apiVersion", "kind", "namespace", "name", "uid", "resourceVersion", "canonicalDigest"],
+      "properties": {
+        "apiVersion": {"enum": ["v1", "rbac.authorization.k8s.io/v1"]},
+        "kind": {"enum": ["Role", "RoleBinding", "ServiceAccount"]},
+        "namespace": {"type": "string", "minLength": 1, "maxLength": 63},
+        "name": {"type": "string", "pattern": "^obs-[a-z0-9][a-z0-9-]{7,52}$"},
+        "uid": {"type": "string", "minLength": 1, "maxLength": 128},
+        "resourceVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+        "canonicalDigest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "applicationRole": {"$ref": "#/$defs/namespacedObject", "properties": {"apiVersion": {"const": "rbac.authorization.k8s.io/v1"}, "kind": {"const": "Role"}, "namespace": {"const": "argocd"}}},
+    "applicationRoleBinding": {"$ref": "#/$defs/namespacedObject", "properties": {"apiVersion": {"const": "rbac.authorization.k8s.io/v1"}, "kind": {"const": "RoleBinding"}, "namespace": {"const": "argocd"}}},
+    "inventoryClusterRole": {"$ref": "#/$defs/clusterObject", "properties": {"kind": {"const": "ClusterRole"}, "name": {"const": "darkfactory-preview-delivery-list-v1"}}},
+    "namespaceClusterRole": {"$ref": "#/$defs/clusterObject", "properties": {"kind": {"const": "ClusterRole"}, "name": {"pattern": "^obs-[a-z0-9][a-z0-9-]{7,52}$"}}},
+    "namespaceClusterRoleBinding": {"$ref": "#/$defs/clusterObject", "properties": {"kind": {"const": "ClusterRoleBinding"}, "name": {"pattern": "^obs-[a-z0-9][a-z0-9-]{7,52}$"}}},
+    "realmRoleBinding": {"$ref": "#/$defs/namespacedObject", "properties": {"apiVersion": {"const": "rbac.authorization.k8s.io/v1"}, "kind": {"const": "RoleBinding"}, "namespace": {"pattern": "^preview-[a-z0-9][a-z0-9-]{7,52}$"}}},
+    "serviceAccount": {"$ref": "#/$defs/namespacedObject", "properties": {"apiVersion": {"const": "v1"}, "kind": {"const": "ServiceAccount"}, "namespace": {"const": "darkfactory-observers"}}}
+  }
+}

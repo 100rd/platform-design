@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:darkfactory:platform-contract:observation-scope:v1",
+  "title": "ObservationScope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "workOrderId",
+    "subject",
+    "identityDerivation",
+    "identityBindingDigest",
+    "adapterBindingDigest",
+    "semanticVerifier",
+    "audience",
+    "apiServer",
+    "caSha256",
+    "application",
+    "namespace",
+    "operations",
+    "kindIds",
+    "issuedAt",
+    "expiresAt",
+    "deadline",
+    "maxObjects",
+    "maxResponseBytes",
+    "issuer",
+    "canonicalization",
+    "digestPayloadExcludes",
+    "scopeSha256"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "delivery/observation-scope/v1"},
+    "workOrderId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,52}$"},
+    "subject": {
+      "type": "string",
+      "pattern": "^system:serviceaccount:darkfactory-observers:obs-[a-z0-9][a-z0-9-]{7,52}$"
+    },
+    "identityDerivation": {"const": "workorder-derived-observer-scope/v1"},
+    "identityBindingDigest": {"$ref": "#/$defs/digest"},
+    "adapterBindingDigest": {"$ref": "#/$defs/digest"},
+    "semanticVerifier": {"const": "kubernetes.observation-scope-bound/v1"},
+    "audience": {"type": "string", "minLength": 1, "maxLength": 253},
+    "apiServer": {"type": "string", "format": "uri", "pattern": "^https://"},
+    "caSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "application": {"$ref": "#/$defs/applicationRef"},
+    "namespace": {"$ref": "#/$defs/namespaceRef"},
+    "operations": {"const": ["application.get", "namespace.get", "realm.list"]},
+    "kindIds": {
+      "const": [
+        "apps/v1/Deployment",
+        "apps/v1/ReplicaSet",
+        "networking.k8s.io/v1/Ingress",
+        "networking.k8s.io/v1/NetworkPolicy",
+        "rbac.authorization.k8s.io/v1/Role",
+        "rbac.authorization.k8s.io/v1/RoleBinding",
+        "v1/PersistentVolumeClaim",
+        "v1/Pod",
+        "v1/ResourceQuota",
+        "v1/Service",
+        "v1/ServiceAccount"
+      ]
+    },
+    "issuedAt": {"type": "string", "format": "date-time"},
+    "expiresAt": {"type": "string", "format": "date-time"},
+    "deadline": {"type": "string", "format": "date-time"},
+    "maxObjects": {"const": 100},
+    "maxResponseBytes": {"const": 1048576},
+    "issuer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profileDigest", "subject", "signingKeyId", "algorithm", "signature"],
+      "properties": {
+        "profileDigest": {"$ref": "#/$defs/digest"},
+        "subject": {"type": "string", "minLength": 1, "maxLength": 253},
+        "signingKeyId": {"type": "string", "minLength": 1, "maxLength": 253},
+        "algorithm": {"enum": ["ECDSA_SHA_256", "Ed25519"]},
+        "signature": {"type": "string", "pattern": "^[A-Za-z0-9_-]{43,4096}$"}
+      }
+    },
+    "canonicalization": {"const": "rfc8785-json-canonicalization/v1"},
+    "digestPayloadExcludes": {"const": ["issuer.signature", "scopeSha256"]},
+    "scopeSha256": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "applicationRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespace", "name", "uid"],
+      "properties": {
+        "namespace": {"const": "argocd"},
+        "name": {"type": "string", "pattern": "^preview-[a-z0-9][a-z0-9-]{7,52}$"},
+        "uid": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    },
+    "namespaceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "uid"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^preview-[a-z0-9][a-z0-9-]{7,52}$"},
+        "uid": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    }
+  }
+}
