@@ -811,6 +811,9 @@ def validate_semantics(
                     "provision-observer-access": "delivery.provision-observer-access/v1",
                     "register-observer-access-compensation": "execution.register-compensation/v1",
                     "revoke-observer-access": "delivery.revoke-observer-access/v1",
+                    "store-http-probe-result": (
+                        "evidence.store-http-probe-result/v1"
+                    ),
                     "store-observation-evidence": "evidence.store-delivery-observation/v1",
                     "issue-http-probe-credential": (
                         "verification.issue-http-probe-credential/v1"
@@ -832,7 +835,8 @@ def validate_semantics(
                     "store-observation-evidence": ["observe-gitops"],
                     "issue-http-probe-credential": ["store-observation-evidence"],
                     "verify-runtime": ["issue-http-probe-credential"],
-                    "revoke-observer-access": ["verify-runtime"],
+                    "store-http-probe-result": ["verify-runtime"],
+                    "revoke-observer-access": ["store-http-probe-result"],
                 }
                 for step_id, needs in observer_chain.items():
                     if step_needs.get(step_id) != needs:
@@ -936,6 +940,17 @@ def validate_semantics(
                     )
                 if runtime["evidenceType"] != runtime_profile["evidence"]["evidenceType"]:
                     raise ContractError(f"{path_id}: HTTP evidence type binding differs")
+                commit = runtime.get("evidenceCommit")
+                if commit is None:
+                    raise ContractError(f"{path_id}: HTTP evidence commit profile is absent")
+                require_registered(commit["action"], registries["actions"], path_id)
+                require_registered(
+                    commit["receiptEvidenceType"], registries["evidenceTypes"], path_id
+                )
+                if commit["receiptEvidenceType"] not in path["evidence"]["requiredTypes"]:
+                    raise ContractError(
+                        f"{path_id}: HTTP evidence commit receipt is not required"
+                    )
         condition_ids = [condition["id"] for condition in path["conditionsOfDone"]]
         if len(condition_ids) != len(set(condition_ids)):
             raise ContractError(f"{path_id}: duplicate Condition of Done id")
