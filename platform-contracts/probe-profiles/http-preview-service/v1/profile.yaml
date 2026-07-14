@@ -1,0 +1,96 @@
+schemaVersion: platform/http-probe-profile/v1
+kind: HttpProbeProfile
+metadata:
+  name: http-preview-service
+  version: v1
+  owner: platform-team
+  state: draft
+appliesTo:
+  path: standard-http-service/v3
+  deliveryProfile: argocd-preview-http-service/v2
+  realm: preview/v2
+conditionPlan:
+  freezeAction: verification.freeze-http-conditions/v1
+  freezeBefore: workflow.author-change
+  acceptanceFrom: request.inputs.acceptance
+  acceptanceDigestFrom: executionEnvelope.httpAcceptanceDigest
+  method: GET
+  pathPattern: ^/[A-Za-z0-9_~-]+(?:/[A-Za-z0-9_~-]+)*$
+  fixedConditions:
+    - id: runtime.health
+      probe: http.healthz/v1
+      path: /healthz
+      status: 200
+      assertion: status-only
+    - id: runtime.readiness
+      probe: http.readyz/v1
+      path: /readyz
+      status: 200
+      assertion: status-only
+  requestContract:
+    conditionId: runtime.request-contract
+    probe: http.request-contract/v1
+    minItems: 1
+    maxItems: 5
+    status: 200
+    assertions: [exact-text, json-subset]
+targetResolution:
+  deliveryEvidenceFrom: evidence.kubernetes.delivery-observation
+  deliveryEvidenceMaxAge: PT5M
+  clusterRefFrom: destination.clusterRef
+  namespaceFrom: destination.namespaceTemplate
+  namespaceSnapshotFields: [resourceVersion, uid]
+  serviceNameFrom: request.inputs.serviceName
+  servicePort: 8080
+  serviceSnapshotFields: [clusterIP, ports, resourceVersion, selector, type, uid]
+  backendChain: [apps/v1/Deployment, apps/v1/ReplicaSet, v1/Pod, discovery.k8s.io/v1/EndpointSlice, status.containerStatuses.imageID]
+  servingContainerRule: exactly-one-container-serving-port-8080
+  minReadyBackends: 1
+  maxReadyBackends: 3
+  backendOrder: stable-pod-or-endpoint-key-ascending
+  probeMode: each-ready-backend-direct
+  snapshotTiming: before-and-after-each-attempt
+  invalidTargetReasons: [empty-backend-set, excess-backend-set, invalid-backend, mixed-image, target-drift]
+  onInvalidTarget: probe-error
+transport:
+  scheme: http
+  method: GET
+  pathMode: prevalidated-origin-form
+  urlJoin: false
+  trustEnvironment: false
+  redirects: false
+  authentication: none
+  hostHeaderFrom: derivedTarget.serviceDnsName
+  backendExecution: concurrent-bounded-3-results-pod-uid-ordered
+  textMediaTypes: [text/plain, "text/plain; charset=utf-8"]
+  jsonMediaTypes: [application/json, "application/json; charset=utf-8"]
+limits:
+  maxAttemptsPerConditionRun: 5
+  consecutivePasses: 3
+  delayBetweenAttempts: PT1S
+  perBackendDeadline: PT5S
+  attemptBatchDeadline: PT30S
+  overallRunDeadline: PT4M
+  maxResponseBytesPerBackend: 65536
+  maxOracleEntries: 10
+  onAssertionFailure: continue-until-five-or-success
+  onProbeError: stop
+aggregation:
+  states: [fail, inconclusive, pass, probe-error]
+  batchPass: all-backends-pass-and-snapshots-identical
+  batchPrecedence: [probe-error, fail, inconclusive, pass]
+  conditionPass: three-consecutive-pass-batches
+  nonPassResetsStreak: true
+  requestContractPass: all-acceptance-condition-runs-pass
+  pathPass: all-three-path-conditions-pass
+evidence:
+  subjectSchema: urn:darkfactory:platform-contract:http-probe-subject:v1
+  resultSchema: urn:darkfactory:platform-contract:http-probe-result:v1
+  evidenceType: http.probe-result/v1
+  canonicalization: rfc8785-json-canonicalization/v1
+  digestAlgorithm: sha256
+  signatureAlgorithm: Ed25519
+  verifierProfileFrom: adapter.httpVerification.verifierProfile
+  signingKeyFrom: adapter.httpVerification.signingKey
+  workerEvidenceAccepted: false
+  rawResponseStored: false

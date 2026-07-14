@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:darkfactory:platform-contract:http-probe-result:v1",
+  "title": "HttpProbeResult v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "evidenceType", "workOrderId", "runId", "subject", "subjectSha256", "conditionRuns", "pathConditionResults", "aggregateState", "satisfied", "startedAt", "completedAt", "expiresAt", "canonicalization", "digestPayloadExcludes", "evidenceSha256", "verifier"],
+  "properties": {
+    "schemaVersion": {"const": "verification/http-probe-result/v1"},
+    "evidenceType": {"const": "http.probe-result/v1"},
+    "workOrderId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,52}$"},
+    "runId": {"$ref": "#/$defs/runId"},
+    "subject": {"$ref": "urn:darkfactory:platform-contract:http-probe-subject:v1"},
+    "subjectSha256": {"$ref": "#/$defs/digest"},
+    "conditionRuns": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 7,
+      "items": {"$ref": "#/$defs/conditionRun"}
+    },
+    "pathConditionResults": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {"$ref": "#/$defs/pathResult", "properties": {"id": {"const": "runtime.health"}}},
+        {"$ref": "#/$defs/pathResult", "properties": {"id": {"const": "runtime.readiness"}}},
+        {"$ref": "#/$defs/pathResult", "properties": {"id": {"const": "runtime.request-contract"}}}
+      ],
+      "items": false
+    },
+    "aggregateState": {"$ref": "#/$defs/state"},
+    "satisfied": {"type": "boolean"},
+    "startedAt": {"type": "string", "format": "date-time"},
+    "completedAt": {"type": "string", "format": "date-time"},
+    "expiresAt": {"type": "string", "format": "date-time"},
+    "canonicalization": {"const": "rfc8785-json-canonicalization/v1"},
+    "digestPayloadExcludes": {"const": ["evidenceSha256", "verifier.signature"]},
+    "evidenceSha256": {"$ref": "#/$defs/digest"},
+    "verifier": {"$ref": "#/$defs/signer"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "runId": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "state": {"enum": ["pass", "fail", "inconclusive", "probe-error"]},
+    "pathResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "state", "satisfied"],
+      "properties": {
+        "id": {"enum": ["runtime.health", "runtime.readiness", "runtime.request-contract"]},
+        "state": {"$ref": "#/$defs/state"},
+        "satisfied": {"type": "boolean"}
+      }
+    },
+    "conditionRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "pathConditionId", "probe", "expectationOrdinal", "path", "expectationDigest", "attempts", "achievedConsecutivePasses", "state", "termination"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^(health|readiness|acceptance-[1-5])$"},
+        "pathConditionId": {"enum": ["runtime.health", "runtime.readiness", "runtime.request-contract"]},
+        "probe": {"enum": ["http.healthz/v1", "http.readyz/v1", "http.request-contract/v1"]},
+        "expectationOrdinal": {"type": "integer", "minimum": 0, "maximum": 5},
+        "path": {"type": "string", "minLength": 2, "maxLength": 128, "pattern": "^/[A-Za-z0-9_~-]+(?:/[A-Za-z0-9_~-]+)*$"},
+        "expectationDigest": {"$ref": "#/$defs/digest"},
+        "attempts": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 5,
+          "items": {"$ref": "#/$defs/attempt"}
+        },
+        "achievedConsecutivePasses": {"type": "integer", "minimum": 0, "maximum": 3},
+        "state": {"$ref": "#/$defs/state"},
+        "termination": {"enum": ["condition-satisfied", "attempts-exhausted", "run-deadline", "probe-error"]}
+      }
+    },
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attemptId", "ordinal", "startedAt", "completedAt", "durationMs", "preTarget", "targetErrorCode", "backendResults", "postTarget", "state"],
+      "properties": {
+        "attemptId": {"$ref": "#/$defs/runId"},
+        "ordinal": {"type": "integer", "minimum": 1, "maximum": 5},
+        "startedAt": {"type": "string", "format": "date-time"},
+        "completedAt": {"type": "string", "format": "date-time"},
+        "durationMs": {"type": "integer", "minimum": 0, "maximum": 30000},
+        "preTarget": {"$ref": "#/$defs/targetSnapshot"},
+        "targetErrorCode": {"type": ["string", "null"], "enum": [null, "empty-backend-set", "excess-backend-set", "invalid-backend", "mixed-image", "target-drift"]},
+        "backendResults": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 3,
+          "items": {"$ref": "#/$defs/backendResult"}
+        },
+        "postTarget": {"$ref": "#/$defs/targetSnapshot"},
+        "state": {"$ref": "#/$defs/state"}
+      }
+    },
+    "targetSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespaceUid", "namespaceResourceVersion", "serviceUid", "serviceResourceVersion", "serviceRoutingSpecDigest", "networkPolicySetDigest", "endpointSliceSetDigest", "backendSetDigest", "observedBackendCount", "backends"],
+      "properties": {
+        "namespaceUid": {"type": "string", "minLength": 1, "maxLength": 128},
+        "namespaceResourceVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+        "serviceUid": {"type": "string", "minLength": 1, "maxLength": 128},
+        "serviceResourceVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+        "serviceRoutingSpecDigest": {"$ref": "#/$defs/digest"},
+        "networkPolicySetDigest": {"$ref": "#/$defs/digest"},
+        "endpointSliceSetDigest": {"$ref": "#/$defs/digest"},
+        "backendSetDigest": {"$ref": "#/$defs/digest"},
+        "observedBackendCount": {"type": "integer", "minimum": 0, "maximum": 100},
+        "backends": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 100,
+          "items": {"$ref": "#/$defs/backendSnapshot"}
+        }
+      }
+    },
+    "backendSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpointSliceName", "endpointSliceUid", "endpointSliceResourceVersion", "endpointSliceDigest", "endpointSliceServiceName", "endpointSliceManagedBy", "addressType", "address", "targetRefKind", "targetRefName", "targetRefUid", "podNamespace", "podName", "podUid", "podResourceVersion", "podSpecDigest", "podStatusDigest", "podIp", "podOwnerKind", "podOwnerName", "podOwnerUid", "replicaSetName", "replicaSetUid", "replicaSetResourceVersion", "replicaSetOwnerKind", "replicaSetOwnerName", "replicaSetOwnerUid", "deploymentName", "deploymentUid", "deploymentResourceVersion", "renderedPodTemplateDigest", "ownershipWorkOrderId", "selectorMatches", "ready", "serving", "terminating", "hostNetwork", "containerName", "containersServingPort", "containerPort", "serviceTargetPort", "containerReady", "imageId", "imageDigest"],
+      "properties": {
+        "endpointSliceName": {"type": "string", "minLength": 1, "maxLength": 253},
+        "endpointSliceUid": {"type": "string", "minLength": 1, "maxLength": 128},
+        "endpointSliceResourceVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+        "endpointSliceDigest": {"$ref": "#/$defs/digest"},
+        "endpointSliceServiceName": {"type": "string", "minLength": 1, "maxLength": 63},
+        "endpointSliceManagedBy": {"type": "string", "minLength": 1, "maxLength": 253},
+        "addressType": {"enum": ["IPv4", "IPv6"]},
+        "address": {"type": "string", "minLength": 2, "maxLength": 45},
+        "targetRefKind": {"type": ["string", "null"], "maxLength": 63},
+        "targetRefName": {"type": ["string", "null"], "minLength": 1, "maxLength": 253},
+        "targetRefUid": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "podNamespace": {"type": ["string", "null"], "maxLength": 63},
+        "podName": {"type": ["string", "null"], "minLength": 1, "maxLength": 253},
+        "podUid": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "podResourceVersion": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "podSpecDigest": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]},
+        "podStatusDigest": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]},
+        "podIp": {"type": ["string", "null"], "minLength": 2, "maxLength": 45},
+        "podOwnerKind": {"type": ["string", "null"], "maxLength": 63},
+        "podOwnerName": {"type": ["string", "null"], "minLength": 1, "maxLength": 253},
+        "podOwnerUid": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "replicaSetName": {"type": ["string", "null"], "minLength": 1, "maxLength": 253},
+        "replicaSetUid": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "replicaSetResourceVersion": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "replicaSetOwnerKind": {"type": ["string", "null"], "maxLength": 63},
+        "replicaSetOwnerName": {"type": ["string", "null"], "minLength": 1, "maxLength": 253},
+        "replicaSetOwnerUid": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "deploymentName": {"type": ["string", "null"], "minLength": 1, "maxLength": 253},
+        "deploymentUid": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "deploymentResourceVersion": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "renderedPodTemplateDigest": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]},
+        "ownershipWorkOrderId": {"type": ["string", "null"], "maxLength": 53},
+        "selectorMatches": {"type": "boolean"},
+        "ready": {"type": "boolean"},
+        "serving": {"type": "boolean"},
+        "terminating": {"type": "boolean"},
+        "hostNetwork": {"type": "boolean"},
+        "containerName": {"type": ["string", "null"], "minLength": 1, "maxLength": 63},
+        "containersServingPort": {"type": "integer", "minimum": 0, "maximum": 100},
+        "containerPort": {"type": ["integer", "null"], "minimum": 1, "maximum": 65535},
+        "serviceTargetPort": {"type": ["integer", "null"], "minimum": 1, "maximum": 65535},
+        "containerReady": {"type": "boolean"},
+        "imageId": {"type": ["string", "null"], "maxLength": 512},
+        "imageDigest": {"oneOf": [{"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, {"type": "null"}]}
+      }
+    },
+    "backendResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["podUid", "state", "durationMs", "status", "mediaType", "responseBytes", "responseTruncated", "contentSha256", "errorCode", "oracle"],
+      "properties": {
+        "podUid": {"type": "string", "minLength": 1, "maxLength": 128},
+        "state": {"$ref": "#/$defs/state"},
+        "durationMs": {"type": "integer", "minimum": 0, "maximum": 5000},
+        "status": {"type": ["integer", "null"], "minimum": 100, "maximum": 599},
+        "mediaType": {"type": ["string", "null"], "maxLength": 80},
+        "responseBytes": {"type": "integer", "minimum": 0, "maximum": 65536},
+        "responseTruncated": {"type": "boolean"},
+        "contentSha256": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]},
+        "errorCode": {"type": ["string", "null"], "enum": [null, "connection", "deadline", "target-drift", "target-invalid", "run-deadline", "verifier"]},
+        "oracle": {
+          "oneOf": [
+            {"$ref": "#/$defs/statusOracle"},
+            {"$ref": "#/$defs/textOracle"},
+            {"$ref": "#/$defs/jsonOracle"}
+          ]
+        }
+      }
+    },
+    "statusOracle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "expectedStatus", "observedStatus"],
+      "properties": {
+        "kind": {"const": "status-only"},
+        "expectedStatus": {"const": 200},
+        "observedStatus": {"type": ["integer", "null"], "minimum": 100, "maximum": 599}
+      }
+    },
+    "textOracle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "expectedByteDigest", "observedByteDigest"],
+      "properties": {
+        "kind": {"const": "exact-text"},
+        "expectedByteDigest": {"$ref": "#/$defs/digest"},
+        "observedByteDigest": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]}
+      }
+    },
+    "jsonOracle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "entries"],
+      "properties": {
+        "kind": {"const": "json-subset"},
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "expectedType", "expectedValueDigest", "observedPresent", "observedType", "observedValueDigest"],
+            "properties": {
+              "key": {"type": "string", "minLength": 1, "maxLength": 64},
+              "expectedType": {"enum": ["boolean", "integer", "null", "number", "string"]},
+              "expectedValueDigest": {"$ref": "#/$defs/digest"},
+              "observedPresent": {"type": "boolean"},
+              "observedType": {"type": ["string", "null"], "enum": [null, "boolean", "integer", "null", "number", "string"]},
+              "observedValueDigest": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]}
+            }
+          }
+        }
+      }
+    },
+    "signer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profileDigest", "signingKeyId", "algorithm", "signature"],
+      "properties": {
+        "profileDigest": {"$ref": "#/$defs/digest"},
+        "signingKeyId": {"type": "string", "minLength": 1, "maxLength": 253},
+        "algorithm": {"const": "Ed25519"},
+        "signature": {"type": "string", "pattern": "^[A-Za-z0-9_-]{43,4096}$"}
+      }
+    }
+  }
+}

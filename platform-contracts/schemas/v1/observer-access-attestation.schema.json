@@ -234,7 +234,7 @@
     },
     "applicationRole": {"$ref": "#/$defs/namespacedObject", "properties": {"apiVersion": {"const": "rbac.authorization.k8s.io/v1"}, "kind": {"const": "Role"}, "namespace": {"const": "argocd"}}},
     "applicationRoleBinding": {"$ref": "#/$defs/namespacedObject", "properties": {"apiVersion": {"const": "rbac.authorization.k8s.io/v1"}, "kind": {"const": "RoleBinding"}, "namespace": {"const": "argocd"}}},
-    "inventoryClusterRole": {"$ref": "#/$defs/clusterObject", "properties": {"kind": {"const": "ClusterRole"}, "name": {"const": "darkfactory-preview-delivery-list-v1"}}},
+    "inventoryClusterRole": {"$ref": "#/$defs/clusterObject", "properties": {"kind": {"const": "ClusterRole"}, "name": {"const": "darkfactory-preview-delivery-list-v2"}}},
     "namespaceClusterRole": {"$ref": "#/$defs/clusterObject", "properties": {"kind": {"const": "ClusterRole"}, "name": {"pattern": "^obs-[a-z0-9][a-z0-9-]{7,52}$"}}},
     "namespaceClusterRoleBinding": {"$ref": "#/$defs/clusterObject", "properties": {"kind": {"const": "ClusterRoleBinding"}, "name": {"pattern": "^obs-[a-z0-9][a-z0-9-]{7,52}$"}}},
     "realmRoleBinding": {"$ref": "#/$defs/namespacedObject", "properties": {"apiVersion": {"const": "rbac.authorization.k8s.io/v1"}, "kind": {"const": "RoleBinding"}, "namespace": {"pattern": "^preview-[a-z0-9][a-z0-9-]{7,52}$"}}},

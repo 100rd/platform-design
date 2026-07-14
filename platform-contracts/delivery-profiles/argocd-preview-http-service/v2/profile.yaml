@@ -62,6 +62,7 @@ resourceEnvelope:
     - dedicated-namespace
     - default-deny-network
     - digest-pinned-image
+    - http-verifier-ingress-only
     - no-persistent-volumes
     - no-runtime-secrets
     - no-service-account-token
@@ -139,7 +140,7 @@ observerAccess:
       nameFrom: observerAccess.serviceAccount.nameTemplate
       namespaceFrom: observerAccess.observerNamespace
   inventoryClusterRole:
-    name: darkfactory-preview-delivery-list-v1
+    name: darkfactory-preview-delivery-list-v2
     shared: true
     rules:
       - apiGroups: [""]
@@ -147,6 +148,9 @@ observerAccess:
         verbs: [list]
       - apiGroups: [apps]
         resources: [deployments, replicasets]
+        verbs: [list]
+      - apiGroups: [discovery.k8s.io]
+        resources: [endpointslices]
         verbs: [list]
       - apiGroups: [networking.k8s.io]
         resources: [ingresses, networkpolicies]
@@ -189,6 +193,7 @@ observerAccess:
     kindIds:
       - apps/v1/Deployment
       - apps/v1/ReplicaSet
+      - discovery.k8s.io/v1/EndpointSlice
       - networking.k8s.io/v1/Ingress
       - networking.k8s.io/v1/NetworkPolicy
       - rbac.authorization.k8s.io/v1/Role
@@ -396,6 +401,41 @@ observerAccess:
     tokenExpiryIsCleanup: false
     onAmbiguous: park-and-escalate
     triggers: [cancelled, completed, expired, failed]
+runtimeVerification:
+  action: verification.run-http-probes/v1
+  profile: http-preview-service/v1
+  profileSchema: urn:darkfactory:platform-contract:http-probe-profile:v1
+  subjectSchema: urn:darkfactory:platform-contract:http-probe-subject:v1
+  resultSchema: urn:darkfactory:platform-contract:http-probe-result:v1
+  evidenceType: http.probe-result/v1
+  deliveryObservationSchemaFrom: observations.evidenceSchema
+  credential:
+    authority: platform-control-plane
+    serviceAccountFrom: observerAccess.serviceAccount.nameTemplate
+    issueAction: verification.issue-http-probe-credential/v1
+    audienceFrom: adapter.destination.tokenAudience
+    apiServerFrom: adapter.destination.apiServer
+    caSha256From: adapter.destination.caSha256
+    maxLifetime: PT5M
+    absoluteDeadline: PT4M
+    maxResponseBytes: 1048576
+    operations: [deployments.list, endpointslices.list, namespace.get, networkpolicies.list, pods.list, replicasets.list, services.list]
+    kindIds: [apps/v1/Deployment, apps/v1/ReplicaSet, discovery.k8s.io/v1/EndpointSlice, networking.k8s.io/v1/NetworkPolicy, v1/Namespace, v1/Pod, v1/Service]
+    subjectIssuerProfileFrom: adapter.httpVerification.subjectIssuerProfile
+  network:
+    sourceNamespaceFrom: adapter.httpVerification.namespace
+    sourcePodSelectorFrom: adapter.httpVerification.podSelector
+    destinationNamespaceFrom: destination.namespaceTemplate
+    destinationPodSelectorFrom: application.requiredLabels
+    destinationPort: 8080
+    protocol: TCP
+    policyTypes: [Ingress]
+    allowRuleCount: 1
+    denyOtherIngress: true
+    desiredPolicyDigestFrom: workflow.validate-change.httpVerifierNetworkPolicyDigest
+    observedPolicySnapshotFrom: evidence.kubernetes.delivery-observation.finalCollectionSnapshots.networking-v1-networkpolicies
+    requiredAssertion: http-verifier-ingress-only
+    callerNetworkTargetAccepted: false
 compensation:
   action: delivery.revert-prune-and-revoke-preview/v2
   verifier: realm.preview-and-observer-pruned/v1

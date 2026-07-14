@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:darkfactory:platform-contract:http-probe-profile:v1",
+  "title": "HttpProbeProfile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "metadata", "appliesTo", "conditionPlan", "targetResolution", "transport", "limits", "aggregation", "evidence"],
+  "properties": {
+    "schemaVersion": {"const": "platform/http-probe-profile/v1"},
+    "kind": {"const": "HttpProbeProfile"},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "owner", "state"],
+      "properties": {
+        "name": {"const": "http-preview-service"},
+        "version": {"const": "v1"},
+        "owner": {"const": "platform-team"},
+        "state": {"const": "draft"}
+      }
+    },
+    "appliesTo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "deliveryProfile", "realm"],
+      "properties": {
+        "path": {"const": "standard-http-service/v3"},
+        "deliveryProfile": {"const": "argocd-preview-http-service/v2"},
+        "realm": {"const": "preview/v2"}
+      }
+    },
+    "conditionPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["freezeAction", "freezeBefore", "acceptanceFrom", "acceptanceDigestFrom", "method", "pathPattern", "fixedConditions", "requestContract"],
+      "properties": {
+        "freezeAction": {"const": "verification.freeze-http-conditions/v1"},
+        "freezeBefore": {"const": "workflow.author-change"},
+        "acceptanceFrom": {"const": "request.inputs.acceptance"},
+        "acceptanceDigestFrom": {"const": "executionEnvelope.httpAcceptanceDigest"},
+        "method": {"const": "GET"},
+        "pathPattern": {"const": "^/[A-Za-z0-9_~-]+(?:/[A-Za-z0-9_~-]+)*$"},
+        "fixedConditions": {
+          "const": [
+            {"id": "runtime.health", "probe": "http.healthz/v1", "path": "/healthz", "status": 200, "assertion": "status-only"},
+            {"id": "runtime.readiness", "probe": "http.readyz/v1", "path": "/readyz", "status": 200, "assertion": "status-only"}
+          ]
+        },
+        "requestContract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["conditionId", "probe", "minItems", "maxItems", "status", "assertions"],
+          "properties": {
+            "conditionId": {"const": "runtime.request-contract"},
+            "probe": {"const": "http.request-contract/v1"},
+            "minItems": {"const": 1},
+            "maxItems": {"const": 5},
+            "status": {"const": 200},
+            "assertions": {"const": ["exact-text", "json-subset"]}
+          }
+        }
+      }
+    },
+    "targetResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deliveryEvidenceFrom", "deliveryEvidenceMaxAge", "clusterRefFrom", "namespaceFrom", "namespaceSnapshotFields", "serviceNameFrom", "servicePort", "serviceSnapshotFields", "backendChain", "servingContainerRule", "minReadyBackends", "maxReadyBackends", "backendOrder", "probeMode", "snapshotTiming", "invalidTargetReasons", "onInvalidTarget"],
+      "properties": {
+        "deliveryEvidenceFrom": {"const": "evidence.kubernetes.delivery-observation"},
+        "deliveryEvidenceMaxAge": {"const": "PT5M"},
+        "clusterRefFrom": {"const": "destination.clusterRef"},
+        "namespaceFrom": {"const": "destination.namespaceTemplate"},
+        "namespaceSnapshotFields": {"const": ["resourceVersion", "uid"]},
+        "serviceNameFrom": {"const": "request.inputs.serviceName"},
+        "servicePort": {"const": 8080},
+        "serviceSnapshotFields": {"const": ["clusterIP", "ports", "resourceVersion", "selector", "type", "uid"]},
+        "backendChain": {"const": ["apps/v1/Deployment", "apps/v1/ReplicaSet", "v1/Pod", "discovery.k8s.io/v1/EndpointSlice", "status.containerStatuses.imageID"]},
+        "servingContainerRule": {"const": "exactly-one-container-serving-port-8080"},
+        "minReadyBackends": {"const": 1},
+        "maxReadyBackends": {"const": 3},
+        "backendOrder": {"const": "stable-pod-or-endpoint-key-ascending"},
+        "probeMode": {"const": "each-ready-backend-direct"},
+        "snapshotTiming": {"const": "before-and-after-each-attempt"},
+        "invalidTargetReasons": {"const": ["empty-backend-set", "excess-backend-set", "invalid-backend", "mixed-image", "target-drift"]},
+        "onInvalidTarget": {"const": "probe-error"}
+      }
+    },
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scheme", "method", "pathMode", "urlJoin", "trustEnvironment", "redirects", "authentication", "hostHeaderFrom", "backendExecution", "textMediaTypes", "jsonMediaTypes"],
+      "properties": {
+        "scheme": {"const": "http"},
+        "method": {"const": "GET"},
+        "pathMode": {"const": "prevalidated-origin-form"},
+        "urlJoin": {"const": false},
+        "trustEnvironment": {"const": false},
+        "redirects": {"const": false},
+        "authentication": {"const": "none"},
+        "hostHeaderFrom": {"const": "derivedTarget.serviceDnsName"},
+        "backendExecution": {"const": "concurrent-bounded-3-results-pod-uid-ordered"},
+        "textMediaTypes": {"const": ["text/plain", "text/plain; charset=utf-8"]},
+        "jsonMediaTypes": {"const": ["application/json", "application/json; charset=utf-8"]}
+      }
+    },
+    "limits": {
+      "const": {
+        "maxAttemptsPerConditionRun": 5,
+        "consecutivePasses": 3,
+        "delayBetweenAttempts": "PT1S",
+        "perBackendDeadline": "PT5S",
+        "attemptBatchDeadline": "PT30S",
+        "overallRunDeadline": "PT4M",
+        "maxResponseBytesPerBackend": 65536,
+        "maxOracleEntries": 10,
+        "onAssertionFailure": "continue-until-five-or-success",
+        "onProbeError": "stop"
+      }
+    },
+    "aggregation": {
+      "const": {
+        "states": ["fail", "inconclusive", "pass", "probe-error"],
+        "batchPass": "all-backends-pass-and-snapshots-identical",
+        "batchPrecedence": ["probe-error", "fail", "inconclusive", "pass"],
+        "conditionPass": "three-consecutive-pass-batches",
+        "nonPassResetsStreak": true,
+        "requestContractPass": "all-acceptance-condition-runs-pass",
+        "pathPass": "all-three-path-conditions-pass"
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subjectSchema", "resultSchema", "evidenceType", "canonicalization", "digestAlgorithm", "signatureAlgorithm", "verifierProfileFrom", "signingKeyFrom", "workerEvidenceAccepted", "rawResponseStored"],
+      "properties": {
+        "subjectSchema": {"const": "urn:darkfactory:platform-contract:http-probe-subject:v1"},
+        "resultSchema": {"const": "urn:darkfactory:platform-contract:http-probe-result:v1"},
+        "evidenceType": {"const": "http.probe-result/v1"},
+        "canonicalization": {"const": "rfc8785-json-canonicalization/v1"},
+        "digestAlgorithm": {"const": "sha256"},
+        "signatureAlgorithm": {"const": "Ed25519"},
+        "verifierProfileFrom": {"const": "adapter.httpVerification.verifierProfile"},
+        "signingKeyFrom": {"const": "adapter.httpVerification.signingKey"},
+        "workerEvidenceAccepted": {"const": false},
+        "rawResponseStored": {"const": false}
+      }
+    }
+  }
+}

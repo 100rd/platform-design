@@ -50,6 +50,7 @@
       "const": [
         "apps/v1/Deployment",
         "apps/v1/ReplicaSet",
+        "discovery.k8s.io/v1/EndpointSlice",
         "networking.k8s.io/v1/Ingress",
         "networking.k8s.io/v1/NetworkPolicy",
         "rbac.authorization.k8s.io/v1/Role",

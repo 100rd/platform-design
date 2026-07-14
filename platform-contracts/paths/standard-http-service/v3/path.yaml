@@ -17,9 +17,12 @@ workflow:
   - id: inspect-source
     action: source.inspect-existing-repository/v1
     needs: []
+  - id: freeze-http-conditions
+    action: verification.freeze-http-conditions/v1
+    needs: [inspect-source]
   - id: author-change
     action: source.author-http-service-change/v1
-    needs: [inspect-source]
+    needs: [freeze-http-conditions]
   - id: validate-change
     action: verification.run-source-gates/v1
     needs: [author-change]
@@ -50,12 +53,15 @@ workflow:
   - id: store-observation-evidence
     action: evidence.store-delivery-observation/v1
     needs: [observe-gitops]
-  - id: revoke-observer-access
-    action: delivery.revoke-observer-access/v1
+  - id: issue-http-probe-credential
+    action: verification.issue-http-probe-credential/v1
     needs: [store-observation-evidence]
   - id: verify-runtime
     action: verification.run-http-probes/v1
-    needs: [revoke-observer-access]
+    needs: [issue-http-probe-credential]
+  - id: revoke-observer-access
+    action: delivery.revoke-observer-access/v1
+    needs: [verify-runtime]
 policies:
   - delivery.platform-observer-access/v1
   - global.no-main-push/v1

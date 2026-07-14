@@ -5,12 +5,14 @@ on:
     branches: [main]
     paths:
       - "platform-contracts/**"
+      - "scripts/http_probe_contract_validation.py"
       - "scripts/validate-platform-contracts.py"
       - "scripts/requirements-platform-contracts.txt"
       - ".github/workflows/platform-contracts-validate.yml"
   pull_request:
     paths:
       - "platform-contracts/**"
+      - "scripts/http_probe_contract_validation.py"
       - "scripts/validate-platform-contracts.py"
       - "scripts/requirements-platform-contracts.txt"
       - ".github/workflows/platform-contracts-validate.yml"

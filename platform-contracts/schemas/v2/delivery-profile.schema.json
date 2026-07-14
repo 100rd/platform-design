@@ -4,7 +4,7 @@
   "title": "PlatformDeliveryProfile v2",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "kind", "metadata", "path", "mechanism", "templateBindings", "source", "application", "destination", "resourceEnvelope", "observations", "observerAccess", "compensation"],
+  "required": ["schemaVersion", "kind", "metadata", "path", "mechanism", "templateBindings", "source", "application", "destination", "resourceEnvelope", "observations", "observerAccess", "runtimeVerification", "compensation"],
   "properties": {
     "schemaVersion": {"const": "platform/delivery-profile/v2"},
     "kind": {"const": "PlatformDeliveryProfile"},
@@ -152,6 +152,7 @@
               "dedicated-namespace",
               "default-deny-network",
               "digest-pinned-image",
+              "http-verifier-ingress-only",
               "no-workload-rbac",
               "no-persistent-volumes",
               "no-runtime-secrets",
@@ -200,6 +201,59 @@
     },
     "observerAccess": {
       "$ref": "urn:darkfactory:platform-contract:observer-access-profile:v1"
+    },
+    "runtimeVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "profile", "profileSchema", "subjectSchema", "resultSchema", "evidenceType", "deliveryObservationSchemaFrom", "credential", "network"],
+      "properties": {
+        "action": {"const": "verification.run-http-probes/v1"},
+        "profile": {"const": "http-preview-service/v1"},
+        "profileSchema": {"const": "urn:darkfactory:platform-contract:http-probe-profile:v1"},
+        "subjectSchema": {"const": "urn:darkfactory:platform-contract:http-probe-subject:v1"},
+        "resultSchema": {"const": "urn:darkfactory:platform-contract:http-probe-result:v1"},
+        "evidenceType": {"const": "http.probe-result/v1"},
+        "deliveryObservationSchemaFrom": {"const": "observations.evidenceSchema"},
+        "credential": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["authority", "serviceAccountFrom", "issueAction", "audienceFrom", "apiServerFrom", "caSha256From", "maxLifetime", "absoluteDeadline", "maxResponseBytes", "operations", "kindIds", "subjectIssuerProfileFrom"],
+          "properties": {
+            "authority": {"const": "platform-control-plane"},
+            "serviceAccountFrom": {"const": "observerAccess.serviceAccount.nameTemplate"},
+            "issueAction": {"const": "verification.issue-http-probe-credential/v1"},
+            "audienceFrom": {"const": "adapter.destination.tokenAudience"},
+            "apiServerFrom": {"const": "adapter.destination.apiServer"},
+            "caSha256From": {"const": "adapter.destination.caSha256"},
+            "maxLifetime": {"const": "PT5M"},
+            "absoluteDeadline": {"const": "PT4M"},
+            "maxResponseBytes": {"const": 1048576},
+            "operations": {"const": ["deployments.list", "endpointslices.list", "namespace.get", "networkpolicies.list", "pods.list", "replicasets.list", "services.list"]},
+            "kindIds": {"const": ["apps/v1/Deployment", "apps/v1/ReplicaSet", "discovery.k8s.io/v1/EndpointSlice", "networking.k8s.io/v1/NetworkPolicy", "v1/Namespace", "v1/Pod", "v1/Service"]},
+            "subjectIssuerProfileFrom": {"const": "adapter.httpVerification.subjectIssuerProfile"}
+          }
+        },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sourceNamespaceFrom", "sourcePodSelectorFrom", "destinationNamespaceFrom", "destinationPodSelectorFrom", "destinationPort", "protocol", "policyTypes", "allowRuleCount", "denyOtherIngress", "desiredPolicyDigestFrom", "observedPolicySnapshotFrom", "requiredAssertion", "callerNetworkTargetAccepted"],
+          "properties": {
+            "sourceNamespaceFrom": {"const": "adapter.httpVerification.namespace"},
+            "sourcePodSelectorFrom": {"const": "adapter.httpVerification.podSelector"},
+            "destinationNamespaceFrom": {"const": "destination.namespaceTemplate"},
+            "destinationPodSelectorFrom": {"const": "application.requiredLabels"},
+            "destinationPort": {"const": 8080},
+            "protocol": {"const": "TCP"},
+            "policyTypes": {"const": ["Ingress"]},
+            "allowRuleCount": {"const": 1},
+            "denyOtherIngress": {"const": true},
+            "desiredPolicyDigestFrom": {"const": "workflow.validate-change.httpVerifierNetworkPolicyDigest"},
+            "observedPolicySnapshotFrom": {"const": "evidence.kubernetes.delivery-observation.finalCollectionSnapshots.networking-v1-networkpolicies"},
+            "requiredAssertion": {"const": "http-verifier-ingress-only"},
+            "callerNetworkTargetAccepted": {"const": false}
+          }
+        }
+      }
     },
     "compensation": {
       "type": "object",

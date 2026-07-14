@@ -79,6 +79,7 @@
       "required": [
         "apps-v1-deployments",
         "apps-v1-replicasets",
+        "discovery-v1-endpointslices",
         "networking-v1-ingresses",
         "networking-v1-networkpolicies",
         "rbac-v1-rolebindings",
@@ -92,6 +93,7 @@
       "properties": {
         "apps-v1-deployments": {"$ref": "#/$defs/appsDeployment"},
         "apps-v1-replicasets": {"$ref": "#/$defs/appsReplicaSet"},
+        "discovery-v1-endpointslices": {"$ref": "#/$defs/discoveryEndpointSlice"},
         "networking-v1-ingresses": {"$ref": "#/$defs/networkingIngress"},
         "networking-v1-networkpolicies": {"$ref": "#/$defs/networkingNetworkPolicy"},
         "rbac-v1-rolebindings": {"$ref": "#/$defs/rbacRoleBinding"},
@@ -125,6 +127,7 @@
     "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "appsDeployment": {"$ref": "urn:darkfactory:platform-contract:namespaced-resource-snapshot:v1", "properties": {"kindId": {"const": "apps/v1/Deployment"}}},
     "appsReplicaSet": {"$ref": "urn:darkfactory:platform-contract:namespaced-resource-snapshot:v1", "properties": {"kindId": {"const": "apps/v1/ReplicaSet"}}},
+    "discoveryEndpointSlice": {"$ref": "urn:darkfactory:platform-contract:namespaced-resource-snapshot:v1", "properties": {"kindId": {"const": "discovery.k8s.io/v1/EndpointSlice"}}},
     "networkingIngress": {"$ref": "urn:darkfactory:platform-contract:namespaced-resource-snapshot:v1", "properties": {"kindId": {"const": "networking.k8s.io/v1/Ingress"}}},
     "networkingNetworkPolicy": {"$ref": "urn:darkfactory:platform-contract:namespaced-resource-snapshot:v1", "properties": {"kindId": {"const": "networking.k8s.io/v1/NetworkPolicy"}}},
     "rbacRoleBinding": {"$ref": "urn:darkfactory:platform-contract:namespaced-resource-snapshot:v1", "properties": {"kindId": {"const": "rbac.authorization.k8s.io/v1/RoleBinding"}}},
