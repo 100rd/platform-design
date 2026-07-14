@@ -80,7 +80,7 @@
       "additionalProperties": false,
       "required": ["name", "shared", "rules"],
       "properties": {
-        "name": {"const": "darkfactory-preview-delivery-list-v1"},
+        "name": {"const": "darkfactory-preview-delivery-list-v2"},
         "shared": {"const": true},
         "rules": {
           "const": [
@@ -92,6 +92,11 @@
             {
               "apiGroups": ["apps"],
               "resources": ["deployments", "replicasets"],
+              "verbs": ["list"]
+            },
+            {
+              "apiGroups": ["discovery.k8s.io"],
+              "resources": ["endpointslices"],
               "verbs": ["list"]
             },
             {
@@ -158,6 +163,7 @@
           "const": [
             "apps/v1/Deployment",
             "apps/v1/ReplicaSet",
+            "discovery.k8s.io/v1/EndpointSlice",
             "networking.k8s.io/v1/Ingress",
             "networking.k8s.io/v1/NetworkPolicy",
             "rbac.authorization.k8s.io/v1/Role",

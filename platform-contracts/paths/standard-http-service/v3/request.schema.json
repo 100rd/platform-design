@@ -29,23 +29,34 @@
         "required": ["method", "path", "expected"],
         "properties": {
           "method": {"const": "GET"},
-          "path": {"type": "string", "pattern": "^/[a-zA-Z0-9/_-]{0,127}$"},
+          "path": {"type": "string", "minLength": 2, "maxLength": 128, "pattern": "^/[A-Za-z0-9_~-]+(?:/[A-Za-z0-9_~-]+)*$"},
           "expected": {
             "type": "object",
             "additionalProperties": false,
             "required": ["status"],
             "properties": {
               "status": {"const": 200},
+              "mediaType": {"enum": ["text/plain", "text/plain; charset=utf-8", "application/json", "application/json; charset=utf-8"]},
               "exactText": {"type": "string", "maxLength": 512},
               "jsonSubset": {
                 "type": "object",
                 "maxProperties": 10,
-                "additionalProperties": {"type": ["string", "number", "integer", "boolean", "null"]}
+                "minProperties": 1,
+                "propertyNames": {"type": "string", "pattern": "^[A-Za-z0-9_.-]{1,64}$"},
+                "additionalProperties": {
+                  "anyOf": [
+                    {"type": "string", "maxLength": 512},
+                    {"type": "integer"},
+                    {"type": "number"},
+                    {"type": "boolean"},
+                    {"type": "null"}
+                  ]
+                }
               }
             },
             "oneOf": [
-              {"required": ["exactText"]},
-              {"required": ["jsonSubset"]}
+              {"required": ["mediaType", "exactText"], "properties": {"mediaType": {"enum": ["text/plain", "text/plain; charset=utf-8"]}}},
+              {"required": ["mediaType", "jsonSubset"], "properties": {"mediaType": {"enum": ["application/json", "application/json; charset=utf-8"]}}}
             ]
           }
         }

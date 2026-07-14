@@ -7,8 +7,10 @@ already implements every registered action or probe.
 ## Request boundary
 
 The request names one existing GitHub repository and a safe relative source subpath. Runtime,
-exposure, port, and resource size are fixed. Acceptance probes are bounded `GET` requests with
-HTTP 200 and either exact text or a shallow JSON subset. Unknown fields fail validation.
+exposure, port, and resource size are fixed. Acceptance probes are bounded origin-form `GET`
+requests with HTTP 200, a fixed media type, and either exact text or a shallow JSON subset. Paths
+cannot contain an authority, empty/repeated segment, dot segment, percent encoding, query, fragment,
+or backslash. Unknown fields and duplicate paths fail validation.
 
 The request cannot supply commands, scripts, environment variables, secrets, image tags, Helm
 values, policy overrides, namespaces, clusters, accounts, or production targets. Identity and
@@ -32,8 +34,11 @@ The workload desired inventory remains the same closed six-kind set as v2. Obser
 separate platform control inventory: one shared versioned list-only ClusterRole and six exact
 WorkOrder objects. Workers cannot author those objects. The control plane registers cleanup before
 creation, obtains signed independent live-RBAC evidence, issues an issuer-signed WorkOrder and
-adapter-bound short-lived scope, stores schema-bound observation evidence, and removes the access
-bundle before runtime probes continue.
+adapter-bound short-lived scope, and stores schema-bound observation evidence. It then issues a
+separate five-minute runtime credential to the same WorkOrder-specific read-only identity. That
+identity can additionally list EndpointSlices; it remains unable to read Secrets or ConfigMaps,
+watch, proxy, execute, mint tokens, or mutate anything. The access bundle is removed immediately
+after runtime verification and is also covered by terminal compensation.
 
 The observer transport has no discovery operation and platform-owned rules contain no
 `nonResourceURLs`. Kubernetes may still grant `/api` and `/apis` through its built-in
@@ -56,15 +61,18 @@ actions, probes, expected responses, compensation, and evidence TTL. Completion 
 6. Independent authority evidence binds the exact platform control inventory, negative checks,
    inherited authority, credential scope, transport recording, and live RBAC digests.
 7. Two complete bounded inventory passes prove stable exact-revision delivery and Realm containment.
-8. Observer access is revoked through attested UID and resourceVersion DELETE preconditions; signed
-   cleanup evidence proves six exact WorkOrder objects absent, the credential lease revoked, and the
-   shared ClusterRole preserved before runtime probing continues.
+8. A fresh signed HTTP subject binds the frozen acceptance digest, exact bundle/profile, WorkOrder,
+   cluster, Namespace/Service identity, delivery evidence, merge commit, image digest, and deadline.
 9. A dedicated quota-bound, default-deny preview namespace has no production credentials,
    shared-state access, data mutation, or cross-Realm authority.
-10. `/healthz`, `/readyz`, and every requested route pass three consecutive bounded probes
-   from a verifier outside the worker identity and writable environment.
-11. The evidence manifest is immutable and no older than `PT24H`.
-12. Registered compensation can close an unmerged PR or revert the landed change, revoke observer
+10. `/healthz`, `/readyz`, and every requested route pass three consecutive all-backend batches.
+    Every batch directly probes the complete one-through-three ready Pod set in deterministic order;
+    pre/post Service, EndpointSlice, Pod UID/address, readiness, and image snapshots must match.
+11. Observer access is revoked through attested UID and resourceVersion DELETE preconditions; signed
+    cleanup evidence proves six exact WorkOrder objects absent, the credential lease revoked, and the
+    shared versioned ClusterRole preserved after runtime verification.
+12. The evidence manifest is immutable and no older than `PT24H`.
+13. Registered compensation can close an unmerged PR or revert the landed change, revoke observer
    access, and prune the preview Realm; the verifier proves absence of WorkOrder-owned resources.
 
 Any missing, expired, conflicting, or unverifiable result prevents verified completion.

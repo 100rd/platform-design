@@ -101,6 +101,7 @@ decision.
 | [0054](0054-baremetal-elasticity-node-lifecycle.md) | Bare-metal elasticity & node lifecycle without a cloud autoscaler — Cluster-API/Sidero vs Metal³ vs robot-API vs static pools; workload scale-to-zero | Proposed | pending | WS-A of Bare-Metal ML platform plan; replaces GKE/Karpenter autoscaling; design 2026-06-15 |
 | [0056](0056-machine-readable-platform-contracts.md) | Machine-readable platform contracts for organizational automation | Accepted | contract published; execution pending | native · Omnius P0 vertical |
 | [0057](0057-platform-owned-delivery-observation.md) | Separate platform-owned delivery observation from workload authority | Proposed | draft contract; not admitted | genai ADR-0013 · Omnius ADR-0020/SPEC-DO |
+| [0058](0058-precommitted-http-probe-evidence.md) | Precommit HTTP completion and verify every delivered backend | Proposed | draft contract; not admitted | genai ADR-0014 · Omnius HTTP verifier |
 
 
 

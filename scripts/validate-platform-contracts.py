@@ -16,6 +16,11 @@ import yaml
 from jsonschema import Draft202012Validator, FormatChecker, ValidationError
 from referencing import Registry, Resource
 
+from http_probe_contract_validation import (
+    validate_http_probe_contracts,
+    validate_http_request_inputs,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_ROOT = ROOT / "platform-contracts"
@@ -92,6 +97,7 @@ def validate_index(index: dict[str, Any]) -> list[dict[str, str]]:
         "entity-classes",
         "realms",
         "delivery-profiles",
+        "probe-profiles",
         "paths",
     )
     discovered = sorted(
@@ -114,6 +120,7 @@ def validate_index(index: dict[str, Any]) -> list[dict[str, str]]:
         "EntityClass",
         "Realm",
         "PlatformDeliveryProfile",
+        "HttpProbeProfile",
         "PlatformPath",
     }
     for position, artifact in enumerate(artifacts):
@@ -287,6 +294,8 @@ def validate_observer_access(
     } | {
         ("apps", resource, "list") for resource in ("deployments", "replicasets")
     } | {
+        ("discovery.k8s.io", "endpointslices", "list")
+    } | {
         ("networking.k8s.io", resource, "list")
         for resource in ("ingresses", "networkpolicies")
     } | {
@@ -294,8 +303,8 @@ def validate_observer_access(
         for resource in ("rolebindings", "roles")
     }
     if actual_inventory != expected_inventory:
-        raise ContractError(f"{context}: observer inventory rules differ from the closed 11-kind set")
-    if observer["inventoryClusterRole"]["name"] != "darkfactory-preview-delivery-list-v1":
+        raise ContractError(f"{context}: observer inventory rules differ from the closed 12-kind set")
+    if observer["inventoryClusterRole"]["name"] != "darkfactory-preview-delivery-list-v2":
         raise ContractError(f"{context}: shared observer role is not immutable and versioned")
 
     expected_negative_cases = {
@@ -450,6 +459,10 @@ def validate_delivery_profile(
     require_registered(observations["realmEvidenceType"], registries["evidenceTypes"], context)
     if profile["schemaVersion"] == "platform/delivery-profile/v2":
         require_registered(observations["semanticVerifier"], registries["probes"], context)
+        runtime = profile["runtimeVerification"]
+        require_registered(runtime["action"], registries["actions"], context)
+        require_registered(runtime["credential"]["issueAction"], registries["actions"], context)
+        require_registered(runtime["evidenceType"], registries["evidenceTypes"], context)
     compensation = profile["compensation"]
     require_registered(compensation["action"], registries["actions"], context)
     require_registered(compensation["verifier"], registries["probes"], context)
@@ -510,6 +523,7 @@ def validate_delivery_profile(
     if profile["schemaVersion"] == "platform/delivery-profile/v2":
         required_assertions.remove("no-cross-realm-rbac")
         required_assertions.add("no-workload-rbac")
+        required_assertions.add("http-verifier-ingress-only")
     if set(envelope["requiredAssertions"]) != required_assertions:
         raise ContractError(f"{context}: preview containment assertions are incomplete")
     if envelope["requiredAssertions"] != sorted(envelope["requiredAssertions"]):
@@ -542,11 +556,12 @@ def validate_delivery_profile(
 
 def validate_semantics(
     index: dict[str, Any], schemas: dict[str, Any], documents: dict[str, dict[str, Any]]
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
     products: dict[str, Any] = {}
     entities: dict[str, Any] = {}
     realms: dict[str, Any] = {}
     delivery_profiles: dict[str, Any] = {}
+    probe_profiles: dict[str, Any] = {}
     paths: dict[str, Any] = {}
     for document in documents.values():
         kind = document.get("kind")
@@ -559,6 +574,8 @@ def validate_semantics(
             target = realms
         elif kind == "PlatformDeliveryProfile":
             target = delivery_profiles
+        elif kind == "HttpProbeProfile":
+            target = probe_profiles
         elif kind == "PlatformPath":
             target = paths
         else:
@@ -570,6 +587,17 @@ def validate_semantics(
     registries = {name: set(values) for name, values in index["spec"]["registries"].items()}
     for profile_id, profile in delivery_profiles.items():
         validate_delivery_profile(profile, registries, profile_id)
+    for probe_profile_id, probe_profile in probe_profiles.items():
+        require_registered(
+            probe_profile["conditionPlan"]["freezeAction"],
+            registries["actions"],
+            probe_profile_id,
+        )
+        require_registered(
+            probe_profile["evidence"]["evidenceType"],
+            registries["evidenceTypes"],
+            probe_profile_id,
+        )
     for entity_id, entity in entities.items():
         for capability in entity["requiredCapabilities"]:
             require_registered(capability, registries["capabilities"], entity_id)
@@ -653,6 +681,26 @@ def validate_semantics(
                     )
             if profile["schemaVersion"] == "platform/delivery-profile/v2":
                 observer = profile["observerAccess"]
+                runtime = profile["runtimeVerification"]
+                runtime_profile_id = runtime["profile"]
+                if runtime_profile_id not in probe_profiles:
+                    raise ContractError(
+                        f"{path_id}: unknown HTTP probe profile {runtime_profile_id}"
+                    )
+                runtime_profile = probe_profiles[runtime_profile_id]
+                expected_applies_to = {
+                    "path": path_id,
+                    "deliveryProfile": profile_id,
+                    "realm": path["supportedRealms"][0],
+                }
+                if runtime_profile["appliesTo"] != expected_applies_to:
+                    raise ContractError(
+                        f"{path_id}: HTTP probe profile applicability is not exact"
+                    )
+                if runtime_profile["metadata"]["state"] != path["metadata"]["state"]:
+                    raise ContractError(
+                        f"{path_id}: HTTP probe profile lifecycle does not match path"
+                    )
                 referenced_runtime_schemas = {
                     profile["observations"]["scopeSchema"],
                     profile["observations"]["snapshotSchema"],
@@ -660,6 +708,9 @@ def validate_semantics(
                     observer["credential"]["scopeSchema"],
                     observer["attestation"]["schema"],
                     observer["cleanup"]["evidenceSchema"],
+                    runtime["profileSchema"],
+                    runtime["subjectSchema"],
+                    runtime["resultSchema"],
                 }
                 unknown_runtime_schemas = referenced_runtime_schemas - set(schemas)
                 if unknown_runtime_schemas:
@@ -675,6 +726,10 @@ def validate_semantics(
                     "register-observer-access-compensation": "execution.register-compensation/v1",
                     "revoke-observer-access": "delivery.revoke-observer-access/v1",
                     "store-observation-evidence": "evidence.store-delivery-observation/v1",
+                    "issue-http-probe-credential": (
+                        "verification.issue-http-probe-credential/v1"
+                    ),
+                    "verify-runtime": "verification.run-http-probes/v1",
                 }
                 for step_id, action in required_observer_steps.items():
                     if step_actions.get(step_id) != action:
@@ -689,8 +744,9 @@ def validate_semantics(
                     "issue-observer-credential": ["attest-observer-access"],
                     "observe-gitops": ["issue-observer-credential"],
                     "store-observation-evidence": ["observe-gitops"],
-                    "revoke-observer-access": ["store-observation-evidence"],
-                    "verify-runtime": ["revoke-observer-access"],
+                    "issue-http-probe-credential": ["store-observation-evidence"],
+                    "verify-runtime": ["issue-http-probe-credential"],
+                    "revoke-observer-access": ["verify-runtime"],
                 }
                 for step_id, needs in observer_chain.items():
                     if step_needs.get(step_id) != needs:
@@ -721,6 +777,17 @@ def validate_semantics(
             if unknown_needs:
                 raise ContractError(f"{path_id}: step {step['id']} has non-prior needs {sorted(unknown_needs)}")
             seen.add(step["id"])
+        if profile and profile["schemaVersion"] == "platform/delivery-profile/v2":
+            step_needs = {step["id"]: step["needs"] for step in path["workflow"]}
+            step_actions = {step["id"]: step["action"] for step in path["workflow"]}
+            if step_actions.get("freeze-http-conditions") != (
+                "verification.freeze-http-conditions/v1"
+            ):
+                raise ContractError(f"{path_id}: HTTP conditions are not frozen")
+            if step_needs.get("freeze-http-conditions") != ["inspect-source"]:
+                raise ContractError(f"{path_id}: HTTP freeze ordering is not closed")
+            if step_needs.get("author-change") != ["freeze-http-conditions"]:
+                raise ContractError(f"{path_id}: mutation can precede HTTP condition freeze")
         for policy in path["policies"]:
             require_registered(policy, registries["policies"], path_id)
         for condition in path["conditionsOfDone"]:
@@ -762,6 +829,27 @@ def validate_semantics(
                     raise ContractError(
                         f"{path_id}: observer authority or cleanup is not a Condition of Done"
                     )
+                runtime = profile["runtimeVerification"]
+                runtime_profile = probe_profiles[runtime["profile"]]
+                expected_http_pairs = {
+                    (
+                        condition["probe"],
+                        runtime_profile["evidence"]["evidenceType"],
+                    )
+                    for condition in runtime_profile["conditionPlan"]["fixedConditions"]
+                }
+                expected_http_pairs.add(
+                    (
+                        runtime_profile["conditionPlan"]["requestContract"]["probe"],
+                        runtime_profile["evidence"]["evidenceType"],
+                    )
+                )
+                if not expected_http_pairs.issubset(condition_pairs):
+                    raise ContractError(
+                        f"{path_id}: HTTP probe profile is not bound to all runtime conditions"
+                    )
+                if runtime["evidenceType"] != runtime_profile["evidence"]["evidenceType"]:
+                    raise ContractError(f"{path_id}: HTTP evidence type binding differs")
         condition_ids = [condition["id"] for condition in path["conditionsOfDone"]]
         if len(condition_ids) != len(set(condition_ids)):
             raise ContractError(f"{path_id}: duplicate Condition of Done id")
@@ -804,7 +892,17 @@ def validate_semantics(
     orphaned_profiles = set(delivery_profiles) - referenced_profiles
     if orphaned_profiles:
         raise ContractError(f"orphaned delivery profiles: {sorted(orphaned_profiles)}")
-    return products, paths, realms, delivery_profiles
+    referenced_probe_profiles = {
+        profile["runtimeVerification"]["profile"]
+        for profile in delivery_profiles.values()
+        if profile["schemaVersion"] == "platform/delivery-profile/v2"
+    }
+    orphaned_probe_profiles = set(probe_profiles) - referenced_probe_profiles
+    if orphaned_probe_profiles:
+        raise ContractError(
+            f"orphaned HTTP probe profiles: {sorted(orphaned_probe_profiles)}"
+        )
+    return products, paths, realms, delivery_profiles, probe_profiles
 
 
 def validate_request(
@@ -836,6 +934,8 @@ def validate_request(
     Draft202012Validator(
         schemas[path["inputSchema"]], format_checker=FORMAT_CHECKER
     ).validate(request["inputs"])
+    if path_id == "standard-http-service/v3":
+        validate_http_request_inputs(request["inputs"])
 
 
 def validate_fixtures(
@@ -1048,7 +1148,7 @@ def validate_runtime_schema_examples(schemas: dict[str, Any]) -> None:
             "inventoryClusterRole": object_evidence(
                 "rbac.authorization.k8s.io/v1",
                 "ClusterRole",
-                "darkfactory-preview-delivery-list-v1",
+                "darkfactory-preview-delivery-list-v2",
             ),
             "namespaceClusterRole": object_evidence(
                 "rbac.authorization.k8s.io/v1", "ClusterRole", observer_name
@@ -1118,6 +1218,7 @@ def validate_runtime_schema_examples(schemas: dict[str, Any]) -> None:
         "kindIds": [
             "apps/v1/Deployment",
             "apps/v1/ReplicaSet",
+            "discovery.k8s.io/v1/EndpointSlice",
             "networking.k8s.io/v1/Ingress",
             "networking.k8s.io/v1/NetworkPolicy",
             "rbac.authorization.k8s.io/v1/Role",
@@ -1148,6 +1249,7 @@ def validate_runtime_schema_examples(schemas: dict[str, Any]) -> None:
     snapshot_kinds = {
         "apps-v1-deployments": "apps/v1/Deployment",
         "apps-v1-replicasets": "apps/v1/ReplicaSet",
+        "discovery-v1-endpointslices": "discovery.k8s.io/v1/EndpointSlice",
         "networking-v1-ingresses": "networking.k8s.io/v1/Ingress",
         "networking-v1-networkpolicies": "networking.k8s.io/v1/NetworkPolicy",
         "rbac-v1-rolebindings": "rbac.authorization.k8s.io/v1/RoleBinding",
@@ -1252,7 +1354,7 @@ def validate_runtime_schema_examples(schemas: dict[str, Any]) -> None:
             for name in cleanup_object_names
         },
         "sharedInventoryClusterRole": {
-            "name": "darkfactory-preview-delivery-list-v1",
+            "name": "darkfactory-preview-delivery-list-v2",
             "status": "preserved",
             "canonicalDigest": attestation["objects"]["inventoryClusterRole"][
                 "canonicalDigest"
@@ -1359,7 +1461,7 @@ def validate_runtime_schema_examples(schemas: dict[str, Any]) -> None:
         expected_control_names = {
             "applicationRole": expected_observer,
             "applicationRoleBinding": expected_observer,
-            "inventoryClusterRole": "darkfactory-preview-delivery-list-v1",
+            "inventoryClusterRole": "darkfactory-preview-delivery-list-v2",
             "namespaceClusterRole": expected_observer,
             "namespaceClusterRoleBinding": expected_observer,
             "realmRoleBinding": expected_observer,
@@ -1793,10 +1895,13 @@ def main() -> int:
         artifacts = validate_index(index)
         validate_digests(index, artifacts)
         schemas, documents = load_and_validate_artifacts(artifacts)
-        products, paths, realms, delivery_profiles = validate_semantics(index, schemas, documents)
+        products, paths, realms, delivery_profiles, probe_profiles = validate_semantics(
+            index, schemas, documents
+        )
         validate_fixtures(schemas, products, paths, realms)
         validate_delivery_profile_fixtures(index, schemas)
         validate_runtime_schema_examples(schemas)
+        validate_http_probe_contracts(schemas, index)
     except Exception as error:
         print(f"platform-contract validation failed: {error}", file=sys.stderr)
         return 1
@@ -1804,7 +1909,8 @@ def main() -> int:
         "platform-contract validation passed: "
         f"{len(artifacts)} indexed artifacts, {len(products)} product, "
         f"{len(paths)} path, {len(realms)} Realm, "
-        f"{len(delivery_profiles)} delivery profile"
+        f"{len(delivery_profiles)} delivery profile, "
+        f"{len(probe_profiles)} HTTP probe profile"
     )
     return 0
 

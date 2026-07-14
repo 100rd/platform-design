@@ -5,7 +5,7 @@ metadata:
   version: v1
 spec:
   digestAlgorithm: sha256-path-nul-bytes-v1
-  bundleDigest: f4fa3aaafa3217a4beb231b52aa1184486addff026841f92bb2380a2d095c611
+  bundleDigest: 1c86f50f9463c4d71383663e7dfd450aa10d63b603ebda2a19aac52037167c87
   artifacts:
     - path: delivery-profiles/argocd-preview-http-service/v1/profile.yaml
       kind: PlatformDeliveryProfile
@@ -14,7 +14,7 @@ spec:
     - path: delivery-profiles/argocd-preview-http-service/v2/profile.yaml
       kind: PlatformDeliveryProfile
       schema: urn:darkfactory:platform-contract:delivery-profile:v2
-      sha256: ba87e6c63cb1d7dd99435c7fd625c1fa00b5e7513f10d1656e655c6a968954ee
+      sha256: 19e1fce6de041974c44a2be9f4ad09f5ead3a0a28eb413ff0ef53f986334964e
     - path: entity-classes/environment/v1/entity-class.yaml
       kind: EntityClass
       schema: urn:darkfactory:platform-contract:entity-class:v1
@@ -58,11 +58,15 @@ spec:
     - path: paths/standard-http-service/v3/path.yaml
       kind: PlatformPath
       schema: urn:darkfactory:platform-contract:platform-path:v2
-      sha256: 920ace687d3422b1adddbe69c807f7f0c051a9c51ad8039f96c80143fb455add
+      sha256: 86e8fbd0839809d6dd00d3ea120daa6a750b1218e0455440f07d4e6c394343e8
     - path: paths/standard-http-service/v3/request.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
-      sha256: 57ddd5d7e9c57b9bd403233252fffff63ef72dd56f6afb59000960bd6c90ad82
+      sha256: c3a0c5085f9a384ad93216d89154d094de079fe63c4f37c2c83d9bbc33e1565d
+    - path: probe-profiles/http-preview-service/v1/profile.yaml
+      kind: HttpProbeProfile
+      schema: urn:darkfactory:platform-contract:http-probe-profile:v1
+      sha256: 9a3070e7f537438fc96966766336c3d0125b86e41e8ac38826f5b5c59d63abea
     - path: products/standard-service/v1/product.yaml
       kind: PlatformProduct
       schema: urn:darkfactory:platform-contract:platform-product:v1
@@ -86,7 +90,7 @@ spec:
     - path: schemas/v1/delivery-observation-evidence.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
-      sha256: 1aaeab8995b906a4f212d098df846353db39d24674b0ce6cfa2918c36acb29b5
+      sha256: 860763a4ac37a2c38e386221f3c13d38e3be8460f0f2660bdb12c1ca60bb81fe
     - path: schemas/v1/delivery-profile.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
@@ -95,26 +99,38 @@ spec:
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
       sha256: 745c089840975f2a363b9cfc09312259a50a667c2345fc5ebac9ab2550a75bc2
+    - path: schemas/v1/http-probe-profile.schema.json
+      kind: Schema
+      schema: https://json-schema.org/draft/2020-12/schema
+      sha256: f3338cfe11accb2e450afc807f1c5ab77896bd45795c0a111d1cd5d845c55bc6
+    - path: schemas/v1/http-probe-result.schema.json
+      kind: Schema
+      schema: https://json-schema.org/draft/2020-12/schema
+      sha256: a69d38924f3ffc3c4253fb4e0eb1a6df4f1aa13a71299194ecbf01bfe072db66
+    - path: schemas/v1/http-probe-subject.schema.json
+      kind: Schema
+      schema: https://json-schema.org/draft/2020-12/schema
+      sha256: 19e9b88af6a18fe661bf26e3dee3baca685579cbe3911e4b2702e08f31dcf2ce
     - path: schemas/v1/namespaced-resource-snapshot.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
-      sha256: bab8fe6654562bf470b86b057ca0db4b482bdef5f04294ab8fe16bc939f55af9
+      sha256: 7af87737f4b782e8c8cc48d3554c8998b20a904bd6dbcaa419e335cd9830e515
     - path: schemas/v1/observation-scope.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
-      sha256: e7836c9b510fd73f293e0813d85303e15f6b35cb7b105d479a46ba308e7a399c
+      sha256: 6d879434cc27d897cc4cf664cb6dd8d81ef3cfc06a7be205b5891669691aed6d
     - path: schemas/v1/observer-access-attestation.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
-      sha256: 992cefd863874e1f4ba288e55cf556ae235adedc893beaa6052c68ec74c2505e
+      sha256: 9f6644383a0c1728f5333ad84050012019e5559815e9e39c1bf0f525bb7a5c53
     - path: schemas/v1/observer-access-cleanup-evidence.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
-      sha256: c3e43cbcc827c0cbefaea910f1fe17339c68138c0e866cd009c0f3dabc1936b3
+      sha256: 88d69a02de3e0e5c65d1c11213c2b224ab62358c11bb38a062122e8695083f84
     - path: schemas/v1/observer-access-profile.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
-      sha256: a4760fcd1aaf70bed85851e2f5e1cb2d8b15b8292cd7a5fa4facee4fe85909fb
+      sha256: 9d55e8292ad715ac298049c6f09411d1fd3df6f73233188e89918868dfccbaeb
     - path: schemas/v1/platform-path.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
@@ -134,7 +150,7 @@ spec:
     - path: schemas/v2/delivery-profile.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
-      sha256: 5c279a75cc1479d393e077523f05a8960dfecbb1a7d09a49db1fba0c604780fd
+      sha256: 9d965697935dc47b854709b6c7656d996a2c931bc6e013341b8c64b3725dc896
     - path: schemas/v2/platform-path.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
@@ -159,6 +175,8 @@ spec:
       - realm.resolve-preview/v1
       - source.author-http-service-change/v1
       - source.inspect-existing-repository/v1
+      - verification.freeze-http-conditions/v1
+      - verification.issue-http-probe-credential/v1
       - verification.run-http-probes/v1
       - verification.run-source-gates/v1
     capabilities:

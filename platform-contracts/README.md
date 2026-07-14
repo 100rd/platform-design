@@ -7,7 +7,8 @@ indexed bundle pinned by exact Git commit and bundle SHA-256.
 ## Layout
 
 - `schemas/v1/` and later version directories define closed Draft 2020-12 schemas.
-- `products/`, `entity-classes/`, `realms/`, `delivery-profiles/`, and `paths/` contain owned instances.
+- `products/`, `entity-classes/`, `realms/`, `delivery-profiles/`, `probe-profiles/`, and `paths/`
+  contain owned instances.
 - `index.yaml` lists every authoritative file, its schema, and its content digest.
 - `fixtures/` contains requests that must pass or fail validation.
 
@@ -22,6 +23,12 @@ The proposed observer-access design is published as the separate draft
 `argocd-preview-http-service/v2`. It names `preview/v2` as a compatibility target but is not in that
 Realm's admission list, so the bundle cannot authorize its execution. Acceptance, qualification, and
 admission require later human-owned revisions.
+
+The draft now also binds `http-preview-service/v1`. Its Conditions of Done are frozen before
+authoring. After fresh delivery observation, a separately signed subject derives one Service and its
+complete one-through-three ready EndpointSlice/Pod backend set. Every backend must run the delivered
+image digest and pass three consecutive bounded attempts. The signed result uses four states and
+cannot accept an empty backend set, caller URL, worker self-report, stale subject, or changed target.
 
 ## Publication and pinning
 
@@ -62,6 +69,13 @@ reaping are closed contract fields. Runtime schemas bind the resolved observatio
 collection snapshots, delivery evidence, and cleanup evidence to the same WorkOrder-derived identity,
 adapter configuration, object UIDs, and semantic verifiers. Each collection keeps its own
 resourceVersion; the contract makes no cross-kind atomic-snapshot claim.
+
+For runtime verification the same WorkOrder-specific read-only observer identity gains only
+EndpointSlice list authority in addition to its existing bounded inventory reads. The control plane
+issues a separate five-minute probe credential and a four-minute signed subject after delivery
+evidence is stored. The verifier network source and port 8080 ingress are adapter- and
+NetworkPolicy-derived; requests cannot nominate a destination. Access is revoked after the probes,
+and normal or terminal compensation still proves cleanup.
 
 Kubernetes built-in bindings may grant `/api` and `/apis` discovery to authenticated principals. The
 platform-owned rules grant no `nonResourceURLs`, the observer transport exposes no discovery method,

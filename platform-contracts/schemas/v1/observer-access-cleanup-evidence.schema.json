@@ -100,7 +100,7 @@
       "additionalProperties": false,
       "required": ["name", "status", "canonicalDigest"],
       "properties": {
-        "name": {"const": "darkfactory-preview-delivery-list-v1"},
+        "name": {"const": "darkfactory-preview-delivery-list-v2"},
         "status": {"const": "preserved"},
         "canonicalDigest": {"$ref": "#/$defs/digest"}
       }

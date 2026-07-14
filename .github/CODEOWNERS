@@ -3,4 +3,5 @@
 /platform-contracts/ @100rd
 /docs/adrs/0056-machine-readable-platform-contracts.md @100rd
 /.github/workflows/platform-contracts-validate.yml @100rd
+/scripts/http_probe_contract_validation.py @100rd
 /scripts/validate-platform-contracts.py @100rd
