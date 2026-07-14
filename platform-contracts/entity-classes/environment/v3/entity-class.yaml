@@ -1,0 +1,37 @@
+schemaVersion: platform/entity-class/v1
+kind: EntityClass
+metadata:
+  name: Environment
+  version: v3
+  owner: platform-team
+  state: draft
+requiredCapabilities:
+  - delivery.observer-access/v1
+  - kubernetes.namespace/v1
+  - kubernetes.resource-quota/v1
+  - kubernetes.default-deny-network-policy/v1
+naming:
+  pattern: ^preview-[a-z0-9][a-z0-9-]{7,52}$
+  maxLength: 63
+lifecycle:
+  - create
+  - observe
+  - delete
+probes:
+  - id: kubernetes.observer-rbac-attested/v1
+    phase: delivery
+    required: true
+  - id: realm.preview-delivery-observed/v1
+    phase: runtime
+    required: true
+  - id: kubernetes.observer-access-revoked/v1
+    phase: compensation
+    required: true
+  - id: realm.preview-pruned/v1
+    phase: compensation
+    required: true
+compensation:
+  action: delivery.prune-preview-realm/v1
+  verifier: realm.preview-pruned/v1
+allowedRealms:
+  - preview/v2

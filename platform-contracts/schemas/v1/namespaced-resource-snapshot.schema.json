@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:darkfactory:platform-contract:namespaced-resource-snapshot:v1",
+  "title": "NamespacedResourceSnapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kindId", "resourceVersion", "items", "canonicalDigest"],
+  "properties": {
+    "schemaVersion": {"const": "delivery/namespaced-resource-snapshot/v1"},
+    "kindId": {
+      "enum": [
+        "apps/v1/Deployment",
+        "apps/v1/ReplicaSet",
+        "networking.k8s.io/v1/Ingress",
+        "networking.k8s.io/v1/NetworkPolicy",
+        "rbac.authorization.k8s.io/v1/Role",
+        "rbac.authorization.k8s.io/v1/RoleBinding",
+        "v1/PersistentVolumeClaim",
+        "v1/Pod",
+        "v1/ResourceQuota",
+        "v1/Service",
+        "v1/ServiceAccount"
+      ]
+    },
+    "resourceVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+    "items": {
+      "type": "array",
+      "maxItems": 100,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["namespace", "name", "uid", "contentDigest"],
+        "properties": {
+          "namespace": {"type": "string", "pattern": "^preview-[a-z0-9][a-z0-9-]{7,52}$"},
+          "name": {"type": "string", "minLength": 1, "maxLength": 253},
+          "uid": {"type": "string", "minLength": 1, "maxLength": 128},
+          "contentDigest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "canonicalDigest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

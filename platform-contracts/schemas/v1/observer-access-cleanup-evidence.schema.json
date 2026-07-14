@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:darkfactory:platform-contract:observer-access-cleanup-evidence:v1",
+  "title": "ObserverAccessCleanupEvidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "workOrderId",
+    "identityBindingDigest",
+    "cleanupPlanDigest",
+    "safeToReclaimDecision",
+    "leaseRevoked",
+    "workOrderObjects",
+    "sharedInventoryClusterRole",
+    "ambiguousEffects",
+    "verifier",
+    "verifiedAt",
+    "canonicalization",
+    "digestPayloadExcludes",
+    "evidenceSha256"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "delivery/observer-access-cleanup-evidence/v1"},
+    "workOrderId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,52}$"},
+    "identityBindingDigest": {"$ref": "#/$defs/digest"},
+    "cleanupPlanDigest": {"$ref": "#/$defs/digest"},
+    "safeToReclaimDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workOrderId",
+        "policy",
+        "decision",
+        "workOrderState",
+        "workOrderStateDigest",
+        "semanticVerifier",
+        "issuer",
+        "decidedAt",
+        "canonicalization",
+        "digestPayloadExcludes",
+        "decisionDigest"
+      ],
+      "properties": {
+        "workOrderId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,52}$"},
+        "policy": {"const": "delivery.observer-access-safe-to-reclaim/v1"},
+        "decision": {"const": "allowed"},
+        "workOrderState": {"enum": ["absent", "terminal"]},
+        "workOrderStateDigest": {"$ref": "#/$defs/digest"},
+        "semanticVerifier": {"const": "delivery.observer-access-safe-to-reclaim/v1"},
+        "issuer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "profileDigest",
+            "subject",
+            "independentFromCleanupExecutor",
+            "signingKeyId",
+            "algorithm",
+            "signature"
+          ],
+          "properties": {
+            "profileDigest": {"$ref": "#/$defs/digest"},
+            "subject": {"type": "string", "minLength": 1, "maxLength": 253},
+            "independentFromCleanupExecutor": {"const": true},
+            "signingKeyId": {"type": "string", "minLength": 1, "maxLength": 253},
+            "algorithm": {"enum": ["ECDSA_SHA_256", "Ed25519"]},
+            "signature": {"type": "string", "pattern": "^[A-Za-z0-9_-]{43,4096}$"}
+          }
+        },
+        "decidedAt": {"type": "string", "format": "date-time"},
+        "canonicalization": {"const": "rfc8785-json-canonicalization/v1"},
+        "digestPayloadExcludes": {"const": ["issuer.signature", "decisionDigest"]},
+        "decisionDigest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "leaseRevoked": {"const": true},
+    "workOrderObjects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applicationRole",
+        "applicationRoleBinding",
+        "namespaceClusterRole",
+        "namespaceClusterRoleBinding",
+        "realmRoleBinding",
+        "serviceAccount"
+      ],
+      "properties": {
+        "applicationRole": {"$ref": "#/$defs/absentObject"},
+        "applicationRoleBinding": {"$ref": "#/$defs/absentObject"},
+        "namespaceClusterRole": {"$ref": "#/$defs/absentObject"},
+        "namespaceClusterRoleBinding": {"$ref": "#/$defs/absentObject"},
+        "realmRoleBinding": {"$ref": "#/$defs/absentObject"},
+        "serviceAccount": {"$ref": "#/$defs/absentObject"}
+      }
+    },
+    "sharedInventoryClusterRole": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "canonicalDigest"],
+      "properties": {
+        "name": {"const": "darkfactory-preview-delivery-list-v1"},
+        "status": {"const": "preserved"},
+        "canonicalDigest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "ambiguousEffects": {"const": []},
+    "verifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profileDigest", "subject", "signingKeyId", "algorithm", "signature"],
+      "properties": {
+        "profileDigest": {"$ref": "#/$defs/digest"},
+        "subject": {"type": "string", "minLength": 1, "maxLength": 253},
+        "signingKeyId": {"type": "string", "minLength": 1, "maxLength": 253},
+        "algorithm": {"enum": ["ECDSA_SHA_256", "Ed25519"]},
+        "signature": {"type": "string", "pattern": "^[A-Za-z0-9_-]{43,4096}$"}
+      }
+    },
+    "verifiedAt": {"type": "string", "format": "date-time"},
+    "canonicalization": {"const": "rfc8785-json-canonicalization/v1"},
+    "digestPayloadExcludes": {"const": ["evidenceSha256", "verifier.signature"]},
+    "evidenceSha256": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "absentObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expectedUid",
+        "expectedResourceVersion",
+        "expectedCanonicalDigest",
+        "deleteResult",
+        "status"
+      ],
+      "properties": {
+        "expectedUid": {"type": "string", "minLength": 1, "maxLength": 128},
+        "expectedResourceVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+        "expectedCanonicalDigest": {"$ref": "#/$defs/digest"},
+        "deleteResult": {"enum": ["already-absent", "deleted"]},
+        "status": {"const": "absent"}
+      }
+    }
+  }
+}
