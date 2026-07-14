@@ -90,6 +90,8 @@ evidence:
   canonicalization: rfc8785-json-canonicalization/v1
   digestAlgorithm: sha256
   signatureAlgorithm: Ed25519
+  signaturePayloadProfile: domain-separated-evidence-digest/v1
+  signatureDomain: darkfactory.http-probe-result/v1
   verifierProfileFrom: adapter.httpVerification.verifierProfile
   signingKeyFrom: adapter.httpVerification.signingKey
   workerEvidenceAccepted: false

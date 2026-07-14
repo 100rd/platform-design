@@ -59,9 +59,12 @@ workflow:
   - id: verify-runtime
     action: verification.run-http-probes/v1
     needs: [issue-http-probe-credential]
+  - id: store-http-probe-result
+    action: evidence.store-http-probe-result/v1
+    needs: [verify-runtime]
   - id: revoke-observer-access
     action: delivery.revoke-observer-access/v1
-    needs: [verify-runtime]
+    needs: [store-http-probe-result]
 policies:
   - delivery.platform-observer-access/v1
   - global.no-main-push/v1
@@ -132,6 +135,7 @@ evidence:
     - compensation.result/v1
     - supply-chain.attestation/v1
     - gitops.revision-status/v1
+    - http.probe-commit-receipt/v1
     - http.probe-result/v1
     - kubernetes.delivery-observation/v1
     - kubernetes.inherited-authority/v1

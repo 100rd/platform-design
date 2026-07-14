@@ -5,7 +5,7 @@ metadata:
   version: v1
 spec:
   digestAlgorithm: sha256-path-nul-bytes-v1
-  bundleDigest: ff74f28a6b5177990628e3b7994a058fabc6b6db622d1c9f0b8c3154a2f8fd66
+  bundleDigest: 96e61c97b74c8565160a56792e9c4e5498341b7a09377a5be898252bb0bf3197
   artifacts:
     - path: attestor-profiles/eks-kms-ed25519/v1/profile.yaml
       kind: ObserverAttestorProfile
@@ -22,7 +22,7 @@ spec:
     - path: delivery-profiles/argocd-preview-http-service/v2/profile.yaml
       kind: PlatformDeliveryProfile
       schema: urn:darkfactory:platform-contract:delivery-profile:v2
-      sha256: b79f1d77d887573f2daffa0ebab40c3c70b9ff64a91b124f68f6a635925f9b7a
+      sha256: 6191861b63c2e030edcf1e5f795704d11a7a03a938411e244b0dfe4417722aec
     - path: entity-classes/environment/v1/entity-class.yaml
       kind: EntityClass
       schema: urn:darkfactory:platform-contract:entity-class:v1
@@ -66,7 +66,7 @@ spec:
     - path: paths/standard-http-service/v3/path.yaml
       kind: PlatformPath
       schema: urn:darkfactory:platform-contract:platform-path:v2
-      sha256: 86e8fbd0839809d6dd00d3ea120daa6a750b1218e0455440f07d4e6c394343e8
+      sha256: 42e01230c13d3bb592e87a75cb456fd6ceea7cdb1bb3f19a643ee8be7a73ba3e
     - path: paths/standard-http-service/v3/request.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
@@ -74,7 +74,7 @@ spec:
     - path: probe-profiles/http-preview-service/v1/profile.yaml
       kind: HttpProbeProfile
       schema: urn:darkfactory:platform-contract:http-probe-profile:v1
-      sha256: 9a3070e7f537438fc96966766336c3d0125b86e41e8ac38826f5b5c59d63abea
+      sha256: 4690af26044fa5fce46a01ab6508226809f51527cbcea2c4133a5d106f0bc733
     - path: products/standard-service/v1/product.yaml
       kind: PlatformProduct
       schema: urn:darkfactory:platform-contract:platform-product:v1
@@ -107,14 +107,18 @@ spec:
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
       sha256: 745c089840975f2a363b9cfc09312259a50a667c2345fc5ebac9ab2550a75bc2
+    - path: schemas/v1/http-evidence-commit-receipt.schema.json
+      kind: Schema
+      schema: https://json-schema.org/draft/2020-12/schema
+      sha256: b8c18a7f87f934d573b9181d29880d138680e0df26bde1fc0b2b7f8021b113e3
     - path: schemas/v1/http-probe-profile.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
-      sha256: f3338cfe11accb2e450afc807f1c5ab77896bd45795c0a111d1cd5d845c55bc6
+      sha256: d9dd89f0b02434d6db4c713c63b01d0ba69539fb6e86e1913a674f25ac57c76b
     - path: schemas/v1/http-probe-result.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
-      sha256: a69d38924f3ffc3c4253fb4e0eb1a6df4f1aa13a71299194ecbf01bfe072db66
+      sha256: e59f3960c7729246517f90d2744fd22895f8748c255cc3cd8efd3d958c7830c9
     - path: schemas/v1/http-probe-subject.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
@@ -162,7 +166,7 @@ spec:
     - path: schemas/v2/delivery-profile.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
-      sha256: 9d965697935dc47b854709b6c7656d996a2c931bc6e013341b8c64b3725dc896
+      sha256: 0bccf65697b621a147dfcd902e3a5b8bb3475dc1ceeaac723e79868d5ae7bc37
     - path: schemas/v2/platform-path.schema.json
       kind: Schema
       schema: https://json-schema.org/draft/2020-12/schema
@@ -183,6 +187,7 @@ spec:
       - delivery.revert-prune-and-revoke-preview/v2
       - delivery.revoke-observer-access/v1
       - evidence.store-delivery-observation/v1
+      - evidence.store-http-probe-result/v1
       - execution.register-compensation/v1
       - realm.resolve-preview/v1
       - source.author-http-service-change/v1
@@ -205,6 +210,7 @@ spec:
       - ci.check-run/v1
       - compensation.result/v1
       - gitops.revision-status/v1
+      - http.probe-commit-receipt/v1
       - http.probe-result/v1
       - kubernetes.delivery-observation/v1
       - kubernetes.inherited-authority/v1

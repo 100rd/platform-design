@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:darkfactory:platform-contract:http-evidence-commit-receipt:v1",
+  "title": "HttpEvidenceCommitReceipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "evidenceType", "workOrderId", "runId", "storeProfileDigest", "bucketArn", "objectKey", "versionId", "checksumSha256", "evidenceSha256", "committedAt", "canonicalization", "digestPayloadExcludes", "receiptSha256"],
+  "properties": {
+    "schemaVersion": {"const": "verification/http-evidence-commit-receipt/v1"},
+    "evidenceType": {"const": "http.probe-commit-receipt/v1"},
+    "workOrderId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,52}$"},
+    "runId": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "storeProfileDigest": {"$ref": "#/$defs/digest"},
+    "bucketArn": {"type": "string", "pattern": "^arn:aws:s3:::[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"},
+    "objectKey": {"type": "string", "pattern": "^http-probe-result/v1/[a-z0-9][a-z0-9-]{7,52}/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\.json$"},
+    "versionId": {"type": "string", "minLength": 1, "maxLength": 1024},
+    "checksumSha256": {"$ref": "#/$defs/digest"},
+    "evidenceSha256": {"$ref": "#/$defs/digest"},
+    "committedAt": {"type": "string", "format": "date-time"},
+    "canonicalization": {"const": "rfc8785-json-canonicalization/v1"},
+    "digestPayloadExcludes": {"const": ["receiptSha256"]},
+    "receiptSha256": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

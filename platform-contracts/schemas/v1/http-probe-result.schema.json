@@ -242,11 +242,13 @@
     "signer": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["profileDigest", "signingKeyId", "algorithm", "signature"],
+      "required": ["profileDigest", "signingKeyId", "algorithm", "payloadProfile", "domain", "signature"],
       "properties": {
         "profileDigest": {"$ref": "#/$defs/digest"},
         "signingKeyId": {"type": "string", "minLength": 1, "maxLength": 253},
         "algorithm": {"const": "Ed25519"},
+        "payloadProfile": {"const": "domain-separated-evidence-digest/v1"},
+        "domain": {"const": "darkfactory.http-probe-result/v1"},
         "signature": {"type": "string", "pattern": "^[A-Za-z0-9_-]{43,4096}$"}
       }
     }

@@ -35,10 +35,14 @@ separate platform control inventory: one shared versioned list-only ClusterRole 
 WorkOrder objects. Workers cannot author those objects. The control plane registers cleanup before
 creation, obtains signed independent live-RBAC evidence, issues an issuer-signed WorkOrder and
 adapter-bound short-lived scope, and stores schema-bound observation evidence. It then issues a
-separate five-minute runtime credential to the same WorkOrder-specific read-only identity. That
+separate exact-ten-minute TokenRequest-floor credential with a four-minute runtime budget to the same
+WorkOrder-specific read-only identity. That
 identity can additionally list EndpointSlices; it remains unable to read Secrets or ConfigMaps,
-watch, proxy, execute, mint tokens, or mutate anything. The access bundle is removed immediately
-after runtime verification and is also covered by terminal compensation.
+watch, proxy, execute, mint tokens, or mutate anything. The signed HTTP result is committed under a
+create-only WorkOrder/run-derived key, read back exactly, and recorded by an immutable commit receipt
+before the normal revoke step. The access bundle is then removed and is also covered by terminal
+compensation. Sign/store failure still drives fail-safe credential and producer cleanup but cannot
+produce completion evidence.
 
 The observer transport has no discovery operation and platform-owned rules contain no
 `nonResourceURLs`. Kubernetes may still grant `/api` and `/apis` through its built-in
@@ -71,7 +75,8 @@ actions, probes, expected responses, compensation, and evidence TTL. Completion 
 11. Observer access is revoked through attested UID and resourceVersion DELETE preconditions; signed
     cleanup evidence proves six exact WorkOrder objects absent, the credential lease revoked, and the
     shared versioned ClusterRole preserved after runtime verification.
-12. The evidence manifest is immutable and no older than `PT24H`.
+12. A create-only commit receipt proves exact read-back of the signed HTTP result before normal revoke;
+    the evidence manifest is immutable and no older than `PT24H`.
 13. Registered compensation can close an unmerged PR or revert the landed change, revoke observer
    access, and prune the preview Realm; the verifier proves absence of WorkOrder-owned resources.
 

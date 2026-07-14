@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILE_PATH = (
     ROOT / "platform-contracts/probe-profiles/http-preview-service/v1/profile.yaml"
 )
+RESULT_SIGNATURE_DOMAIN = b"darkfactory.http-probe-result/v1"
 STATE_PRECEDENCE = ("probe-error", "fail", "inconclusive", "pass")
 
 
@@ -89,6 +90,22 @@ def _sign(
     )
 
 
+def _result_signature_payload(value: dict[str, Any]) -> bytes:
+    try:
+        digest = bytes.fromhex(value["evidenceSha256"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise HttpProbeContractError("HTTP result digest is not signable") from error
+    if len(digest) != 32:
+        raise HttpProbeContractError("HTTP result digest is not SHA-256")
+    return RESULT_SIGNATURE_DOMAIN + b"\0" + digest
+
+
+def _sign_result(value: dict[str, Any], private_key: Ed25519PrivateKey) -> None:
+    value["verifier"]["signature"] = _encode_signature(
+        private_key.sign(_result_signature_payload(value))
+    )
+
+
 def _verify_signature(
     value: dict[str, Any],
     signer: dict[str, Any],
@@ -108,12 +125,59 @@ def _verify_signature(
         raise HttpProbeContractError("cryptographic signature verification failed") from error
 
 
+def _verify_result_signature(
+    value: dict[str, Any],
+    public_key: Ed25519PublicKey,
+    expected_profile: str,
+    expected_key_id: str,
+) -> None:
+    signer = value["verifier"]
+    if (
+        signer["profileDigest"] != expected_profile
+        or signer["signingKeyId"] != expected_key_id
+        or signer["algorithm"] != "Ed25519"
+        or signer["payloadProfile"] != "domain-separated-evidence-digest/v1"
+        or signer["domain"] != RESULT_SIGNATURE_DOMAIN.decode("ascii")
+    ):
+        raise HttpProbeContractError("result signer is not the pinned trust profile")
+    try:
+        public_key.verify(
+            _decode_signature(signer["signature"]),
+            _result_signature_payload(value),
+        )
+    except (InvalidSignature, ValueError) as error:
+        raise HttpProbeContractError("HTTP result signature verification failed") from error
+
+
 def _parse(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 def _timestamp(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _validate_commit_receipt(
+    receipt: dict[str, Any], result: dict[str, Any]
+) -> None:
+    expected_key = (
+        f"http-probe-result/v1/{result['workOrderId']}/{result['runId']}.json"
+    )
+    if (
+        receipt["workOrderId"] != result["workOrderId"]
+        or receipt["runId"] != result["runId"]
+        or receipt["objectKey"] != expected_key
+        or receipt["evidenceSha256"] != result["evidenceSha256"]
+        or receipt["checksumSha256"] != _digest(_canonical_bytes(result))
+    ):
+        raise HttpProbeContractError("HTTP commit receipt does not join stored result")
+    if receipt["receiptSha256"] != _digest(
+        _without(receipt, ("receiptSha256",))
+    ):
+        raise HttpProbeContractError("HTTP commit receipt digest is false")
+    committed_at = _parse(receipt["committedAt"])
+    if not _parse(result["completedAt"]) <= committed_at <= _parse(result["expiresAt"]):
+        raise HttpProbeContractError("HTTP commit receipt time is outside result validity")
 
 
 def _json_type(value: Any) -> str:
@@ -516,18 +580,15 @@ def _build_example(
             "profileDigest": _digest("http-verifier-profile"),
             "signingKeyId": "kms:http-verifier-v1",
             "algorithm": "Ed25519",
+            "payloadProfile": "domain-separated-evidence-digest/v1",
+            "domain": RESULT_SIGNATURE_DOMAIN.decode("ascii"),
             "signature": "0" * 86,
         },
     }
     result["evidenceSha256"] = _digest(
         _without(result, ("evidenceSha256", "verifier.signature"))
     )
-    _sign(
-        result,
-        verifier_private_key,
-        ("evidenceSha256", "verifier.signature"),
-        ("verifier", "signature"),
-    )
+    _sign_result(result, verifier_private_key)
     trusted = {
         "executionEnvelope": {
             "digest": subject["executionEnvelopeDigest"],
@@ -829,13 +890,11 @@ def _validate_semantics(
         raise HttpProbeContractError("cross-WorkOrder result")
     if result["runId"] != subject["runId"]:
         raise HttpProbeContractError("cross-run result")
-    _verify_signature(
+    _verify_result_signature(
         result,
-        result["verifier"],
         trusted["verifier"]["publicKey"],
         trusted["verifier"]["profileDigest"],
         trusted["verifier"]["signingKeyId"],
-        ("evidenceSha256", "verifier.signature"),
     )
 
     descriptors = [
@@ -1050,12 +1109,7 @@ def _redigest_result(
     result["evidenceSha256"] = _digest(
         _without(result, ("evidenceSha256", "verifier.signature"))
     )
-    _sign(
-        result,
-        private_key,
-        ("evidenceSha256", "verifier.signature"),
-        ("verifier", "signature"),
-    )
+    _sign_result(result, private_key)
 
 
 def _make_target_error_result(
@@ -1111,12 +1165,68 @@ def validate_http_probe_contracts(
     result_validator = Draft202012Validator(
         schemas[result_schema], registry=registry, format_checker=FormatChecker()
     )
+    receipt_schema = (
+        "urn:darkfactory:platform-contract:http-evidence-commit-receipt:v1"
+    )
+    receipt_validator = Draft202012Validator(
+        schemas[receipt_schema], registry=registry, format_checker=FormatChecker()
+    )
     subject, result, trusted = _build_example(index)
     subject_private_key = trusted["subjectIssuer"]["privateKey"]
     verifier_private_key = trusted["verifier"]["privateKey"]
     subject_validator.validate(subject)
     result_validator.validate(result)
     _validate_semantics(subject, result, index, trusted)
+    receipt = {
+        "schemaVersion": "verification/http-evidence-commit-receipt/v1",
+        "evidenceType": "http.probe-commit-receipt/v1",
+        "workOrderId": result["workOrderId"],
+        "runId": result["runId"],
+        "storeProfileDigest": _digest("http-evidence-store-profile"),
+        "bucketArn": "arn:aws:s3:::darkfactory-http-evidence-dev",
+        "objectKey": (
+            f"http-probe-result/v1/{result['workOrderId']}/{result['runId']}.json"
+        ),
+        "versionId": "s3-version-1",
+        "checksumSha256": _digest(_canonical_bytes(result)),
+        "evidenceSha256": result["evidenceSha256"],
+        "committedAt": result["completedAt"],
+        "canonicalization": "rfc8785-json-canonicalization/v1",
+        "digestPayloadExcludes": ["receiptSha256"],
+        "receiptSha256": "0" * 64,
+    }
+    receipt["receiptSha256"] = _digest(_without(receipt, ("receiptSha256",)))
+    receipt_validator.validate(receipt)
+    _validate_commit_receipt(receipt, result)
+
+    receipt_mutations = []
+    for name, field, value in (
+        (
+            "foreign object key",
+            "objectKey",
+            f"http-probe-result/v1/otherwork1/{result['runId']}.json",
+        ),
+        ("foreign evidence digest", "evidenceSha256", _digest("foreign-evidence")),
+        ("false stored checksum", "checksumSha256", _digest("foreign-bytes")),
+    ):
+        mutation = copy.deepcopy(receipt)
+        mutation[field] = value
+        mutation["receiptSha256"] = _digest(
+            _without(mutation, ("receiptSha256",))
+        )
+        receipt_mutations.append((name, mutation))
+    false_receipt_digest = copy.deepcopy(receipt)
+    false_receipt_digest["receiptSha256"] = _digest("false-receipt")
+    receipt_mutations.append(("false receipt digest", false_receipt_digest))
+    for name, mutation in receipt_mutations:
+        receipt_validator.validate(mutation)
+        try:
+            _validate_commit_receipt(mutation, result)
+        except HttpProbeContractError:
+            continue
+        raise HttpProbeContractError(
+            f"invalid HTTP commit receipt unexpectedly passed: {name}"
+        )
 
     profile_schema = "urn:darkfactory:platform-contract:http-probe-profile:v1"
     profile_validator = Draft202012Validator(
@@ -1567,6 +1677,25 @@ def validate_http_probe_contracts(
     unsigned_result["verifier"]["signature"] = "A" * 86
     semantic_mutations.append(
         ("fabricated verifier signature", unsigned_result["subject"], unsigned_result)
+    )
+
+    direct_canonical_signature = copy.deepcopy(result)
+    direct_canonical_signature["verifier"]["signature"] = _encode_signature(
+        verifier_private_key.sign(
+            _canonical_bytes(
+                _without(
+                    direct_canonical_signature,
+                    ("evidenceSha256", "verifier.signature"),
+                )
+            )
+        )
+    )
+    semantic_mutations.append(
+        (
+            "direct canonical result signature",
+            direct_canonical_signature["subject"],
+            direct_canonical_signature,
+        )
     )
 
     cross_run = copy.deepcopy(result)

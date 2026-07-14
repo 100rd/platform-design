@@ -797,6 +797,7 @@ def validate_semantics(
                     runtime["profileSchema"],
                     runtime["subjectSchema"],
                     runtime["resultSchema"],
+                    runtime["evidenceCommit"]["receiptSchema"],
                 }
                 unknown_runtime_schemas = referenced_runtime_schemas - set(schemas)
                 if unknown_runtime_schemas:
