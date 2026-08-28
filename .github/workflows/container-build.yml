@@ -30,11 +30,12 @@ jobs:
       services: ${{ steps.changes.outputs.services }}
     steps:
       # Runtime egress monitoring — MUST be the first step so the agent is
-      # installed before anything else runs. Audit mode: observe-only, never
-      # blocks the build. See .github/actions/harden-runner for the flip-to-block
-      # rollout and docs/ci-cd/supply-chain-runtime.md.
+      # installed before anything else runs. Called directly (not via local
+      # composite) because GitHub Actions does not run `pre` hooks for local
+      # actions before checkout.
       - name: Harden runner (audit)
-        uses: ./.github/actions/harden-runner
+        # step-security/harden-runner v2.19.4
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
         with:
           egress-policy: audit
 
@@ -84,7 +85,8 @@ jobs:
       # so it can baseline this job's outbound traffic to ECR, the GitHub API,
       # Sigstore (cosign) and the buildx cache. Audit mode: never blocks.
       - name: Harden runner (audit)
-        uses: ./.github/actions/harden-runner
+        # step-security/harden-runner v2.19.4
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
         with:
           egress-policy: audit
 
