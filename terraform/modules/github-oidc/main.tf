@@ -47,7 +47,7 @@ locals {
 # OIDC Provider (one per AWS account — idempotent creation)
 module "github_oidc_provider" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-oidc-provider"
-  version = "6.8.2"
+  version = "6.6.1"
 
   url            = local.github_oidc_url
   client_id_list = [local.github_oidc_audience]
@@ -58,7 +58,7 @@ module "github_oidc_provider" {
 # Terraform CI/CD role — used by plan/apply workflows
 module "terraform_role" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role"
-  version = "6.8.2"
+  version = "6.6.1"
 
   name            = "${var.project}-${var.account_name}-terraform"
   use_name_prefix = false
@@ -84,7 +84,7 @@ module "terraform_role" {
 # Read-only role — used by PR plan workflows (safe, no write access)
 module "readonly_role" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role"
-  version = "6.8.2"
+  version = "6.6.1"
 
   name            = "${var.project}-${var.account_name}-terraform-plan"
   use_name_prefix = false
@@ -107,7 +107,7 @@ module "readonly_role" {
 # ECR push role — used by application CI workflows to build and push images
 module "ecr_push_role" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role"
-  version = "6.8.2"
+  version = "6.6.1"
 
   name            = "${var.project}-${var.account_name}-ecr-push"
   use_name_prefix = false

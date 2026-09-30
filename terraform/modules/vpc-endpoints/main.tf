@@ -18,7 +18,7 @@
 
 module "vpc_endpoints" {
   source  = "terraform-aws-modules/vpc/aws//modules/vpc-endpoints"
-  version = "6.7.3"
+  version = "6.6.0"
 
   vpc_id             = var.vpc_id
   subnet_ids         = var.subnet_ids

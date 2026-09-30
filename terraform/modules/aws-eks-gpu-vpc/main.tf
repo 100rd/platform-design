@@ -39,7 +39,7 @@ locals {
 
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 6.7"
+  version = "~> 6.6"
 
   count = local.create ? 1 : 0
 
