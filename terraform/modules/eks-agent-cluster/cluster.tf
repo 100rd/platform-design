@@ -39,7 +39,7 @@ module "eks" {
   # will be responsible for all node management.
   # ---------------------------------------------------------------------------
   eks_managed_node_groups = {}
-  
+
   # Also disable the self-managed node group which might be created by default in older versions
   create_node_group = false
 
