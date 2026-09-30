@@ -4,7 +4,7 @@
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 21.15" # Using the same version as your other module for consistency
+  version = "~> 21.26" # Using the same version as your other module for consistency
 
   cluster_name    = var.cluster_name
   cluster_version = var.cluster_version
