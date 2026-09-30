@@ -25,7 +25,7 @@ resource "aws_db_parameter_group" "this" {
 
 module "db" {
   source  = "terraform-aws-modules/rds/aws"
-  version = "~> 7.2"
+  version = "~> 6.0"
 
   identifier = var.identifier
 
@@ -74,7 +74,7 @@ module "db" {
 
 module "security_group" {
   source  = "terraform-aws-modules/security-group/aws"
-  version = "~> 6.0"
+  version = "~> 5.0"
 
   name        = "${var.identifier}-sg"
   description = "PostgreSQL security group"

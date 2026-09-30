@@ -32,7 +32,7 @@ locals {
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 21.26"
+  version = "~> 21.15"
 
   count = local.create ? 1 : 0
 

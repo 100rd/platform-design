@@ -2,7 +2,7 @@ data "aws_region" "current" {}
 
 module "vpc_cni_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 6.8"
+  version = "~> 5.0"
 
   role_name_prefix      = "VPC-CNI-IRSA"
   attach_vpc_cni_policy = true
@@ -51,7 +51,7 @@ resource "aws_iam_policy" "dns_sync_policy" {
 # Updated 2026-01-28: Replaced AmazonRoute53FullAccess with least-privilege custom policy
 module "dns_sync_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 6.8"
+  version = "~> 5.0"
 
   role_name_prefix = "dns-sync-irsa"
 
@@ -101,7 +101,7 @@ resource "aws_iam_policy" "failover_controller_policy" {
 
 module "failover_controller_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 6.8"
+  version = "~> 5.0"
 
   role_name_prefix = "failover-controller-irsa"
 
@@ -122,7 +122,7 @@ module "failover_controller_irsa" {
 # DNS Monitor Role - Needs Route53 Read Access
 module "dns_monitor_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 6.8"
+  version = "~> 5.0"
 
   role_name_prefix = "dns-monitor-irsa"
 
@@ -185,7 +185,7 @@ resource "aws_iam_policy" "external_secrets_policy" {
 
 module "external_secrets_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 6.8"
+  version = "~> 5.0"
 
   role_name_prefix = "external-secrets-irsa"
 
