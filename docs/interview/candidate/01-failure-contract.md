@@ -41,6 +41,27 @@ The preview stack has ten apps, owned by four teams, in Go, Node and Python:
 Nodes are Karpenter-managed, partly Spot, and consolidate aggressively
 ([ADR-0046](../../adrs/0046-eks-node-strategy-karpenter-spot.md)).
 
+## Facts and numbers you may use
+
+Assume these are true. They exist so you can do arithmetic instead of guessing.
+
+| Fact | Value |
+|---|---|
+| Concurrent previews at peak (working hours) | 14 |
+| Replicas per app in a preview | 2 (db-migrate: one Job) |
+| Postgres connection pool per `ledger` pod | 20, opened eagerly at start-up |
+| Shared preview RDS `max_connections` | 1 700 |
+| RDS Multi-AZ failover duration | 20–40 s of refused connections |
+| Liveness probe defaults in the `helm/app` chart | `periodSeconds: 10`, `failureThreshold: 3`, timeout 1 s |
+| Kubelet restart back-off | 10 s, 20 s, 40 s, 80 s, 160 s, then capped at 300 s |
+| `terminationGracePeriodSeconds` default | 30 s |
+| Endpoint removal → Gateway/Cilium stops routing | 1–5 s |
+| Spot interruption notice | 2 min; consolidation evictions get only the grace period |
+| Default HTTP client timeouts | Go `http.Client{}`: none · Python `requests`: none · Node `fetch`: none (until the socket dies) |
+| RabbitMQ consumers | manual ack, `prefetch = 50`; unacked messages are redelivered when the channel closes |
+| Typical sync path | `edge-gw → web-bff → orders → pricing → ledger` (4 hops below the edge) |
+| Retry config found in the four teams' code today | "3 attempts on 5xx or timeout" in edge-gw, web-bff, orders and pricing |
+
 ## What the platform requires today
 
 The entire error-handling contract is in [`developer-manifest.md`](../../developer-manifest.md):

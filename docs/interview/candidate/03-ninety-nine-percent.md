@@ -24,6 +24,29 @@ From [`platform-design.excalidraw`](../../architecture/platform-design.excalidra
 
 The failure-mode matrix in SPEC-08 §5.2 lists what is automated and what is manual. Read it.
 
+### Critical user journeys (assume)
+
+| Journey | Share of revenue | Sync services on the path | Async after the response | Shared dependencies touched |
+|---|---|---|---|---|
+| Checkout | 70% | 11 | 3 (settlement, notification, fraud score) | RDS, Redis, RabbitMQ (publish is **synchronous** in `orders`) |
+| Login | — (gate for all) | 4 | 0 | RDS (auth schema), Redis (sessions) |
+| Browse / search | 20% (conversion) | 6 | 0 | Redis, catalog index |
+| Payout settlement | 10%, regulatory | 5 | — (fully async, batch every 5 min) | RabbitMQ, RDS, Iceberg on S3 |
+
+Every service has a Pyrra SLO of **99.9%**. Most of the remaining ~120 services are internal,
+low-traffic, or only on async paths.
+
+### Last 12 months of incidents (assume)
+
+| Incident | Count | Duration each | Impact while it lasted |
+|---|---|---|---|
+| Bad deploy caught by canary late | 3 per month | ~10 min | ~30% of checkout requests fail |
+| RDS Multi-AZ failover | 4 | ~1 min | all journeys touching RDS fail |
+| RabbitMQ network partition | 2 | ~25 min | checkout fails (sync publish); settlement stalls |
+| Redis eviction storm | 1 | ~50 min | ~40% of login and checkout fail |
+| Region serves 5xx with healthy TCP | 1 per quarter | ~35 min until a human turns the traffic dial | 50% of all traffic fails (one of two regions) |
+| DNS provider degradation | 1 | ~15 min to fail over, then a long tail of stale resolvers | partial, hard to measure |
+
 ## Your task
 
 1. **Define "99% working".** Of what, measured where, over what window, as seen by whom?

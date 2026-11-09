@@ -31,6 +31,20 @@ How it's checked today: `terragrunt stack plan` must be clean (with `mock_output
 unresolved dependencies), policy scans run on the IaC, and SPEC-03 §8 has a manual
 **acceptance checklist** of `kubectl get …` and `cilium status` lines run once after a rebuild.
 
+### Facts and numbers you may use
+
+| Fact | Value |
+|---|---|
+| Clusters in the fleet | ~20 (8 EKS workload, 2 EKS GPU, 2 bare-metal, 2 GKE, plus sandboxes) |
+| Nodes | ~300 per EKS workload cluster; up to 5 000 per GPU cluster; ~120 per bare-metal DC |
+| Node churn | Karpenter replaces ~8% of nodes per day (consolidation, Spot, `expireAfter`) |
+| AMI selection | `EC2NodeClass` uses an alias that follows the latest Bottlerocket release |
+| Helm releases per workload cluster | ~60 platform charts, synced by Argo CD |
+| Break-glass use | 3 times last quarter; entries were added from the AWS console |
+| Policy engines installed | Kyverno, Gatekeeper and ValidatingAdmissionPolicy (all three) |
+| How SPEC-03 §8 is run today | Once, by hand, after a rebuild; output pasted into the PR |
+| Who may run checks | Anything you design; but nothing may have cluster-admin in prod except break-glass |
+
 ## Your task
 
 1. **Answer leadership.** What can and can't be known with certainty about a running cluster?

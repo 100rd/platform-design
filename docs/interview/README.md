@@ -27,6 +27,20 @@ Logic over technology knowledge. Each challenge is scored on the same five dimen
 A strong hire scores 3+ on Framing, Mechanism and Verifiability. Trade-offs and Altitude
 separate senior from staff.
 
+Each interviewer guide contains:
+
+1. **What it measures**, and which real gaps in this repo it is built on.
+2. **The trap**: the typical first answer and why it falls short.
+3. **Level calibration**: what middle, senior and staff candidates produce unprompted.
+4. **Reference answer** with worked numbers taken from the candidate brief's fact tables.
+5. **Curveballs** with the walkthrough to listen for, follow-up probes, and weak vs strong answers.
+6. **Hints if the candidate is stuck**: record how many were needed.
+7. **Signals, red flags and 1–4 scoring anchors.**
+
+Candidate briefs include a **"facts and numbers"** table. The numbers are invented but
+plausible, so candidates can calculate instead of guessing. The best signal is a candidate whose
+arithmetic changes their first conclusion.
+
 ## How to run a session
 
 - **Format:** one challenge per 60-minute slot; or one challenge as a take-home (candidate
