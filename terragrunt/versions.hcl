@@ -36,6 +36,7 @@ locals {
     kubernetes = "~> 2.30"
     null       = "~> 3.2"
     random     = "~> 3.6"
+    scaleway   = "~> 2.45"
     tls        = "~> 4.0"
   }
 }
