@@ -6,7 +6,7 @@
 generate "common_vars" {
   path      = "_common_vars.hcl"
   if_exists = "overwrite_terragrunt"
-  contents = <<EOF
+  contents  = <<EOF
 locals {
   # Include the region and env specific variables.
   aws_region = read_terragrunt_config(find_in_parent_folders("region.hcl")).locals.aws_region
@@ -23,27 +23,27 @@ modules = {
   }
 
   "eks" = {
-    path = "./eks.hcl"
+    path         = "./eks.hcl"
     dependencies = ["vpc"]
   }
 
   "karpenter" = {
-    path = "./karpenter.hcl"
+    path         = "./karpenter.hcl"
     dependencies = ["eks"]
   }
 
   "cilium" = {
-    path = "./cilium.hcl"
+    path         = "./cilium.hcl"
     dependencies = ["eks"]
   }
 
   "istio" = {
-    path = "./istio.hcl"
+    path         = "./istio.hcl"
     dependencies = ["eks"]
   }
-  
+
   "keda" = {
-    path = "./keda.hcl"
+    path         = "./keda.hcl"
     dependencies = ["eks"]
   }
 }
