@@ -50,7 +50,7 @@ jobs:
     outputs:
       environments: ${{ steps.build-list.outputs.environments }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build environment list
         id: build-list
@@ -91,7 +91,7 @@ jobs:
       # as artifacts and consumed by the report job.
       drift_found: ${{ steps.run-detection.outputs.drift_found }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: hashicorp/setup-terraform@v4
         with:
@@ -168,7 +168,7 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download all drift report artifacts
         uses: actions/download-artifact@v8

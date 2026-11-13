@@ -57,7 +57,7 @@ jobs:
       - name: Harden runner (audit)
         uses: ./.github/actions/harden-runner
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # AWS OIDC authentication replaces GCP Workload Identity Federation.
       # IAM role scoped to this repo via GitHub OIDC conditions (ADR-0018).
@@ -89,7 +89,7 @@ jobs:
       - name: Harden runner (audit)
         uses: ./.github/actions/harden-runner
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Authenticate to AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -125,7 +125,7 @@ jobs:
       - name: Harden runner (audit)
         uses: ./.github/actions/harden-runner
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Authenticate to AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -167,7 +167,7 @@ jobs:
       - name: Harden runner (audit)
         uses: ./.github/actions/harden-runner
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Authenticate to AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
