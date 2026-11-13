@@ -37,6 +37,7 @@ locals {
     null       = "~> 3.2"
     random     = "~> 3.6"
     scaleway   = "~> 2.45"
+    stackit    = "~> 0.122"
     tls        = "~> 4.0"
   }
 }
