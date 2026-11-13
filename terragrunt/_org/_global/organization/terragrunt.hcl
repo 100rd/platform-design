@@ -66,12 +66,14 @@ inputs = {
     }
   }
 
-  # RESOURCE_CONTROL_POLICY enabled per ADR-0017 (resource-side data perimeter).
-  # Required before the modules/rcps org-perimeter RCP can be created/attached.
+  # RESOURCE_CONTROL_POLICY + DECLARATIVE_POLICY_EC2 enabled per ADR-0017
+  # (resource-side data perimeter + declarative org controls). Required before the
+  # modules/rcps RCP and modules/ec2-declarative-policies policy can be created/attached.
   enabled_policy_types = [
     "SERVICE_CONTROL_POLICY",
     "TAG_POLICY",
     "RESOURCE_CONTROL_POLICY",
+    "DECLARATIVE_POLICY_EC2",
   ]
 
   aws_service_access_principals = [
