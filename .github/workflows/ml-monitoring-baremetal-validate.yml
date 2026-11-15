@@ -64,7 +64,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Helm ${{ env.HELM_VERSION }}
         uses: azure/setup-helm@v4
@@ -118,7 +118,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install yamllint
         run: pip install yamllint==1.35.1
@@ -145,7 +145,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Terraform ${{ env.TF_VERSION }}
         uses: hashicorp/setup-terraform@v3

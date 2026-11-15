@@ -70,7 +70,7 @@ jobs:
       - name: Harden runner (audit)
         uses: ./.github/actions/harden-runner
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No GCP WI -- authenticate to Airflow directly via AIRFLOW_API_TOKEN.
       # Token is stored in GitHub Actions secrets (Vault-rotated via ESO).
@@ -105,7 +105,7 @@ jobs:
       - name: Harden runner (audit)
         uses: ./.github/actions/harden-runner
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Wait for eval gate (eval_adapter_debate must pass)
         env:
@@ -140,7 +140,7 @@ jobs:
       - name: Harden runner (audit)
         uses: ./.github/actions/harden-runner
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Register model version in MLflow (-> Staging)
         env:
@@ -182,7 +182,7 @@ jobs:
       - name: Harden runner (audit)
         uses: ./.github/actions/harden-runner
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Open Kargo promotion (staging auto / prod gated)
         uses: ./.github/actions/argocd-tag-bump
