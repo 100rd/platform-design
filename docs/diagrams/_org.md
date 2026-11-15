@@ -11,6 +11,7 @@ graph LR
     _org__global_break_glass_user["_org/_global/break-glass-user<br/>(break-glass-user)"]
     _org__global_budgets["_org/_global/budgets<br/>(unknown)"]
     _org__global_cloudtrail["_org/_global/cloudtrail<br/>(cloudtrail)"]
+    _org__global_ec2_declarative_policies["_org/_global/ec2-declarative-policies<br/>(ec2-declarative-policies)"]
     _org__global_guardduty_org["_org/_global/guardduty-org<br/>(guardduty-org)"]
     _org__global_iam_baseline["_org/_global/iam-baseline<br/>(iam-baseline)"]
     _org__global_organization["_org/_global/organization<br/>(organization)"]
@@ -23,6 +24,7 @@ graph LR
   _org__global_break_glass_user -->|depends on| _org__global_break_glass_user__dep__cloudtrail(cloudtrail)
   _org__global_cloudtrail -->|depends on| _org__global_cloudtrail__dep__kms(kms)
   _org__global_cloudtrail -->|depends on| _org__global_cloudtrail__dep__organization(organization)
+  _org__global_ec2_declarative_policies -->|depends on| _org__global_ec2_declarative_policies__dep__organization(organization)
   _org__global_guardduty_org -->|depends on| _org__global_guardduty_org__dep__organization(organization)
   _org__global_rcps -->|depends on| _org__global_rcps__dep__organization(organization)
   _org__global_scps -->|depends on| _org__global_scps__dep__organization(organization)
