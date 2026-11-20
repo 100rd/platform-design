@@ -38,7 +38,7 @@ jobs:
           # Use a token that can push back to the branch on main.
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
